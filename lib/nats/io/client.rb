@@ -483,29 +483,11 @@ module NATS
           if connect_urls
             srvs = []
             connect_urls.each do |url|
-              u = URI.parse("nats://#{url}")
+              srv = prepared_server_pool_addition(URI.parse("nats://#{url}"))
+              next unless srv
 
-              # Skip in case it is the current server which we already know
-              next if @uri.host == u.host && @uri.port == u.port
-
-              present = server_pool.detect do |srv|
-                srv[:uri].host == u.host && srv[:uri].port == u.port
-              end
-
-              if not present
-                # Let explicit user and pass options set the credentials.
-                u.user = options[:user] if options[:user]
-                u.password = options[:pass] if options[:pass]
-
-                # Use creds from the current server if not set explicitly.
-                if @uri
-                  u.user ||= @uri.user if @uri.user
-                  u.password ||= @uri.password if @uri.password
-                end
-
-                srv = { :uri => u, :reconnect_attempts => 0, :discovered => true }
-                srvs << srv
-              end
+              srv[:discovered] = true
+              srvs << srv
             end
             srvs.shuffle! unless @options[:dont_randomize_servers]
 
@@ -570,6 +552,18 @@ module NATS
         end
       end
 
+      def update_server_pool(u)
+        uri = u.is_a?(URI) ? u.dup : URI.parse(u)
+        synchronize do
+          srv = prepared_server_pool_addition(uri)
+          return false unless srv
+
+          @server_pool << srv
+        end
+
+        true
+      end
+
       private
 
       def select_next_server
@@ -591,6 +585,30 @@ module NATS
         @uri.password = @options[:pass] if @options[:pass]
 
         srv
+      end
+
+      def prepared_server_pool_addition(u)
+        # Skip in case it is the current server which we already know
+        return nil if @uri.host == u.host && @uri.port == u.port
+
+        present = server_pool.detect do |srv|
+          srv[:uri].host == u.host && srv[:uri].port == u.port
+        end
+
+        if not present
+          # Let explicit user and pass options set the credentials.
+          u.user = options[:user] if options[:user]
+          u.password = options[:pass] if options[:pass]
+
+          # Use creds from the current server if not set explicitly.
+          if @uri
+            u.user ||= @uri.user if @uri.user
+            u.password ||= @uri.password if @uri.password
+          end
+
+          srv = { :uri => u, :reconnect_attempts => 0 }
+          return srv
+        end
       end
 
       def server_using_secure_connection?
@@ -869,7 +887,7 @@ module NATS
           # to see whether need to take it out from rotation
           srv[:auth_required] ||= true if @server_info[:auth_required]
           server_pool << srv if can_reuse_server?(srv)
-          
+
           @last_err = e
 
           # Trigger async error handler
