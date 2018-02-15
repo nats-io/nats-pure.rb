@@ -303,4 +303,45 @@ describe 'Client - Specification' do
     end
     expect(total).to eql(1000)
   end
+
+  it "should be possible to expand server pool safely" do
+    nats = NATS::IO::Client.new
+    nats.connect(:servers => [@s.uri], :reconnect => false)
+
+    auth_nats = NATS::IO::Client.new
+    auth_nats.connect(:servers => [@s.uri], :reconnect => false, :user => "hello", :pass => "world")
+
+    was_added = nats.update_server_pool("nats://127.0.0.1:8282")
+    expect(was_added).to eql(true)
+    expect(nats.server_pool.count).to eql(2)
+
+    # Should have the same number of servers
+    was_added = nats.update_server_pool("nats://127.0.0.1:8282")
+    expect(was_added).to eql(false)
+    expect(nats.server_pool.count).to eql(2)
+
+    was_added = nats.update_server_pool("nats://foo:bar@127.0.0.1:8283")
+    expect(was_added).to eql(true)
+    expect(nats.server_pool.count).to eql(3)
+    expect(nats.server_pool.last[:uri].user).to eql("foo")
+    expect(nats.server_pool.last[:uri].password).to eql("bar")
+
+    was_added = auth_nats.update_server_pool("nats://foo:bar@127.0.0.1:8283")
+    expect(was_added).to eql(true)
+    expect(auth_nats.server_pool.count).to eql(2)
+    expect(auth_nats.server_pool.last[:uri].user).to eql("hello")
+    expect(auth_nats.server_pool.last[:uri].password).to eql("world")
+
+    # Mock discovery message should be adding more servers as required
+    info_msg = '{"connect_urls": ["127.0.0.1:8585","127.0.0.1:8787"]}'
+    nats.process_info(info_msg)
+    expect(nats.server_pool.count).to eql(5)
+    expect(nats.server_pool.last[:discovered]).to eql(true)
+
+    auth_nats.process_info(info_msg)
+    expect(auth_nats.server_pool.count).to eql(4)
+    expect(auth_nats.server_pool.last[:discovered]).to eql(true)
+    expect(auth_nats.server_pool.last[:uri].user).to eql("hello")
+    expect(auth_nats.server_pool.last[:uri].password).to eql("world")
+  end
 end
