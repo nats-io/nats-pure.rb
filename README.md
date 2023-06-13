@@ -143,6 +143,25 @@ loop do
 end
 ```
 
+## WebSocket
+
+Since NATS server 2.2 it is possible to connect to a NATS server [using WebSocket](https://docs.nats.io/running-a-nats-service/configuration/websocket), which is more secure then standard protocol if TLS is used and allows to traverse strict firewalls.
+
+ 1. Add a [`websocket`](https://github.com/imanel/websocket-ruby) gem to your Gemfile:
+
+    ```ruby
+    # Gemfile
+    gem 'websocket'
+    ```
+
+ 2. Connect to WebSocket-enabled NATS cluster using `ws` or `wss` protocol in URLs (for plain and secure connection respectively):
+
+    ```ruby
+    nats = NATS.connect("wss://demo.nats.io:8443")
+    ```
+
+ 3. Use NATS as usual.
+
 ## Ractor Usage
 
 Using NATS within a Ractor requires URI 0.11.0 or greater to be installed.
