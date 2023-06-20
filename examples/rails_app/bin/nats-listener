@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+
+# Load application
+APP_PATH = File.expand_path('../config/application', __dir__)
+require_relative '../config/boot'
+require_relative '../config/environment'
+
+# NOTE: This code is NOT automatically reloaded in development environment.
+# Restart the process after you made changes to the code below.
+
+puts "Connecting to NATS…"
+$nats.connect
+
+puts "Setting up NATS listeners…"
+$nats.subscribe('messages') do |msg, _reply, sub|
+  puts "Received on '#{sub}': '#{msg}'"
+  # Subscription block is executed in a separate thread, so invoking model methods
+  # will check out a connection from the database connection pool.
+  text = msg.force_encoding("UTF-8") # NATS payload is binary, but we sure that it is UTF-8 here
+  Message.create!(text: text)
+  # But after block has finished executing, the connection is returned to the pool.
+end
+
+$nats.on_error do |e|
+  Rails.logger.error e
+end
+
+$nats.flush
+puts "Ready to receive messages!"
+
+shutting_down = false
+Signal.trap("INT") do
+  puts "Shutting down NATS client…"
+  shutting_down = true
+end
+
+# run process forever
+loop do
+  sleep 1
+
+  break if $nats.closed?
+  $nats.drain if shutting_down
+end
