@@ -1423,10 +1423,11 @@ module NATS
       case
       when (server_using_secure_connection? and client_using_secure_connection?)
         @io.setup_tls!
-      when (server_using_secure_connection? and !client_using_secure_connection?)
+      # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
+      when (server_using_secure_connection? and !client_using_secure_connection? and @uri.scheme != "ws")
         raise NATS::IO::ConnectError.new('TLS/SSL required by server')
-      # Server requiring TLS/SSL over websocket but not requiring it over standard protocol
-      # doesn't send `tls_required` in its INFO so we need to check the URI scheme.
+      # Server < v2.9.19 requiring TLS/SSL over websocket but not requiring it over standard protocol
+      # doesn't send `tls_required` in its INFO so we need to check the URI scheme for WebSocket.
       when (client_using_secure_connection? and !server_using_secure_connection? and @uri.scheme != "wss")
         raise NATS::IO::ConnectError.new('TLS/SSL not supported by server')
       else
