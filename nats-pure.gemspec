@@ -29,6 +29,7 @@ Gem::Specification.new do |s|
 
   s.files = Dir['lib/**/*.rb']
   s.files += Dir['sig/**/*.rbs']
+  s.files += %w[LICENSE README.md]
 
   s.add_dependency "concurrent-ruby", "~> 1.0"
 end
