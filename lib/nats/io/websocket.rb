@@ -20,7 +20,6 @@ module NATS
       end
 
       def connect
-
         super
 
         setup_tls! if @uri.scheme == "wss" # WebSocket connection must be made over TLS from the beginning

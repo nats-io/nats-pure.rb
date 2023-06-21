@@ -22,7 +22,9 @@ describe 'Client - Cluster TLS reconnect' do
       'host'          => '127.0.0.1',
       'port'          => 4232,
       'cluster_port'  => 6232,
-      'wsport'        => 8232
+      'wsport'        => 8232,
+      'advertise'     => 'server-A.clients.nats-service.localhost:8232',
+      'name'          => 'server-A'
     }
 
     s2_config_opts = {
@@ -30,7 +32,9 @@ describe 'Client - Cluster TLS reconnect' do
       'host'          => '127.0.0.1',
       'port'          => 4233,
       'cluster_port'  => 6233,
-      'wsport'        => 8233
+      'wsport'        => 8233,
+      'advertise'     => 'server-B.clients.nats-service.localhost:8233',
+      'name'          => 'server-B'
     }
 
     s3_config_opts = {
@@ -38,7 +42,9 @@ describe 'Client - Cluster TLS reconnect' do
       'host'          => '127.0.0.1',
       'port'          => 4234,
       'cluster_port'  => 6234,
-      'wsport'        => 8234
+      'wsport'        => 8234,
+      'advertise'     => 'server-C.clients.nats-service.localhost:8234',
+      'name'          => 'server-C'
     }
 
     nodes = []
@@ -48,6 +54,7 @@ describe 'Client - Cluster TLS reconnect' do
         host: '#{config_opts['host']}'
         port:  #{config_opts['port']}
         pid_file: '#{config_opts['pid_file']}'
+        server_name: '#{config_opts['name']}'
 
         websocket {
           port: #{config_opts['wsport']}
@@ -58,7 +65,7 @@ describe 'Client - Cluster TLS reconnect' do
             timeout:   10
           }
           # NOTE: Force to reconnect using any other hostname other than the initial one.
-          advertise: 'server-B.clients.nats-service.localhost:#{config_opts['wsport']}'
+          advertise: '#{config_opts['advertise']}'
         }
 
         tls {
@@ -208,7 +215,6 @@ describe 'Client - Cluster TLS reconnect' do
 
         errors = []
         nats.on_error do |e|
-          puts e
           errors << e
         end
 
@@ -242,7 +248,7 @@ describe 'Client - Cluster TLS reconnect' do
         # Reconnected...
         expect(nats.instance_variable_get("@hostname")).to eql("server-A.clients.nats-service.localhost")
         expect(nats.connected_server.to_s).to_not eql("")
-        expect(["wss://127.0.0.1:8233", "wss://127.0.0.1:8234"].include?(nats.connected_server.to_s)).to eql(true)
+        expect(["wss://server-B.clients.nats-service.localhost:8233", "wss://server-C.clients.nats-service.localhost:8234"].include?(nats.connected_server.to_s)).to eql(true)
         nats.request("hello", 'world', timeout: 1)
 
         expect(reconnects).to eql(1)

@@ -384,7 +384,7 @@ module NATS
           @hostname = srv[:hostname]
         end
 
-        # Create TCP socket connection to NATS
+        # Create TCP socket connection to NATS.
         @io = create_socket
         @io.connect
 
@@ -867,7 +867,8 @@ module NATS
         if !@options[:ignore_discovered_urls] && connect_urls
           srvs = []
           connect_urls.each do |url|
-            scheme = client_using_secure_connection? ? "tls" : "nats"
+            # Use the same scheme as the currently in use URI.
+            scheme = @uri.scheme
             u = URI.parse("#{scheme}://#{url}")
 
             # Skip in case it is the current server which we already know
@@ -1406,6 +1407,7 @@ module NATS
     end
 
     def process_connect_init
+      # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line or line.empty?
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not received")
