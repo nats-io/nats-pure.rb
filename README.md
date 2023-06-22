@@ -143,27 +143,6 @@ loop do
 end
 ```
 
-## Ractor Usage
-
-Using NATS within a Ractor requires URI 0.11.0 or greater to be installed.
-
-```ruby
-Ractor.new do
-  ractor_nats = NATS.connect('demo.nats.io')
-
-  ractor_nats.subscribe('foo') do |msg, reply|
-    puts "Received on '#{msg.subject}': '#{msg.data}' with headers: #{msg.header}"
-    ractor_nats.publish(reply, 'baz')
-  end
-
-  sleep
-end
-
-nats = NATS.connect('demo.nats.io')
-response = nats.request('foo', 'bar', timeout: 0.5)
-puts response.data
-```
-
 ## TLS
 
 It is possible to setup a custom TLS connection to NATS by passing
@@ -182,11 +161,30 @@ NATS.connect({
  })
 ```
 
-### New Authentication (Nkeys and User Credentials)
+## WebSocket
+
+Since NATS Server v2.2 it is possible to connect to a NATS server [using WebSocket](https://docs.nats.io/running-a-nats-service/configuration/websocket).
+
+ 1. Add a [`websocket`](https://github.com/imanel/websocket-ruby) gem to your Gemfile:
+
+    ```ruby
+    # Gemfile
+    gem 'websocket'
+    ```
+
+ 2. Connect to WebSocket-enabled NATS Server using `ws` or `wss` protocol in URLs (for plain and secure connection respectively):
+
+    ```ruby
+    nats = NATS.connect("wss://demo.nats.io:8443")
+    ```
+
+ 3. Use NATS as usual.
+
+### NKEYS and JWT User Credentials
 
 This requires server with version >= 2.0.0
 
-Starting from [v0.6.0](https://github.com/nats-io/nats-pure.rb/releases/tag/v0.6.0) release,
+Starting from [v0.6.0](https://github.com/nats-io/nats-pure.rb/releases/tag/v0.6.0) release of the client,
 you can also optionally install [NKEYS](https://github.com/nats-io/nkeys.rb) in order to use
 the new NATS v2.0 auth features:
 
@@ -224,6 +222,27 @@ This can be disabled at connection time:
 
 ```ruby
 NATS.connect(servers: ['nats://127.0.0.1:4444'], ignore_discovered_urls: true)
+```
+
+### Ractor Usage
+
+Using NATS within a Ractor requires URI 0.11.0 or greater to be installed.
+
+```ruby
+Ractor.new do
+  ractor_nats = NATS.connect('demo.nats.io')
+
+  ractor_nats.subscribe('foo') do |msg, reply|
+    puts "Received on '#{msg.subject}': '#{msg.data}' with headers: #{msg.header}"
+    ractor_nats.publish(reply, 'baz')
+  end
+
+  sleep
+end
+
+nats = NATS.connect('demo.nats.io')
+response = nats.request('foo', 'bar', timeout: 0.5)
+puts response.data
 ```
 
 ## License

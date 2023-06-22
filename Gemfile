@@ -9,6 +9,7 @@ group :test do
   gem 'rails', require: false
   gem 'activerecord', require: false
   gem 'sqlite3', require: false
+  gem 'websocket'
 end
 
 group :v2 do

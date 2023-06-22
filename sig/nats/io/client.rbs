@@ -27,7 +27,7 @@ module NATS
     attr_reader subscription_executor: Concurrent::ThreadPoolExecutor?
     attr_reader reloader: Proc
 
-    DEFAULT_PORT: 4222
+    DEFAULT_PORT: Hash[Symbol, Integer]
     DEFAULT_URI: String
 
     CR_LF: '\r\n'

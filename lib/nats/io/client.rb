@@ -103,8 +103,8 @@ module NATS
 
     attr_reader :status, :server_info, :server_pool, :options, :connected_server, :stats, :uri, :subscription_executor, :reloader
 
-    DEFAULT_PORT = 4222
-    DEFAULT_URI = ("nats://localhost:#{DEFAULT_PORT}".freeze)
+    DEFAULT_PORT = { nats: 4222, ws: 80, wss: 443 }.freeze
+    DEFAULT_URI = ("nats://localhost:#{DEFAULT_PORT[:nats]}".freeze)
 
     CR_LF = ("\r\n".freeze)
     CR_LF_SIZE = (CR_LF.bytesize)
@@ -294,12 +294,8 @@ module NATS
       when String
         # Initialize TLS defaults in case any url is using it.
         srvs = opts[:servers] = process_uri(uri)
-        if srvs.any? {|u| u.scheme == 'tls'} and !opts[:tls]
-          tls_context = OpenSSL::SSL::SSLContext.new
-          tls_context.set_params
-          opts[:tls] = {
-            context: tls_context
-          }
+        if srvs.any? {|u| %w[tls wss].include? u.scheme } and !opts[:tls]
+          opts[:tls] = { context: tls_context }
         end
         @single_url_connect_used = true if srvs.size == 1
       when Hash
@@ -380,7 +376,15 @@ module NATS
       begin
         srv = select_next_server
 
-        # Create TCP socket connection to NATS
+        # Use the hostname from the server for TLS hostname verification.
+        if client_using_secure_connection? and single_url_connect_used?
+          # Always reuse the original hostname used to connect.
+          @hostname ||= srv[:hostname]
+        else
+          @hostname = srv[:hostname]
+        end
+
+        # Create TCP socket connection to NATS.
         @io = create_socket
         @io.connect
 
@@ -390,14 +394,6 @@ module NATS
 
         # Connection established and now in process of sending CONNECT to NATS
         @status = CONNECTING
-
-        # Use the hostname from the server for TLS hostname verification.
-        if client_using_secure_connection? and single_url_connect_used?
-          # Always reuse the original hostname used to connect.
-          @hostname ||= srv[:hostname]
-        else
-          @hostname = srv[:hostname]
-        end
 
         # Established TCP connection successfully so can start connect
         process_connect_init
@@ -871,7 +867,8 @@ module NATS
         if !@options[:ignore_discovered_urls] && connect_urls
           srvs = []
           connect_urls.each do |url|
-            scheme = client_using_secure_connection? ? "tls" : "nats"
+            # Use the same scheme as the currently in use URI.
+            scheme = @uri.scheme
             u = URI.parse("#{scheme}://#{url}")
 
             # Skip in case it is the current server which we already know
@@ -1069,6 +1066,23 @@ module NATS
 
     def client_using_secure_connection?
       @uri.scheme == "tls" || @tls
+    end
+
+    def tls_context
+      return nil unless @tls
+
+      # Allow prepared context and customizations via :tls opts
+      return @tls[:context] if @tls[:context]
+
+      @tls_context ||= OpenSSL::SSL::SSLContext.new.tap do |tls_context|
+        # Use the default verification options from Ruby:
+        # https://github.com/ruby/ruby/blob/96db72ce38b27799dd8e80ca00696e41234db6ba/ext/openssl/lib/openssl/ssl.rb#L19-L29
+        #
+        # Insecure TLS versions not supported already:
+        # https://github.com/ruby/openssl/commit/3e5a009966bd7f806f7180d82cf830a04be28986
+        #
+        tls_context.set_params
+      end
     end
 
     def single_url_connect_used?
@@ -1393,6 +1407,7 @@ module NATS
     end
 
     def process_connect_init
+      # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line or line.empty?
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not received")
@@ -1407,39 +1422,13 @@ module NATS
 
       case
       when (server_using_secure_connection? and client_using_secure_connection?)
-        tls_context = nil
-
-        if @tls
-          # Allow prepared context and customizations via :tls opts
-          tls_context = @tls[:context] if @tls[:context]
-        else
-          # Defaults
-          tls_context = OpenSSL::SSL::SSLContext.new
-
-          # Use the default verification options from Ruby:
-          # https://github.com/ruby/ruby/blob/96db72ce38b27799dd8e80ca00696e41234db6ba/ext/openssl/lib/openssl/ssl.rb#L19-L29
-          #
-          # Insecure TLS versions not supported already:
-          # https://github.com/ruby/openssl/commit/3e5a009966bd7f806f7180d82cf830a04be28986
-          #
-          tls_context.set_params
-        end
-
-        # Setup TLS connection by rewrapping the socket
-        tls_socket = OpenSSL::SSL::SSLSocket.new(@io.socket, tls_context)
-
-        # Close TCP socket after closing TLS socket as well.
-        tls_socket.sync_close = true
-
-        # Required to enable hostname verification if Ruby runtime supports it (>= 2.4):
-        # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
-        tls_socket.hostname = @hostname
-
-        tls_socket.connect
-        @io.socket = tls_socket
-      when (server_using_secure_connection? and !client_using_secure_connection?)
+        @io.setup_tls!
+      # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
+      when (server_using_secure_connection? and !client_using_secure_connection? and @uri.scheme != "ws")
         raise NATS::IO::ConnectError.new('TLS/SSL required by server')
-      when (client_using_secure_connection? and !server_using_secure_connection?)
+      # Server < v2.9.19 requiring TLS/SSL over websocket but not requiring it over standard protocol
+      # doesn't send `tls_required` in its INFO so we need to check the URI scheme for WebSocket.
+      when (client_using_secure_connection? and !server_using_secure_connection? and @uri.scheme != "wss")
         raise NATS::IO::ConnectError.new('TLS/SSL not supported by server')
       else
         # Otherwise, use a regular connection.
@@ -1484,11 +1473,6 @@ module NATS
       begin
         srv = select_next_server
 
-        # Establish TCP connection with new server
-        @io = create_socket
-        @io.connect
-        @stats[:reconnects] += 1
-
         # Set hostname to use for TLS hostname verification
         if client_using_secure_connection? and single_url_connect_used?
           # Reuse original hostname name in case of using TLS.
@@ -1496,6 +1480,11 @@ module NATS
         else
           @hostname = srv[:hostname]
         end
+
+        # Establish TCP connection with new server
+        @io = create_socket
+        @io.connect
+        @stats[:reconnects] += 1
 
         # Established TCP connection successfully so can start connect
         process_connect_init
@@ -1712,10 +1701,21 @@ module NATS
     end
 
     def create_socket
-      NATS::IO::Socket.new({
-          uri: @uri,
-          connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
-        })
+      socket_class = case @uri.scheme
+        when "nats", "tls"
+          NATS::IO::Socket
+        when "ws", "wss"
+          require_relative 'websocket'
+          NATS::IO::WebSocket
+        else
+          raise NotImplementedError, "#{@uri.scheme} protocol is not supported, check NATS cluster URL spelling"
+        end
+
+      socket_class.new(
+        uri: @uri,
+        tls: { context: tls_context, hostname: @hostname },
+        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT,
+      )
     end
 
     def setup_nkeys_connect
@@ -1825,7 +1825,7 @@ module NATS
 
         # Host and Port
         uri_object.hostname ||= "localhost"
-        uri_object.port ||= DEFAULT_PORT
+        uri_object.port ||= DEFAULT_PORT.fetch(uri.scheme.to_sym, DEFAULT_PORT[:nats])
 
         uri_object
       end
@@ -1877,6 +1877,7 @@ module NATS
         @write_timeout = options[:write_timeout]
         @read_timeout = options[:read_timeout]
         @socket = nil
+        @tls = options[:tls]
       end
 
       def connect
@@ -1893,6 +1894,22 @@ module NATS
 
         # Set TCP no delay by default
         @socket.setsockopt(::Socket::IPPROTO_TCP, ::Socket::TCP_NODELAY, 1)
+      end
+
+      # (Re-)connect using secure connection if server and client agreed on using it.
+      def setup_tls!
+        # Setup TLS connection by rewrapping the socket
+        tls_socket = OpenSSL::SSL::SSLSocket.new(@socket, @tls.fetch(:context))
+
+        # Close TCP socket after closing TLS socket as well.
+        tls_socket.sync_close = true
+
+        # Required to enable hostname verification if Ruby runtime supports it (>= 2.4):
+        # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
+        tls_socket.hostname = @tls[:hostname]
+
+        tls_socket.connect
+        @socket = tls_socket
       end
 
       def read_line(deadline=nil)
