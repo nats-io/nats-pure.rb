@@ -1092,7 +1092,7 @@ module NATS
     def send_command(command)
       raise NATS::IO::ConnectionClosedError if closed?
 
-      establish_connection! unless status
+      establish_connection! if !status || (disconnected? && should_reconnect?)
 
       @pending_size += command.bytesize
       @pending_queue << command
