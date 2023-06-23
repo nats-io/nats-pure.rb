@@ -23,6 +23,17 @@ describe 'Client - Fork detection' do
     @tmpdir = Dir.mktmpdir("ruby-jetstream-fork")
     @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
     @s.start_server(true)
+
+    # Fork detection feature tracks instances of NATS::Client in a weak reference map.
+    # However, as one-off client instances are made for every test case, they are not garbage collected in time
+    # so stale instances are trying to re-connect after fork.
+    # Manually clean up the map before every forking test case.
+    instances_map = NATS::Client.const_get(:INSTANCES)
+    if instances_map.respond_to?(:delete) # Added in Ruby 3.3
+      instances_map.each_key(&instances_map.method(:delete))
+    else
+      GC.start # hope that GC will clear stale instances from the map
+    end
   end
 
   after(:each) do
