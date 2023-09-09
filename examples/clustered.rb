@@ -55,7 +55,7 @@ msgs_received = 0
 bytes_sent = 0
 bytes_received = 0
 
-nats.subscribe("hello") {|data| msgs_received += 1; bytes_received += data.size }
+nats.subscribe("hello") {|msg| msgs_received += 1; bytes_received += msg.data.size }
 
 Thread.new do
   loop do
