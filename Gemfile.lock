@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    nats-pure (2.3.0)
+    nats-pure (2.3.1)
       concurrent-ruby (~> 1.0)
 
 GEM
