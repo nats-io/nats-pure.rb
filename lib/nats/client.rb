@@ -12,4 +12,5 @@
 # limitations under the License.
 #
 require 'nats/io/client'
+require 'nats/io/rails' if defined?(Rails::Engine)
 require 'nats/nuid'
