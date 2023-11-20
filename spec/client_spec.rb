@@ -508,4 +508,54 @@ describe 'Client - Specification' do
       another_thread.exit
     end
   end
+
+  context 'with default port' do
+    before(:each) do
+      @s4222 = NatsServerControl.new("nats://127.0.0.1:4222", "/tmp/test-nats.pid-4222")
+      @s4222.start_server(true)
+    end
+
+    after(:each) do
+      @s4222.kill_server
+      sleep 1
+    end
+
+    it 'should connect' do
+      expect do
+        nc = NATS.connect("localhost")
+        sub = nc.subscribe("foo")
+        nc.flush
+        nc.publish("foo", "hello world")
+        msg = sub.next_msg
+        expect(msg.data).to eql('hello world')
+      end.to_not raise_error
+
+      expect do
+        nc = NATS.connect
+        sub = nc.subscribe("foo")
+        nc.flush
+        nc.publish("foo", "hello world")
+        msg = sub.next_msg
+        expect(msg.data).to eql('hello world')
+      end.to_not raise_error
+
+      expect do
+        nc = NATS.connect("nats://localhost")
+        sub = nc.subscribe("foo")
+        nc.flush
+        nc.publish("foo", "hello world")
+        msg = sub.next_msg
+        expect(msg.data).to eql('hello world')
+      end.to_not raise_error
+
+      expect do
+        nc = NATS.connect("localhost:4222")
+        sub = nc.subscribe("foo")
+        nc.flush
+        nc.publish("foo", "hello world")
+        msg = sub.next_msg
+        expect(msg.data).to eql('hello world')
+      end.to_not raise_error
+    end
+  end
 end
