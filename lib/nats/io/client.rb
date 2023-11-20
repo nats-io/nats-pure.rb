@@ -1824,7 +1824,7 @@ module NATS
 
         # Host and Port
         uri_object.hostname ||= "localhost"
-        uri_object.port ||= DEFAULT_PORT.fetch(uri.scheme.to_sym, DEFAULT_PORT[:nats])
+        uri_object.port ||= DEFAULT_PORT.fetch(uri_object.scheme.to_sym, DEFAULT_PORT[:nats])
 
         uri_object
       end
