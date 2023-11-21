@@ -219,25 +219,57 @@ module NATS
 
     # pull_subscribe binds or creates a subscription to a JetStream pull consumer.
     #
-    # @param subject [String] Subject from which the messages will be fetched.
+    # @param subject [String, Array] Subject or subjects from which the messages will be fetched.
     # @param durable [String] Consumer durable name from where the messages will be fetched.
     # @param params [Hash] Options to customize the PullSubscription.
     # @option params [String] :stream Name of the Stream to which the consumer belongs.
     # @option params [String] :consumer Name of the Consumer to which the PullSubscription will be bound.
+    # @option params [String] :name Name of the Consumer to which the PullSubscription will be bound.
     # @option params [Hash] :config Configuration for the consumer.
     # @return [NATS::JetStream::PullSubscription]
     def pull_subscribe(subject, durable, params={})
-      if durable.empty? && !params[:consumer]
+      if (!durable or durable.empty?) && !(params[:consumer] or params[:name])
         raise JetStream::Error::InvalidDurableName.new("nats: invalid durable name")
       end
-      params[:consumer] ||= durable
-      stream = params[:stream].nil? ? find_stream_name_by_subject(subject) : params[:stream]
+      multi_filter = case 
+                     when (subject.is_a?(Array) and subject.size == 1)
+                       subject = subject.first
+                       false
+                     when (subject.is_a?(Array) and subject.size > 1)
+                       true
+                     end
 
+      params[:consumer] ||= durable
+      params[:consumer] ||= params[:name]
+      stream = if params[:stream].nil?
+                 if multi_filter
+                   # Use the first subject to try to find the stream.
+                   streams = subject.map do |s|
+                    begin
+                      find_stream_name_by_subject(s)
+                    rescue NATS::JetStream::Error::NotFound
+                      raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
+                    end
+                   end
+
+                   # Ensure that the filter subjects are not ambiguous.
+                   streams.uniq!
+                   if streams.count > 1
+                     raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
+                   end
+
+                   streams.first
+                 else
+                   find_stream_name_by_subject(subject)
+                 end
+               else
+                 params[:stream]
+               end
       begin
         consumer_info(stream, params[:consumer])
       rescue NATS::JetStream::Error::NotFound => e
         # If attempting to bind, then this is a hard error.
-        raise e if params[:stream]
+        raise e if params[:stream] and !multi_filter
 
         config = if not params[:config]
                    JetStream::API::ConsumerConfig.new
@@ -248,6 +280,11 @@ module NATS
                  end
         config[:durable_name] = durable
         config[:ack_policy] ||= JS::Config::AckExplicit
+        if multi_filter
+          config[:filter_subjects] ||= subject
+        else
+          config[:filter_subject] ||= subject
+        end
         add_consumer(stream, config)
       end
 

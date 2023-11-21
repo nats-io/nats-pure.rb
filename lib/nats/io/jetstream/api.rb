@@ -119,6 +119,9 @@ module NATS
                                   :num_replicas,
                                   # Force memory storage
                                   :mem_storage,
+
+                                  # NATS v2.10 features
+                                  :metadata, :filter_subjects, :max_bytes,
                                   keyword_init: true) do
         def initialize(opts={})
           # Filter unrecognized fields just in case.

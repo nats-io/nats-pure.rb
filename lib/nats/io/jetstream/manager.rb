@@ -106,18 +106,37 @@ module NATS
                  else
                    config
                  end
-
+        config[:name] ||= config[:durable_name]
         req_subject = case
                       when config[:name]
-                        # NOTE: Only supported after nats-server v2.9.0
+                        ###############################################################################
+                        #                                                                             #
+                        #  Using names is the supported way of creating consumers (NATS +v2.9.0.      #
+                        #                                                                             #
+                        ###############################################################################
                         if config[:filter_subject] && config[:filter_subject] != ">"
                           "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}.#{config[:filter_subject]}"
                         else
+                         ##############################################################################
+                         #                                                                            #
+                         # Endpoint to support creating ANY consumer with multi-filters (NATS +v2.10) #
+                         #                                                                            #
+                         ##############################################################################
                           "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}"
                         end
                       when config[:durable_name]
+                        ###############################################################################
+                        #                                                                             #
+                        # Endpoint to support creating DURABLES before NATS v2.9.0.                   #
+                        #                                                                             #
+                        ###############################################################################
                         "#{@prefix}.CONSUMER.DURABLE.CREATE.#{stream}.#{config[:durable_name]}"
                       else
+                        ###############################################################################
+                        #                                                                             #
+                        # Endpoint to support creating EPHEMERALS before NATS v2.9.0.                 #
+                        #                                                                             #
+                        ###############################################################################
                         "#{@prefix}.CONSUMER.CREATE.#{stream}"
                       end
 
