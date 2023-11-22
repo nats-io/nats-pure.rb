@@ -105,16 +105,50 @@ module NATS
 
     # subscribe binds or creates a push subscription to a JetStream pull consumer.
     #
-    # @param subject [String] Subject from which the messages will be fetched.
+    # @param subject [String, Array] Subject(s) from which the messages will be fetched.
     # @param params [Hash] Options to customize the PushSubscription.
     # @option params [String] :stream Name of the Stream to which the consumer belongs.
     # @option params [String] :consumer Name of the Consumer to which the PushSubscription will be bound.
+    # @option params [String] :name Name of the Consumer to which the PushSubscription will be bound.
     # @option params [String] :durable Consumer durable name from where the messages will be fetched.
     # @option params [Hash] :config Configuration for the consumer.
     # @return [NATS::JetStream::PushSubscription]
     def subscribe(subject, params={}, &cb)
       params[:consumer] ||= params[:durable]
-      stream = params[:stream].nil? ? find_stream_name_by_subject(subject) : params[:stream]
+      params[:consumer] ||= params[:name]
+      multi_filter = case 
+                     when (subject.is_a?(Array) and subject.size == 1)
+                       subject = subject.first
+                       false
+                     when (subject.is_a?(Array) and subject.size > 1)
+                       true
+                     end
+
+      # 
+      stream = if params[:stream].nil?
+                 if multi_filter
+                   # Use the first subject to try to find the stream.
+                   streams = subject.map do |s|
+                    begin
+                      find_stream_name_by_subject(s)
+                    rescue NATS::JetStream::Error::NotFound
+                      raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
+                    end
+                   end
+
+                   # Ensure that the filter subjects are not ambiguous.
+                   streams.uniq!
+                   if streams.count > 1
+                     raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
+                   end
+
+                   streams.first
+                 else
+                   find_stream_name_by_subject(subject)
+                 end
+               else
+                 params[:stream]
+               end
 
       queue = params[:queue]
       durable = params[:durable]
@@ -183,7 +217,11 @@ module NATS
         config.deliver_subject = deliver
 
         # Auto created consumers use the filter subject.
-        config.filter_subject = subject
+        if multi_filter
+          config[:filter_subjects] ||= subject
+        else
+          config[:filter_subject] ||= subject
+        end
 
         # Heartbeats / FlowControl
         config.flow_control = flow_control

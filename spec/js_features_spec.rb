@@ -30,9 +30,9 @@ describe 'JetStream' do
     end
 
     it 'should create pull subscribers with multiple filter subjects' do
-      nc = NATS.connect(@s.uri)
       skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
 
+      nc = NATS.connect(@s.uri)
       js = nc.jetstream
       js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
       js.add_stream(name: "ANOTHER_MULTI_FILTER", subjects: ["foo.five.*"])
@@ -160,6 +160,82 @@ describe 'JetStream' do
         expect(msgs[1].subject).to eql('foo.two.2')
         expect(msgs[2].subject).to eql('foo.two.2')
         expect(msgs.count).to eql(3)
+      end.to raise_error(NATS::JetStream::Error)
+    end
+
+    it 'should create push subscribers with multiple filter subjects' do
+      skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
+
+      nc = NATS.connect(@s.uri)
+      js = nc.jetstream
+      js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
+      js.add_stream(name: "ANOTHER_MULTI_FILTER", subjects: ["foo.five.*"])
+
+      js.publish("foo.one.1", "1")
+      js.publish("foo.two.2", "2")
+      js.publish("foo.three.3", "3")
+      js.publish("foo.two.2", "22")
+      js.publish("foo.one.3", "11")
+
+      # Binding to stream explicitly.
+      expect do
+        sub = js.subscribe(["foo.one.1", "foo.two.2"], durable: "MULTI_FILTER_CONSUMER", stream: "MULTI_FILTER")
+        info = sub.consumer_info
+        expect(info.name).to eql('MULTI_FILTER_CONSUMER')
+        expect(info.config.durable_name).to eql('MULTI_FILTER_CONSUMER')
+        expect(info.config.max_waiting).to eql(nil)
+        expect(info.num_pending).to eql(3)
+
+        msgs = []
+        3.times do
+          msg = sub.next_msg()
+          msg.ack
+          msgs << msg
+        end
+        expect(msgs.count).to eql(3)
+        expect(msgs[0].subject).to eql('foo.one.1')
+        expect(msgs[1].subject).to eql('foo.two.2')
+        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs[2].data).to eql('22')
+      end.to_not raise_error
+
+      # Creating a single filter consumer using an Array.
+      expect do
+        sub = js.subscribe(["foo.one.1"], config: {name: "foo"})
+        info = sub.consumer_info
+        expect(info.name).to eql('foo')
+        expect(info.num_pending).to eql(1)
+        msg = sub.next_msg()
+        expect(msg.subject).to eql('foo.one.1')
+      end.to_not raise_error
+
+      # Auto creating a consumer via a loookup.
+      expect do
+        sub = js.subscribe(["foo.one.1", "foo.two.2"], config: {name: "psub3"})
+        info = sub.consumer_info
+        expect(info.name).to eql('psub3')
+        expect(info.num_pending).to eql(3)
+
+        msgs = []
+        3.times do
+          msg = sub.next_msg
+          msg.ack
+          msgs << msg
+        end
+        expect(msgs[0].subject).to eql('foo.one.1')
+        expect(msgs[1].subject).to eql('foo.two.2')
+        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs.count).to eql(3)
+      end.to_not raise_error
+
+      # Auto creating a consumer with stream that does not match.
+      expect do
+        js.subscribe(["foo.one.1", "foo.four.4"])
+      end.to raise_error(NATS::JetStream::Error)
+
+      # Auto creating a consumer with stream that is ambiguous.
+      expect do
+        js.subscribe(["foo.one.1", "foo.one.2", "foo.five.4"])
       end.to raise_error(NATS::JetStream::Error)
     end
   end
