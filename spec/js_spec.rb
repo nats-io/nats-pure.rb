@@ -120,7 +120,7 @@ describe 'JetStream' do
       sub = js.pull_subscribe("hello", "psub", config: { max_waiting: 30 })
       info = sub.consumer_info
       expect(info.config.max_waiting).to eql(30)
-      expect(info.num_pending).to eql(3)
+      expect(info.num_pending).to eql(1)
 
       msgs = sub.fetch(3)
       msgs.each do |msg|
@@ -133,14 +133,14 @@ describe 'JetStream' do
       sub = js.pull_subscribe("hello", "psub2", config: config)
       info = sub.consumer_info
       expect(info.config.max_waiting).to eql(128)
-      expect(info.num_pending).to eql(3)
+      expect(info.num_pending).to eql(1)
 
       msgs = sub.fetch(1)
       msgs.each do |msg|
         msg.ack_sync
       end
       info = sub.consumer_info
-      expect(info.num_pending).to eql(2)
+      expect(info.num_pending).to eql(0)
     end
 
     it 'should find the pull subscription by subject' do

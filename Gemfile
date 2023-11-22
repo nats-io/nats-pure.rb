@@ -6,9 +6,6 @@ group :test do
   gem 'rake'
   gem 'rspec'
   gem 'benchmark-ips'
-  gem 'rails', require: false
-  gem 'activerecord', require: false
-  gem 'sqlite3', require: false
   gem 'websocket'
 end
 
@@ -18,4 +15,10 @@ end
 
 group :development do
   gem 'ruby-progressbar'
+end
+
+group :rails do
+  gem 'rails', require: false
+  gem 'activerecord', require: false
+  gem 'sqlite3', require: false
 end

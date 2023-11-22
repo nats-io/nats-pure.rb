@@ -1,19 +1,23 @@
-require 'rails'
-require 'nats/io/rails'
-require 'rails/application'
-require 'active_record'
-require 'active_record/railtie'
+
+begin
+  require 'rails'
+  require 'nats/io/rails'
+  require 'rails/application'
+  require 'active_record'
+  require 'active_record/railtie'
+rescue LoadError
+end
 
 require 'spec_helper'
 
 describe 'Rails integration' do
-
   before(:all) do
+    skip 'rails not installed' if not defined?(Rails)
     @serverctl = NatsServerControl.new.tap { |s| s.start_server(true) }
   end
 
   after(:all) do
-    @serverctl.kill_server
+    @serverctl.kill_server if @serverctl
   end
 
   around(:each) do |example|
