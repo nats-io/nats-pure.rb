@@ -195,6 +195,7 @@ module NATS
         :republish,
         :allow_direct,
         :mirror_direct,
+        :metadata,
         keyword_init: true) do
         def initialize(opts={})
           # Filter unrecognized fields just in case.

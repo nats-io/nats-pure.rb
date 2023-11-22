@@ -238,5 +238,39 @@ describe 'JetStream' do
         js.subscribe(["foo.one.1", "foo.one.2", "foo.five.4"])
       end.to raise_error(NATS::JetStream::Error)
     end
+
+    it 'should create streams and customers with metadata' do
+      skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
+
+      nc = NATS.connect(@s.uri)
+      js = nc.jetstream
+      stream = js.add_stream({
+        :name     => "WITH_METADATA",
+        :metadata => {
+          'foo': 'bar',
+          'hello': 'world'
+        }
+      })
+      expect(stream[:config][:metadata][:foo]).to eql('bar')
+      expect(stream[:config][:metadata][:hello]).to eql('world')
+
+      stream = js.stream_info("WITH_METADATA")
+      expect(stream[:config][:metadata][:foo]).to eql('bar')
+      expect(stream[:config][:metadata][:hello]).to eql('world')
+
+      consumer = js.add_consumer("WITH_METADATA", {
+         :name     => "wm",
+         :metadata => {
+           'hoge': 'fuga',
+           'quux': 'uqbar'
+         }
+      })
+      expect(consumer[:config][:metadata][:hoge]).to eql('fuga')
+      expect(consumer[:config][:metadata][:quux]).to eql('uqbar')
+
+      consumer = js.consumer_info("WITH_METADATA", "wm")
+      expect(consumer[:config][:metadata][:hoge]).to eql('fuga')
+      expect(consumer[:config][:metadata][:quux]).to eql('uqbar')
+    end
   end
 end
