@@ -12,7 +12,7 @@ module NATS
 
       def call
         params = (::Rails::VERSION::STRING >= "7.1") ? {source: "gem.nats"} : {}
-        @app.reloader.wrap(**params) do
+        @app.executor.wrap(**params) do
           yield
         end
       end
