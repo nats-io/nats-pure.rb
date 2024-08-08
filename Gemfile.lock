@@ -164,6 +164,7 @@ GEM
     timeout (0.4.1)
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
+    uri (0.13.0)
     websocket (1.2.9)
     websocket-driver (0.7.6)
       websocket-extensions (>= 0.1.0)
@@ -183,6 +184,7 @@ DEPENDENCIES
   rspec
   ruby-progressbar
   sqlite3
+  uri
   websocket
 
 BUNDLED WITH

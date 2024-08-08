@@ -6,6 +6,7 @@ group :test do
   gem 'rake'
   gem 'rspec'
   gem 'benchmark-ips'
+  gem 'uri'
   gem 'websocket'
 end
 
