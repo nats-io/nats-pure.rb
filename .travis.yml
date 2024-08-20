@@ -1,8 +1,8 @@
 language: ruby
 
 rvm:
-  - 3.1.2
-  - 3.2.0
+  - 3.1.6
+  - 3.2.5
 
 cache:
   directories:
@@ -26,16 +26,9 @@ addons:
 
 jobs:
   include:
-  - name: "Ruby: 3.3.0"
-    rvm: "3.3.0-preview1"
-  - name: "Ruby: 3.2.0 (nats-server@v2.9)"
-    rvm: "3.2.0"
-    env:
-    - NATS_SERVER_VERSION=v2.9.24
-  - name: "Ruby: 3.2.0 (nats-server@main)"
-    rvm: "3.2.0"
+  - name: "Ruby: 3.3 (nats-server@main)"
+    rvm: "3.3.4"
     env:
     - NATS_SERVER_VERSION=main
   allow_failures:
-    - name: "Ruby: 3.3.0"
-    - name: "Ruby: 3.2.0 (nats-server@main)"
+    - name: "Ruby: 3.3 (nats-server@main)"
