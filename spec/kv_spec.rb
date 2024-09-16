@@ -136,6 +136,18 @@ describe 'KeyValue' do
         allow_direct: false,
         mirror_direct: false,
     )
+
+    # v2.11 changes
+    if ENV['NATS_SERVER_VERSION'] == "main"
+      config.metadata = {
+        :"_nats.created.server.api_level" => "1",
+        :"_nats.created.server.version"   => "2.11.0-dev",
+        :"_nats.server.api_level"         => "1",
+        :"_nats.server.require.api_level" => "0",
+        :"_nats.server.version"           => "2.11.0-dev"
+      }
+    end
+
     expect(config).to eql(si.config)
 
     # Nothing from start

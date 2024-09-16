@@ -947,6 +947,10 @@ describe 'JetStream' do
       # Filter these out
       info.delete(:reserved_memory) if info[:reserved_memory]
       info.delete(:reserved_storage) if info[:reserved_storage]
+
+      # v2.11 starts to include API levels.
+      expected[:api][:level] = 1 if ENV['NATS_SERVER_VERSION'] == "main"
+
       expect(expected).to eql(info)
     end
 
