@@ -943,6 +943,10 @@ describe 'JetStream' do
         :domain => "estre",
         :api => {:total => 5, :errors => 0}
       }
+
+      # Filter these out
+      info.delete(:reserved_memory) if info[:reserved_memory]
+      info.delete(:reserved_storage) if info[:reserved_storage]
       expect(expected).to eql(info)
     end
 
