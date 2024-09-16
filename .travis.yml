@@ -2,7 +2,7 @@ language: ruby
 
 rvm:
   - 3.1.6
-  - 3.2.5
+  - 3.2.4
   - 3.3.5
 
 cache:
@@ -31,5 +31,11 @@ jobs:
     rvm: "3.3.5"
     env:
     - NATS_SERVER_VERSION=main
+  - name: "Ruby: 3.3 (rails)"
+    rvm: "3.3.5"
+    bundler_args: --gemfile 'Gemfile.rails'
+    env:
+    - NATS_SERVER_VERSION=v2.10.20
   allow_failures:
     - name: "Ruby: 3.3 (nats-server@main)"
+    - name: "Ruby: 3.3 (rails)"

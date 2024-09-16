@@ -12,13 +12,3 @@ end
 group :v2 do
   gem 'nkeys'
 end
-
-group :development do
-  gem 'ruby-progressbar'
-end
-
-group :rails do
-  gem 'rails', require: false
-  gem 'activerecord', require: false
-  gem 'sqlite3', require: false
-end

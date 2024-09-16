@@ -1,4 +1,4 @@
-# Copyright 2016-2018 The NATS Authors
+# Copyright 2016-2024 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -200,52 +200,52 @@ describe 'Client - Thread safety' do
     expect(responses.count).to eql(5)
   end
 
-  # Using pure-nats.rb in a Ractor requires URI 0.11.0 or greater due to URI Ractor support.
-  major_version, minor_version, _ = Gem.loaded_specs['uri'].version.to_s.split('.').map(&:to_i)
-  if major_version >= 0 && minor_version >= 11
-    it 'should be able to process messages in a Ractor' do
-      pending "As of Rails 7.0 known to fail with errors about unshareable objects" if defined? Rails
+  # Using nats-pure.rb in a Ractor requires URI 0.11.0 or greater due to URI Ractor support.
+  it 'should be able to process messages in a Ractor' do
+    uri_version = Gem.loaded_specs['uri']
+    major_version, minor_version, _ = uri_version.version.to_s.split('.').map(&:to_i) if uri_version
+    skip 'URI version not supported: #{uri_version}' unless uri_version && major_version >= 0 && minor_version >= 11
+    pending "As of Rails 7.0 known to fail with errors about unshareable objects" if defined? Rails
 
-      nc = NATS.connect(@s.uri)
+    nc = NATS.connect(@s.uri)
 
-      messages = []
-      nc.subscribe('foo') do |msg|
-        messages << msg
-      end
-
-      r1 = Ractor.new(@s.uri) do |uri|
-        r_nc = NATS.connect(uri)
-
-        r_nc.publish('foo', 'bar')
-        r_nc.flush
-        r_nc.close
-
-        'r1 Finished'
-      end
-      r1.take # wait for Ractor to finish sending messages
-      Thread.pass # allow subscription thread to process messages
-      expect(messages.count).to eql(1)
-
-      r2 = Ractor.new(@s.uri) do |uri|
-        r_nc = NATS.connect(uri)
-
-        r_messages = []
-        r_nc.subscribe('bar') do |payload, reply|
-          r_nc.publish(reply, 'OK!')
-          r_messages << payload
-        end
-
-        Ractor.yield 'r2 Ready'
-        sleep 0.01 while r_messages.empty?
-      end
-      r2.take # wait for Ractor to finish setup
-
-      response = nil
-      expect do
-        response = nc.request('bar', 'baz', timeout: 0.5)
-      end.to_not raise_error
-
-      expect(response.data).to eql('OK!')
+    messages = []
+    nc.subscribe('foo') do |msg|
+      messages << msg
     end
+
+    r1 = Ractor.new(@s.uri) do |uri|
+      r_nc = NATS.connect(uri)
+
+      r_nc.publish('foo', 'bar')
+      r_nc.flush
+      r_nc.close
+
+      'r1 Finished'
+    end
+    r1.take # wait for Ractor to finish sending messages
+    Thread.pass # allow subscription thread to process messages
+    expect(messages.count).to eql(1)
+
+    r2 = Ractor.new(@s.uri) do |uri|
+      r_nc = NATS.connect(uri)
+
+      r_messages = []
+      r_nc.subscribe('bar') do |payload, reply|
+        r_nc.publish(reply, 'OK!')
+        r_messages << payload
+      end
+
+      Ractor.yield 'r2 Ready'
+      sleep 0.01 while r_messages.empty?
+    end
+    r2.take # wait for Ractor to finish setup
+
+    response = nil
+    expect do
+      response = nc.request('bar', 'baz', timeout: 0.5)
+    end.to_not raise_error
+
+    expect(response.data).to eql('OK!')
   end
 end
