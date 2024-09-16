@@ -100,7 +100,7 @@ module NATS
     include MonitorMixin
     include Status
 
-    attr_reader :status, :server_info, :server_pool, :options, :connected_server, :stats, :uri, :subscription_executor, :reloader
+    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader
 
     DEFAULT_PORT = { nats: 4222, ws: 80, wss: 443 }.freeze
     DEFAULT_URI = ("nats://localhost:#{DEFAULT_PORT[:nats]}".freeze)
@@ -620,7 +620,6 @@ module NATS
       end
       msg.reply = inbox
       msg.data ||= ''
-      msg_size = msg.data.bytesize
 
       # Publish request and wait for reply.
       publish_msg(msg)
@@ -930,8 +929,7 @@ module NATS
             key, value = line.strip.split(/\s*:\s*/, 2)
             hdr[key] = value
           end
-        rescue => e
-          err = e
+        rescue
         end
       end
 
@@ -1178,7 +1176,7 @@ module NATS
 
         # Wait until only the resp mux is remaining or there are no subscriptions.
         if @subs.count == 1
-          sid, sub = @subs.first
+          _sid, sub = @subs.first
           if sub == @resp_sub
             break
           end
@@ -1815,8 +1813,6 @@ module NATS
 
     def process_uri(uris)
       uris.split(',').map do |uri|
-        opts = {}
-
         # Scheme
         uri = "nats://#{uri}" if !uri.include?("://")
 

@@ -28,7 +28,8 @@ module NATS
     include MonitorMixin
 
     attr_accessor :subject, :queue, :future, :callback, :response, :received, :max, :pending, :sid
-    attr_accessor :pending_queue, :pending_size, :wait_for_msgs_cond, :concurrency_semaphore
+    attr_accessor :pending_queue, :pending_size, :wait_for_msgs_cond
+    attr_writer   :concurrency_semaphore
     attr_accessor :pending_msgs_limit, :pending_bytes_limit
     attr_accessor :nc
     attr_accessor :jsi
