@@ -1814,7 +1814,7 @@ module NATS
     end
 
     def process_uri(uris)
-      uris.split(',').map do |uri|
+      uris.gsub(/\s+/, "").split(',').map do |uri|
         opts = {}
 
         # Scheme
