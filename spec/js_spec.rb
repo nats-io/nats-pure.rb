@@ -357,10 +357,8 @@ describe 'JetStream' do
 
       # There should be no more messages.
       expect do
-        msgs = sub.fetch(10, timeout: 1)
-        expect(msgs.count).to eql(0)
+        sub.fetch(10, timeout: 1)
       end.to raise_error(NATS::IO::Timeout)
-      # expect(sub.pending_queue.size).to eql(1)
 
       # Requests that have timed out so far will linger.
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")

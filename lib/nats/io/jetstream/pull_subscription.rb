@@ -193,6 +193,7 @@ module NATS
 
           # Check if have not received yet a single message.
           duration = MonotonicTime.since(start_time)
+
           if msgs.empty? and duration > timeout
             raise NATS::Timeout.new("nats: fetch timeout")
           end
@@ -207,13 +208,17 @@ module NATS
               # Wait until there is a message delivered.
               if @pending_queue.empty?
                 deadline = timeout - duration
+                wait_start = MonotonicTime.now
+
                 wait_for_msgs_cond.wait(deadline) if deadline > 0
 
                 duration = MonotonicTime.since(start_time)
                 if msgs.empty? && @pending_queue.empty? and duration > timeout
                   raise NATS::Timeout.new("nats: fetch timeout")
                 end
-              else
+              end
+
+              unless @pending_queue.empty?
                 msg = @pending_queue.pop
                 @pending_size -= msg.data.size
 
