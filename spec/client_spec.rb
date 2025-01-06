@@ -241,7 +241,10 @@ describe 'Client - Specification' do
     end
     nc.flush(1)
 
+    all_received = false
+
     expect(msgs.keys.count).to eql(max_subs)
+
     1.upto(max_subs).each do |n|
       1.upto(max_messages).each do |m|
         nc.publish("quux.#{n}", m.to_s)
@@ -250,10 +253,17 @@ describe 'Client - Specification' do
     nc.flush(1)
 
     # Wait a bit for each sub to receive the message.
-    sleep 0.5
-    1.upto(max_subs).each do |n|
-      expect(msgs["quux.#{n}"].count).to eql(max_messages)
+    timeout = 2.0
+    loop do
+      all_received = 1.upto(max_subs).all? do |n|
+        msgs["quux.#{n}"].count == max_messages
+      end
+      sleep 0.2
+      timeout -= 0.2
+      break if all_received || timeout <= 0
     end
+
+    expect(all_received).to be(true), "Not all messages received in time"
 
     nc.close
   end

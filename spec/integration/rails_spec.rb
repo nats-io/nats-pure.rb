@@ -10,7 +10,7 @@ end
 
 require 'spec_helper'
 
-describe 'Rails integration' do
+describe 'Rails integration', :rails do
   before(:all) do
     skip 'rails not installed' if not defined?(Rails)
     @serverctl = NatsServerControl.new.tap { |s| s.start_server(true) }
@@ -33,8 +33,9 @@ describe 'Rails integration' do
 
   let!(:application) do
     stub_const("TestApp", Class.new(Rails::Application) do
+      config.load_defaults Rails::VERSION::STRING.split('.').take(2).join('.')
       config.eager_load = true
-      config.active_record.legacy_connection_handling = false if config.active_record.respond_to?(:legacy_connection_handling)
+      config.active_record.legacy_connection_handling = false if ActiveRecord::VERSION::STRING < '7.0.0'
     end).tap { Rails.application.initialize!}
   end
 

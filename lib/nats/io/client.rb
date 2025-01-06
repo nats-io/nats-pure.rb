@@ -135,6 +135,8 @@ module NATS
       # Re-establish connection in a new process after forking to start new threads.
       def after_fork
         INSTANCES.each do |client|
+          next if client.closed?
+
           if client.options[:reconnect]
             was_connected = !client.disconnected?
             client.send(:close_connection, Status::DISCONNECTED, true)

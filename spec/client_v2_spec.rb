@@ -162,7 +162,7 @@ describe 'Client - v2.2 features' do
     expect(msg.data).to eql('')
     expect(msg.header).to eql({"one" => "1", "reply" => "ok"})
 
-    expect do 
+    expect do
       msg.respond_msg("foo")
     end.to raise_error TypeError
 
@@ -334,7 +334,12 @@ describe 'Client - v2.2 features' do
     end
     1.upto(5) { msgs << sub.next_msg }
 
-    expect(msgs.first.inspect).to eql(%Q(#<NATS::Msg(subject: "hello", reply: "", data: "hello worl...", header={"foo"=>"bar", "hello"=>"hello-1"})>))
+    expect(msgs.first).to have_attributes(
+      subject: "hello",
+      reply: nil,
+      data: a_string_starting_with("hello world"),
+      header: {"foo"=>"bar", "hello"=>"hello-1"}
+    )
 
     msgs.each_with_index do |msg, i|
       n = i + 1

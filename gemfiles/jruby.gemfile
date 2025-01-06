@@ -1,0 +1,7 @@
+source "https://rubygems.org"
+
+gem "rails", "~> 7.0"
+# See https://github.com/jruby/jruby/issues/7262
+gem "jar-dependencies", "0.4.1"
+
+gemspec path: ".."

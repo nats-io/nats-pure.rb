@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2022 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,11 +27,27 @@ Gem::Specification.new do |s|
   s.authors = ['Waldemar Quevedo']
   s.email = ['wally@synadia.com']
 
+  s.metadata = {
+    "bug_tracker_uri" => "https://github.com/nats-io/nats-pure.rb/issues",
+    "changelog_uri" => "https://github.com/nats-io/nats-pure.rb/blob/master/CHANGELOG.md",
+    "documentation_uri" => "https://github.com/nats-io/nats-pure.rb",
+    "homepage_uri" => "https://github.com/nats-io/nats-pure.rb",
+    "source_code_uri" => "https://github.com/nats-io/nats-pure.rb"
+  }
+
+  s.required_ruby_version = ">= 3.0"
+
   s.require_paths = ['lib']
 
-  s.files = Dir['lib/**/*.rb']
-  s.files += Dir['sig/**/*.rbs']
-  s.files += %w[LICENSE README.md]
+  s.files = Dir.glob("lib/**/*.rb") + Dir.glob("sig/**/*.rbs") + %w[README.md LICENSE CHANGELOG.md]
 
   s.add_dependency "concurrent-ruby", "~> 1.0"
+
+  # Optional deps
+  s.add_development_dependency "nkeys"
+  s.add_development_dependency "websocket"
+
+  s.add_development_dependency "bundler", ">= 1"
+  s.add_development_dependency "rake", ">= 13.0"
+  s.add_development_dependency "rspec", ">= 3.5"
 end
