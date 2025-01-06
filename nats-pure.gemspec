@@ -42,6 +42,11 @@ Gem::Specification.new do |s|
   s.files = Dir.glob("lib/**/*.rb") + Dir.glob("sig/**/*.rbs") + %w[README.md LICENSE CHANGELOG.md]
 
   s.add_dependency "concurrent-ruby", "~> 1.0"
+  # Default Ruby gems
+  s.add_dependency "uri"
+  s.add_dependency "securerandom"
+  s.add_dependency "json"
+  s.add_dependency "base64"
 
   # Optional deps
   s.add_development_dependency "nkeys"
@@ -50,4 +55,5 @@ Gem::Specification.new do |s|
   s.add_development_dependency "bundler", ">= 1"
   s.add_development_dependency "rake", ">= 13.0"
   s.add_development_dependency "rspec", ">= 3.5"
+  s.add_development_dependency "resolv-replace"
 end

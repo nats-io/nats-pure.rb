@@ -201,8 +201,8 @@ describe 'Client - Thread safety' do
   end
 
   # Using pure-nats.rb in a Ractor requires URI 0.11.0 or greater due to URI Ractor support.
-  major_version, minor_version, _ = Gem.loaded_specs['uri'].version.to_s.split('.').map(&:to_i)
-  if major_version >= 0 && minor_version >= 11
+  major_version, minor_version, _ = Gem.loaded_specs['uri'].version.to_s.split('.').map(&:to_i) if Gem.loaded_specs['uri']
+  if major_version && major_version >= 0 && minor_version >= 11
     it 'should be able to process messages in a Ractor' do
       pending "As of Rails 7.0 known to fail with errors about unshareable objects" if defined? Rails
 
