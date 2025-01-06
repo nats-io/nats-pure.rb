@@ -16,12 +16,12 @@ require 'spec_helper'
 
 describe 'Client - Errors' do
 
-  before(:each) do
+  before(:all) do
     @s = NatsServerControl.new
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
   end
 

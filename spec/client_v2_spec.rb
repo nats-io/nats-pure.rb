@@ -16,15 +16,15 @@ require 'spec_helper'
 require 'monitor'
 
 describe 'Client - v2.2 features' do
-
-  before(:each) do
-    @s = NatsServerControl.new("nats://127.0.0.1:4523", "/tmp/test-nats.pid", "-js")
+  before(:all) do
+    @tmpdir = Dir.mktmpdir("ruby-jetstream")
+    @s = NatsServerControl.new("nats://127.0.0.1:4523", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
-    sleep 1
+    FileUtils.remove_entry(@tmpdir)
   end
 
   it 'should receive a message with headers' do

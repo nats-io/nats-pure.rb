@@ -17,14 +17,13 @@ require 'monitor'
 
 describe 'Client - Specification' do
 
-  before(:each) do
+  before(:all) do
     @s = NatsServerControl.new("nats://127.0.0.1:4522", "/tmp/test-nats.pid", "--cluster nats://127.0.0.1:4248 --cluster_name test-cluster")
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
-    sleep 1
   end
 
   it 'should connect' do
@@ -520,14 +519,13 @@ describe 'Client - Specification' do
   end
 
   context 'with default port' do
-    before(:each) do
+    before(:all) do
       @s4222 = NatsServerControl.new("nats://127.0.0.1:4222", "/tmp/test-nats.pid-4222")
       @s4222.start_server(true)
     end
 
-    after(:each) do
+    after(:all) do
       @s4222.kill_server
-      sleep 1
     end
 
     it 'should connect' do

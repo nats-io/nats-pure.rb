@@ -10,7 +10,6 @@ describe 'Client - Reconnect' do
 
   after(:each) do
     @s.kill_server
-    sleep 1
   end
 
   it 'should process errors from a server and reconnect' do

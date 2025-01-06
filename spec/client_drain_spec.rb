@@ -3,14 +3,13 @@ require 'monitor'
 
 describe 'Client - Drain' do
 
-  before(:each) do
+  before(:all) do
     @s = NatsServerControl.new
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
-    sleep 1
   end
 
   it 'should gracefully drain a connection' do
