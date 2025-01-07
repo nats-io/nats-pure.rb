@@ -29,7 +29,7 @@ Gem::Specification.new do |s|
 
   s.metadata = {
     "bug_tracker_uri" => "https://github.com/nats-io/nats-pure.rb/issues",
-    "changelog_uri" => "https://github.com/nats-io/nats-pure.rb/blob/master/CHANGELOG.md",
+    "changelog_uri" => "https://github.com/nats-io/nats-pure.rb/blob/main/CHANGELOG.md",
     "documentation_uri" => "https://github.com/nats-io/nats-pure.rb",
     "homepage_uri" => "https://github.com/nats-io/nats-pure.rb",
     "source_code_uri" => "https://github.com/nats-io/nats-pure.rb"
