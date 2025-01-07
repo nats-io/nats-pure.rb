@@ -23,5 +23,4 @@ jobs:
         bundler-cache: true
     - name: Run RSpec
       run: |
-        bundle exec rspec
         bundle exec rspec || DEBUG_NATS_TEST=true bundle exec rspec --only-failures
