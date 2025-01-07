@@ -28,6 +28,8 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 
+  config.filter_run_excluding(tls_verify_hostname: true) if defined?(JRUBY_VERSION)
+
   if Process.respond_to?(:fork)
     config.after(:each) do
       # Mark all clients as closed to avoid reconnects in fork tests

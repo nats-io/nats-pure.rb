@@ -408,32 +408,43 @@ describe 'Client - Specification' do
       end
       nc.flush
 
+      a_future = Future.new
       total = 100
-      responses_a = []
+
       t_a = Thread.new do
         sleep 0.2
+        responses = []
         total.times do |n|
-          responses_a << nc.request("help", "please-A-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-A-#{n}", timeout: 0.5)
         end
+        a_future.set_result(responses)
       end
 
-      responses_b = []
+      b_future = Future.new
       t_b = Thread.new do
+        responses = []
+
         sleep 0.2
         total.times do |n|
-          responses_b << nc.request("help", "please-B-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-B-#{n}", timeout: 0.5)
         end
+        b_future.set_result(responses)
       end
 
-      responses_c = []
+      c_future = Future.new
       t_c = Thread.new do
+        responses = []
+
         sleep 0.2
         total.times do |n|
-          responses_c << nc.request("help", "please-C-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-C-#{n}", timeout: 0.5)
         end
+        c_future.set_result(responses)
       end
 
-      sleep 1
+      responses_a = a_future.wait_for(2)
+      responses_b = b_future.wait_for(2)
+      responses_c = c_future.wait_for(2)
       expect(responses_a.count).to eql(total)
       expect(responses_b.count).to eql(total)
       expect(responses_c.count).to eql(total)
@@ -479,7 +490,7 @@ describe 'Client - Specification' do
         end
 
         mon.synchronize do
-          test_done.wait(1)
+          test_done.wait(3)
           nats.close
         end
       end

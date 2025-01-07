@@ -1633,6 +1633,9 @@ module NATS
       @subscription_executor = Concurrent::ThreadPoolExecutor.new(
         name: 'nats:subscription', # threads will be given names like nats:subscription-worker-1
         max_threads: NATS::IO::DEFAULT_TOTAL_SUB_CONCURRENCY,
+        # JRuby has a bug on certain Java version of not creating new threads:
+        # https://github.com/ruby-concurrency/concurrent-ruby/issues/864
+        min_threads: defined?(JRUBY_VERSION) ? 2 : 0,
       )
     end
 

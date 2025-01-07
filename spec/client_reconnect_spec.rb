@@ -300,6 +300,7 @@ describe 'Client - Reconnect' do
         loop do
           # Wait for a client to connect
           @fake_nats_server.accept
+        rescue IOError
         end
       end
     end

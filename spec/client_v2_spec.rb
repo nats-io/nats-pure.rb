@@ -118,10 +118,6 @@ describe 'Client - v2.2 features' do
   it 'should make requests with headers' do
     nc = NATS::IO::Client.new
     nc.connect(:servers => [@s.uri])
-    nc.on_error do |e|
-      puts "Error: #{e}"
-      puts e.backtrace
-    end
 
     msgs = []
     seq = 0
@@ -150,14 +146,15 @@ describe 'Client - v2.2 features' do
     end
     expect(msgs.count).to eql(5)
 
-    sub2 = nc.subscribe("quux")
-    Thread.new do
-      # Add some custom headers...
-      msg = sub2.next_msg
-      msg.header["reply"] = "ok"
-      msg.respond
+    q2 = Queue.new
+
+    nc.subscribe("quux") do |data, reply, _, header|
+      q2.pop
+      msg = NATS::Msg.new(data: data, subject: reply, header: header.merge({"reply" => "ok"}))
+      nc.publish_msg(msg)
     end
 
+    q2.push(1)
     msg = nc.request("quux", timeout: 2, header: { "one": "1" })
     expect(msg.data).to eql('')
     expect(msg.header).to eql({"one" => "1", "reply" => "ok"})
@@ -167,9 +164,9 @@ describe 'Client - v2.2 features' do
     end.to raise_error TypeError
 
     expect do
-      nc.request("quux", timeout: 0.0001, header: { "one": "1" })
+      nc.request("quux", timeout: 0.1, header: { "one": "1" })
     end.to raise_error NATS::Timeout
-
+    q2.push(2)
     nc.close
   end
 
