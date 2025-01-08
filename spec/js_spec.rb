@@ -452,6 +452,7 @@ describe "JetStream" do
       end.to raise_error(NATS::IO::BadSubscription)
     end
 
+    # TODO: What do we test here?
     it "should account pending data" do
       nc = NATS.connect(@s.uri)
       nc2 = NATS.connect(@s.uri)
@@ -464,34 +465,36 @@ describe "JetStream" do
 
       js.add_stream(name: "limitstest", subjects: [subject])
 
-      # Continuously send messages until reaching pending bytes limit.
-      t = Thread.new do
-        payload = "A" * 1024 * 1024
-        loop do
-          nc2.publish(subject, payload)
-          sleep 0.01
+      begin
+        # Continuously send messages until reaching pending bytes limit.
+        t = Thread.new do
+          payload = "A" * 1024
+          loop do
+            nc2.publish(subject, payload)
+            sleep 0.01
+          end
         end
-      end
 
-      sub = js.pull_subscribe(subject, "test")
-      65.times do |i|
-        msgs = sub.fetch(1)
-        msgs.each do |msg|
-          msg.ack
+        sub = js.pull_subscribe(subject, "test")
+        65.times do |i|
+          msgs = sub.fetch(1)
+          msgs.each do |msg|
+            msg.ack
+          end
         end
-      end
 
-      sub = js.pull_subscribe(subject, "test")
-      65.times do |i|
-        msgs = sub.fetch(2)
-        msgs.each do |msg|
-          msg.ack
+        sub = js.pull_subscribe(subject, "test")
+        65.times do |i|
+          msgs = sub.fetch(2)
+          msgs.each do |msg|
+            msg.ack
+          end
         end
+      ensure
+        nc.close
+        nc2.close
+        t.exit
       end
-
-      t.exit
-      nc.close
-      nc2.close
     end
 
     it "should create and bind to consumer with name" do

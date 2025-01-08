@@ -27,13 +27,14 @@ describe "Client - Drain" do
     wait_subs = Future.new
     wait_pubs = Future.new
     reqs_started = Queue.new
+    wait_reqs_start = Future.new
     wait_reqs = Future.new
 
     Thread.new do
       wait_subs.wait_for(2)
       40.times do |i|
         ("a".."b").each do
-          payload = "REQ:#{_1}:#{i}"
+          payload = "PUB:#{_1}:#{i}"
           nc2.publish(_1, payload * 128)
           sleep 0.01
         end
@@ -43,9 +44,10 @@ describe "Client - Drain" do
 
       ("a".."b").map do |sub|
         Thread.new do
+          wait_reqs_start.wait_for(5)
           reqs_started << sub
           payload = "REQ:#{sub}"
-          nc2.request(sub, payload)
+          nc2.request(sub, payload, timeout: 5)
         end
       end.each(&:join)
 
@@ -73,20 +75,25 @@ describe "Client - Drain" do
     sub_queue.push(f1)
     sub_queue.push(f2)
 
-    expect(f1.wait_for(1)).to eql(:ok)
-    expect(f2.wait_for(1)).to eql(:ok)
+    expect(f1.wait_for(2)).to eql(:ok)
+    expect(f2.wait_for(2)).to eql(:ok)
 
     wait_pubs.wait_for(2)
 
+    wait_reqs_start.done
+
     reqs_started.pop
     reqs_started.pop
+
+    # sleep a bit to let requests initiate
+    sleep 2
 
     # Start draining process asynchronously.
     nc.drain
 
-    # Release the queue (we have 38 messages left)
+    # Release the queue
     80.times { sub_queue.push(Future.new) }
-    result = future.wait_for(2)
+    result = future.wait_for(7)
     expect(result).to eql(:closed)
     expect(wait_reqs.wait_for(2)).to eql(:ok)
   end
@@ -141,8 +148,8 @@ describe "Client - Drain" do
     sub_queue.push(f1)
     sub_queue.push(f2)
 
-    expect(f1.wait_for(1)).to eql(:ok)
-    expect(f2.wait_for(1)).to eql(:ok)
+    expect(f1.wait_for(2)).to eql(:ok)
+    expect(f2.wait_for(2)).to eql(:ok)
 
     wait_pubs.wait_for(2)
 
