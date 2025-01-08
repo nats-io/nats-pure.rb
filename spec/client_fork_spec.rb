@@ -96,22 +96,34 @@ describe 'Client - Fork detection' do
     nats.close
   end
 
-  it 'should be able to receive messages from child process after forking' do
+  it 'should be able to receive messages from parent process after forking' do
     from_child, to_parent = IO.pipe
     from_parent, to_child = IO.pipe
 
     pid = fork do # child process
       to_child.close; from_child.close # close unused ends
 
+      received = false
       nats.subscribe("forked-topic") do |msg|
         to_parent.write(msg.data)
+        received = true
       end
+
       nats.flush
 
       to_parent.puts("proceed")
       from_parent.gets # Wait for parent to publish message
-      Thread.pass # give a chance for subscription thread to catch and handle message (flaky test)
 
+      timeout = 1.0
+      loop {
+        break if received || timeout < 0
+        Thread.pass # give a chance for subscription thread to catch and handle message
+        timeout -= 0.1
+        sleep 0.1
+      }
+
+      to_parent.write("timed out to receieve message") unless received
+    ensure
       to_parent.close; from_parent.close
       nats.close
     end

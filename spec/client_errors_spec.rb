@@ -16,12 +16,12 @@ require 'spec_helper'
 
 describe 'Client - Errors' do
 
-  before(:each) do
+  before(:all) do
     @s = NatsServerControl.new
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
   end
 
@@ -247,8 +247,8 @@ describe 'Client - Errors' do
     end
 
     data = ''
-    nats.subscribe("hello", pending_bytes_limit: 10) do |payload|
-      data += payload
+    nats.subscribe("hello", pending_bytes_limit: 10) do |msg|
+      data += msg.data
       sleep 2 if data.size == 10
     end
 
@@ -285,6 +285,7 @@ describe 'Client - Errors' do
         loop do
           # Wait for a client to connect and linger
           @fake_nats_server.accept
+        rescue IOError # ignore client disconnects
         end
       end
     end
@@ -358,6 +359,7 @@ describe 'Client - Errors' do
           client = @fake_nats_server.accept
           client.puts %Q(INFO {"version":"1.3.0 foo bar","max_payload": 1048576}\r\n)
           client.puts "PONG\r\n"
+        rescue IOError # ignore client disconnects
         end
       end
     end
@@ -414,6 +416,7 @@ describe 'Client - Errors' do
           ensure
             client.close
           end
+        rescue IOError # ignore client disconnects
         end
       end
     end

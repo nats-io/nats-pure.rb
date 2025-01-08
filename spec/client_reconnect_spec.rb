@@ -10,7 +10,6 @@ describe 'Client - Reconnect' do
 
   after(:each) do
     @s.kill_server
-    sleep 1
   end
 
   it 'should process errors from a server and reconnect' do
@@ -301,6 +300,7 @@ describe 'Client - Reconnect' do
         loop do
           # Wait for a client to connect
           @fake_nats_server.accept
+        rescue IOError
         end
       end
     end

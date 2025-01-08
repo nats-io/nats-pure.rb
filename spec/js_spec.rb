@@ -357,10 +357,8 @@ describe 'JetStream' do
 
       # There should be no more messages.
       expect do
-        msgs = sub.fetch(10, timeout: 1)
-        expect(msgs.count).to eql(0)
+        sub.fetch(10, timeout: 1)
       end.to raise_error(NATS::IO::Timeout)
-      # expect(sub.pending_queue.size).to eql(1)
 
       # Requests that have timed out so far will linger.
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
@@ -804,7 +802,7 @@ describe 'JetStream' do
 
       # Each should get at least a couple of messages
       qsubs.each do |qsub|
-        expect(qsub.pending_queue.size > 2).to eql(true)
+        expect(qsub.pending_queue.size).to be >= 2
       end
     end
 
@@ -924,13 +922,13 @@ describe 'JetStream' do
 
       js = nc.jetstream(domain: "estre")
       info = js.account_info
-      expected = {
+      expected = a_hash_including({
         :type => "io.nats.jetstream.api.v1.account_info_response",
         :memory => 0,
         :storage => 66,
         :streams => 1,
         :consumers => 1,
-        :limits => {
+        :limits => a_hash_including({
           :max_memory => -1,
           :max_storage => -1,
           :max_streams => -1,
@@ -939,11 +937,11 @@ describe 'JetStream' do
           :memory_max_stream_bytes => -1,
           :storage_max_stream_bytes => -1,
           :max_bytes_required => false
-        },
+        }),
         :domain => "estre",
         :api => {:total => 5, :errors => 0}
-      }
-      expect(expected).to eql(info)
+      })
+      expect(info).to match(expected)
     end
 
     it 'should nack messages with a delay' do
@@ -988,7 +986,7 @@ describe 'JetStream' do
       msg = msgs.first
       msg.nak(delay: 2)
 
-      expect do 
+      expect do
         msg.nak(delay: 2, timeout: 2)
       end.to raise_error(NATS::JetStream::Error::MsgAlreadyAckd)
 

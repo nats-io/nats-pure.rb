@@ -135,6 +135,8 @@ module NATS
       # Re-establish connection in a new process after forking to start new threads.
       def after_fork
         INSTANCES.each do |client|
+          next if client.closed?
+
           if client.options[:reconnect]
             was_connected = !client.disconnected?
             client.send(:close_connection, Status::DISCONNECTED, true)
@@ -1631,6 +1633,9 @@ module NATS
       @subscription_executor = Concurrent::ThreadPoolExecutor.new(
         name: 'nats:subscription', # threads will be given names like nats:subscription-worker-1
         max_threads: NATS::IO::DEFAULT_TOTAL_SUB_CONCURRENCY,
+        # JRuby has a bug on certain Java version of not creating new threads:
+        # https://github.com/ruby-concurrency/concurrent-ruby/issues/864
+        min_threads: defined?(JRUBY_VERSION) ? 2 : 0,
       )
     end
 

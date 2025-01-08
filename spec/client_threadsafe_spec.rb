@@ -44,25 +44,44 @@ describe 'Client - Thread safety' do
     component = Component.new
     component.connect!
 
+    q = Queue.new
     threads = []
     thr_a = Thread.new do
       component.nats.subscribe("hello") do |data, reply, subject|
         component.msgs << { :data => data, :subject => subject }
       end
-      sleep 0.01 until component.msgs.count > 100
+
+      q << "hello subscribed"
+
+      loop do
+        if component.msgs.count >= 100
+          q << "hello done"
+          break
+        end
+        sleep 0.1
+      end
     end
+
     threads << thr_a
 
     thr_b = Thread.new do
       component.nats.subscribe("world") do |data, reply, subject|
         component.msgs << { :data => data, :subject => subject }
       end
-      sleep 0.01 until component.msgs.count > 100
+
+      q << "world subscribed"
+
+      loop do
+        if component.msgs.count >= 100
+          q << "world done"
+          break
+        end
+        sleep 0.1
+      end
     end
     threads << thr_b
 
-    # More than enough for subscriptions to have been flushed already.
-    sleep 1
+    q.pop; q.pop
 
     thr_c = Thread.new do
       (1..100).step(2) do |n|
@@ -80,7 +99,7 @@ describe 'Client - Thread safety' do
     end
     threads << thr_d
 
-    sleep 1
+    q.pop; q.pop
     expect(component.msgs.count).to eql(100)
 
     result = component.msgs.select { |msg| msg[:subject] != "hello" && msg[:data].to_i % 2 == 1 }
@@ -201,8 +220,8 @@ describe 'Client - Thread safety' do
   end
 
   # Using pure-nats.rb in a Ractor requires URI 0.11.0 or greater due to URI Ractor support.
-  major_version, minor_version, _ = Gem.loaded_specs['uri'].version.to_s.split('.').map(&:to_i)
-  if major_version >= 0 && minor_version >= 11
+  major_version, minor_version, _ = Gem.loaded_specs['uri'].version.to_s.split('.').map(&:to_i) if Gem.loaded_specs['uri']
+  if major_version && major_version >= 0 && minor_version >= 11
     it 'should be able to process messages in a Ractor' do
       pending "As of Rails 7.0 known to fail with errors about unshareable objects" if defined? Rails
 

@@ -17,14 +17,13 @@ require 'monitor'
 
 describe 'Client - Specification' do
 
-  before(:each) do
+  before(:all) do
     @s = NatsServerControl.new("nats://127.0.0.1:4522", "/tmp/test-nats.pid", "--cluster nats://127.0.0.1:4248 --cluster_name test-cluster")
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
-    sleep 1
   end
 
   it 'should connect' do
@@ -241,7 +240,10 @@ describe 'Client - Specification' do
     end
     nc.flush(1)
 
+    all_received = false
+
     expect(msgs.keys.count).to eql(max_subs)
+
     1.upto(max_subs).each do |n|
       1.upto(max_messages).each do |m|
         nc.publish("quux.#{n}", m.to_s)
@@ -250,10 +252,17 @@ describe 'Client - Specification' do
     nc.flush(1)
 
     # Wait a bit for each sub to receive the message.
-    sleep 0.5
-    1.upto(max_subs).each do |n|
-      expect(msgs["quux.#{n}"].count).to eql(max_messages)
+    timeout = 2.0
+    loop do
+      all_received = 1.upto(max_subs).all? do |n|
+        msgs["quux.#{n}"].count == max_messages
+      end
+      sleep 0.2
+      timeout -= 0.2
+      break if all_received || timeout <= 0
     end
+
+    expect(all_received).to be(true), "Not all messages received in time"
 
     nc.close
   end
@@ -399,32 +408,43 @@ describe 'Client - Specification' do
       end
       nc.flush
 
+      a_future = Future.new
       total = 100
-      responses_a = []
+
       t_a = Thread.new do
         sleep 0.2
+        responses = []
         total.times do |n|
-          responses_a << nc.request("help", "please-A-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-A-#{n}", timeout: 0.5)
         end
+        a_future.set_result(responses)
       end
 
-      responses_b = []
+      b_future = Future.new
       t_b = Thread.new do
+        responses = []
+
         sleep 0.2
         total.times do |n|
-          responses_b << nc.request("help", "please-B-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-B-#{n}", timeout: 0.5)
         end
+        b_future.set_result(responses)
       end
 
-      responses_c = []
+      c_future = Future.new
       t_c = Thread.new do
+        responses = []
+
         sleep 0.2
         total.times do |n|
-          responses_c << nc.request("help", "please-C-#{n}", timeout: 0.5)
+          responses << nc.request("help", "please-C-#{n}", timeout: 0.5)
         end
+        c_future.set_result(responses)
       end
 
-      sleep 1
+      responses_a = a_future.wait_for(2)
+      responses_b = b_future.wait_for(2)
+      responses_c = c_future.wait_for(2)
       expect(responses_a.count).to eql(total)
       expect(responses_b.count).to eql(total)
       expect(responses_c.count).to eql(total)
@@ -470,7 +490,7 @@ describe 'Client - Specification' do
         end
 
         mon.synchronize do
-          test_done.wait(1)
+          test_done.wait(3)
           nats.close
         end
       end
@@ -510,14 +530,13 @@ describe 'Client - Specification' do
   end
 
   context 'with default port' do
-    before(:each) do
+    before(:all) do
       @s4222 = NatsServerControl.new("nats://127.0.0.1:4222", "/tmp/test-nats.pid-4222")
       @s4222.start_server(true)
     end
 
-    after(:each) do
+    after(:all) do
       @s4222.kill_server
-      sleep 1
     end
 
     it 'should connect' do
