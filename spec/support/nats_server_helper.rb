@@ -1,3 +1,5 @@
+require "socket"
+
 class NatsServerControl
   BIN_PATH = File.expand_path(File.join(__dir__, "../../scripts/nats-server"))
 
@@ -17,7 +19,7 @@ class NatsServerControl
     end
 
     def init_with_config_from_string(config_string, config={})
-      puts config_string if ENV["DEBUG_NATS_TEST"] == "true"
+      puts config_string if debug?
       config_file = Tempfile.new(['nats-cluster-tests', '.conf'])
       File.open(config_file.path, 'w') do |f|
         f.puts(config_string)
@@ -32,6 +34,9 @@ class NatsServerControl
       NatsServerControl.new(uri, config['pid_file'], "-c #{config_file.path}", config_file)
     end
 
+    def debug?
+      %w[1 true t].include?(ENV["DEBUG_NATS_TEST"])
+    end
   end
 
   attr_reader :uri
@@ -41,6 +46,10 @@ class NatsServerControl
     @pid_file = pid_file
     @flags = flags
     @config_file = config_file
+  end
+
+  def debug?
+    self.class.debug?
   end
 
   def server_pid
@@ -70,7 +79,7 @@ class NatsServerControl
     end
     args += " #{@flags}" if @flags
 
-    if ENV["DEBUG_NATS_TEST"] == "true"
+    if debug?
       system("#{BIN_PATH} #{args} -DV &")
     else
       system("#{BIN_PATH} #{args} 2> /dev/null &")
@@ -90,19 +99,23 @@ class NatsServerControl
   end
 
   def wait_for_server(uri, max_wait = 5) # :nodoc:
-    start = Time.now
-    while (Time.now - start < max_wait) # Wait max_wait seconds max
-      break if server_running?(uri)
+    wait = max_wait.to_f
+    loop do
+      return if server_running?(uri)
       sleep(0.1)
+      wait -= 0.1
+
+      raise "NATS Server did not start in #{max_wait} seconds" if wait <= 0
     end
   end
 
   def server_running?(uri) # :nodoc:
-    require 'socket'
-    s = TCPSocket.new(uri.host, uri.port)
-    s.close
-    return true
-  rescue
-    return false
+    s = TCPSocket.new(uri.host, uri.port, nil, nil, connect_timeout: 0.5)
+    true
+  rescue => e
+    puts "Server is not available: #{e}" if debug?
+    false
+  ensure
+    s&.close
   end
 end

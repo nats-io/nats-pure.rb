@@ -25,5 +25,7 @@ jobs:
       # Mark failures as warnings for now due to high level of flakiness
       # and occasional OOM-s on CI
       continue-on-error: true
+      env:
+        DEBUG_NATS_TEST: ${{ runner.debug }}
       run: |
-        bundle exec rspec || DEBUG_NATS_TEST=true bundle exec rspec --only-failures
+        bundle exec rspec --force-color || bundle exec rspec --only-failures --force-color

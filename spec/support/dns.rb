@@ -20,6 +20,15 @@ dns_resolver = Resolv::DNS.new
 
 Resolv::DefaultResolver.replace_resolvers([hosts_resolver, dns_resolver])
 
+# resolve-replace doesn't support modern Ruby TCPSocket signature:
+# https://github.com/ruby/resolv-replace/issues/2
+class TCPSocket
+  def initialize(host, serv, *rest, **kwargs)
+    rest[0] = IPSocket.getaddress(rest[0]) if rest[0]
+    original_resolv_initialize(IPSocket.getaddress(host), serv, *rest, **kwargs)
+  end
+end
+
 # Patch Socket to rely on Resolve when getting address info
 # Inspired by the original resolve-replace.rb: https://github.com/ruby/resolv-replace/blob/master/lib/resolv-replace.rb
 require "socket"
@@ -32,7 +41,7 @@ class << Socket
     begin
       return original_getaddrinfo(Resolv.getaddress(host).to_s, *args)
     rescue Resolv::ResolvError
-      raise SocketError, "Hostname not known: #{host}"
+      original_getaddrinfo(host, *args)
     end
   end
 end

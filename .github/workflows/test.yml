@@ -31,8 +31,10 @@ jobs:
         ruby-version: ${{ matrix.ruby }}
         bundler-cache: true
     - name: Run RSpec
+      env:
+        DEBUG_NATS_TEST: ${{ runner.debug }}
       run: |
-        bundle exec rspec
+        bundle exec rspec --force-color
 
   rspec-rails:
     runs-on: ubuntu-latest
@@ -62,4 +64,4 @@ jobs:
         bundler-cache: true
     - name: Run RSpec
       run: |
-        bundle exec rspec --tag rails
+        bundle exec rspec --tag rails --force-color
