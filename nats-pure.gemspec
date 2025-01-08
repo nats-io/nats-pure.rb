@@ -14,18 +14,18 @@
 # limitations under the License.
 #
 
-require_relative 'lib/nats/io/version'
+require_relative "lib/nats/io/version"
 
 Gem::Specification.new do |s|
-  s.name = 'nats-pure'
+  s.name = "nats-pure"
   s.version = NATS::IO::VERSION
-  s.summary = 'NATS is an open-source, high-performance, lightweight cloud messaging system.'
-  s.homepage = 'https://nats.io'
-  s.description = 'NATS is an open-source, high-performance, lightweight cloud messaging system.'
-  s.licenses = ['Apache-2.0']
+  s.summary = "NATS is an open-source, high-performance, lightweight cloud messaging system."
+  s.homepage = "https://nats.io"
+  s.description = "NATS is an open-source, high-performance, lightweight cloud messaging system."
+  s.licenses = ["Apache-2.0"]
 
-  s.authors = ['Waldemar Quevedo']
-  s.email = ['wally@synadia.com']
+  s.authors = ["Waldemar Quevedo"]
+  s.email = ["wally@synadia.com"]
 
   s.metadata = {
     "bug_tracker_uri" => "https://github.com/nats-io/nats-pure.rb/issues",
@@ -37,7 +37,7 @@ Gem::Specification.new do |s|
 
   s.required_ruby_version = ">= 3.0"
 
-  s.require_paths = ['lib']
+  s.require_paths = ["lib"]
 
   s.files = Dir.glob("lib/**/*.rb") + Dir.glob("sig/**/*.rbs") + %w[README.md LICENSE CHANGELOG.md]
 

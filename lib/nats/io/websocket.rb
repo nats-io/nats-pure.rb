@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 begin
-  require 'websocket'
+  require "websocket"
 rescue LoadError
   raise LoadError, "Please add `websocket` gem to your Gemfile to connect to NATS via WebSocket."
 end
@@ -15,7 +17,7 @@ module NATS
 
       attr_accessor :socket
 
-      def initialize(options={})
+      def initialize(options = {})
         super
       end
 
@@ -44,31 +46,31 @@ module NATS
         super
       end
 
-      def read(max_bytes=MAX_SOCKET_READ_BYTES, deadline=nil)
+      def read(max_bytes = MAX_SOCKET_READ_BYTES, deadline = nil)
         data = super
         @frame << data
         result = []
-        while msg = @frame.next
+        while (msg = @frame.next)
           result << msg
         end
         result.join
       end
 
-      def read_line(deadline=nil)
+      def read_line(deadline = nil)
         data = super
         @frame << data
         result = []
-        while msg = @frame.next
+        while (msg = @frame.next)
           result << msg
         end
         result.join
       end
 
-      def write(data, deadline=nil)
+      def write(data, deadline = nil)
         raise HandshakeError, "Attempted to write to socket while WebSocket handshake is in progress" unless @handshaked
 
         frame = ::WebSocket::Frame::Outgoing::Client.new(data: data, type: :binary, version: @handshake.version)
-        super frame.to_s
+        super(frame.to_s)
       end
     end
   end

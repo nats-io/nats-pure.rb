@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,11 +38,11 @@ module NATS
       end
 
       def create_key_value(config)
-        config = if not config.is_a?(KeyValue::API::KeyValueConfig)
-                   KeyValue::API::KeyValueConfig.new(config)
-                 else
-                   config
-                 end
+        config = if !config.is_a?(KeyValue::API::KeyValueConfig)
+          KeyValue::API::KeyValueConfig.new(config)
+        else
+          config
+        end
         config.history ||= 1
         config.replicas ||= 1
         duplicate_window = 2 * 60 # 2 minutes
@@ -68,8 +70,8 @@ module NATS
           max_msgs_per_subject: config.history,
           num_replicas: config.replicas,
           storage: config.storage,
-          republish: config.republish,
-          )
+          republish: config.republish
+        )
 
         si = add_stream(stream)
         KeyValue.new(

@@ -1,9 +1,9 @@
+# frozen_string_literal: true
 
 def with_timeout(timeout)
   start_time = Time.now
   yield
   end_time = Time.now
-  duration = end_time - start_time
   fail if end_time - start_time > timeout
 end
 
@@ -18,7 +18,7 @@ class Future
     @result = nil
   end
 
-  def wait_for(timeout=1)
+  def wait_for(timeout = 1)
     return @result if @result
     @mon.synchronize do
       @done.wait(timeout)

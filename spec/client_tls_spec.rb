@@ -1,22 +1,6 @@
-# Copyright 2016-2018 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-require 'openssl'
-require 'erb'
-
-DEFAULT_JRUBY_CIPHER_SUITE = %q(
+DEFAULT_JRUBY_CIPHER_SUITE = '
     # JRuby is sensible to the ciphers being used
     # so we specify the ones that are available on it here.
     # See: https://github.com/jruby/jruby/issues/1738
@@ -28,18 +12,17 @@ DEFAULT_JRUBY_CIPHER_SUITE = %q(
       "TLS_RSA_WITH_AES_256_CBC_SHA",
       "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
     ]
-)
+'
 
-describe 'Client - TLS spec' do
-
-  context 'when server requires TLS and no auth needed' do
-    before(:each) do
+describe "Client - TLS spec" do
+  context "when server requires TLS and no auth needed" do
+    before do
       opts = {
-        'pid_file' => '/tmp/test-nats-4444.pid',
-        'host' => '127.0.0.1',
-        'port' => 4444
+        "pid_file" => "/tmp/test-nats-4444.pid",
+        "host" => "127.0.0.1",
+        "port" => 4444
       }
-      config = ERB.new(%Q(
+      config = ERB.new(%(
         net:  "<%= opts['host'] %>"
         port: <%= opts['port'] %>
 
@@ -56,27 +39,26 @@ describe 'Client - TLS spec' do
       @tls_no_auth.start_server
     end
 
-    after(:each) do
+    after do
       @tls_no_auth.kill_server
     end
 
-    it 'should error if client does not set secure connection and server requires it' do
+    it "should error if client does not set secure connection and server requires it" do
       errors = []
       closes = 0
-      reconnects = 0
       disconnects = 0
       reconnects = 0
 
       nats = NATS::IO::Client.new
-      nats.on_close      { closes += 1 }
-      nats.on_reconnect  { reconnects += 1 }
+      nats.on_close { closes += 1 }
+      nats.on_reconnect { reconnects += 1 }
       nats.on_disconnect { disconnects += 1 }
       nats.on_error do |e|
         errors << e
       end
 
       expect do
-        nats.connect(:servers => ['nats://127.0.0.1:4444'], :reconnect => false)
+        nats.connect(servers: ["nats://127.0.0.1:4444"], reconnect: false)
       end.to raise_error(NATS::IO::ConnectError)
 
       # Async handler also gets triggered since defined
@@ -89,16 +71,15 @@ describe 'Client - TLS spec' do
       expect(disconnects).to eql(1)
     end
 
-    it 'should allow to connect client with secure connection if server requires it' do
+    it "should allow to connect client with secure connection if server requires it" do
       errors = []
       closes = 0
-      reconnects = 0
       disconnects = 0
       reconnects = 0
 
       nats = NATS::IO::Client.new
-      nats.on_close      { closes += 1 }
-      nats.on_reconnect  { reconnects += 1 }
+      nats.on_close { closes += 1 }
+      nats.on_reconnect { reconnects += 1 }
       nats.on_disconnect { disconnects += 1 }
       nats.on_error do |e|
         errors << e
@@ -109,7 +90,7 @@ describe 'Client - TLS spec' do
         tls_context.set_params
         tls_context.ca_file = "./spec/configs/certs/ca.pem"
         nats.connect({
-          servers: ['tls://127.0.0.1:4444'],
+          servers: ["tls://127.0.0.1:4444"],
           reconnect: false,
           tls: {
             context: tls_context
@@ -125,7 +106,7 @@ describe 'Client - TLS spec' do
       nats.flush
 
       # Send some messages...
-      100.times {|n| nats.publish("hello.#{n}", "world") }
+      100.times { |n| nats.publish("hello.#{n}", "world") }
       nats.flush
       sleep 0.5
 
@@ -140,25 +121,27 @@ describe 'Client - TLS spec' do
       expect(disconnects).to eql(1)
     end
 
-
-    it 'should allow to client to try to connect securely using tls scheme' do
+    it "should allow to client to try to connect securely using tls scheme" do
       nats = NATS::IO::Client.new
 
       # Discard error since only want to confirm that TLS is setup due to scheme option.
-      nats.connect('tls://127.0.0.1:4444', reconnect:false) rescue nil
+      begin
+        nats.connect("tls://127.0.0.1:4444", reconnect: false)
+      rescue
+        nil
+      end
       expect(nats.options[:tls]).to_not be_nil
     end
 
-    it 'should allow custom secure connection contexts' do
+    it "should allow custom secure connection contexts" do
       errors = []
       closes = 0
-      reconnects = 0
       disconnects = 0
       reconnects = 0
 
       nats = NATS::IO::Client.new
-      nats.on_close      { closes += 1 }
-      nats.on_reconnect  { reconnects += 1 }
+      nats.on_close { closes += 1 }
+      nats.on_reconnect { reconnects += 1 }
       nats.on_disconnect { disconnects += 1 }
       nats.on_error do |e|
         errors << e
@@ -169,24 +152,24 @@ describe 'Client - TLS spec' do
         tls_context.ssl_version = :TLSv1
 
         nats.connect({
-                       servers: ['tls://127.0.0.1:4444'],
-                       reconnect: false,
-                       tls: {
-                         context: tls_context
-                       }
-                     })
+          servers: ["tls://127.0.0.1:4444"],
+          reconnect: false,
+          tls: {
+            context: tls_context
+          }
+        })
       end.to raise_error(OpenSSL::SSL::SSLError)
     end
   end
 
-  context 'when server requires TLS and certificates' do
-    before(:each) do
+  context "when server requires TLS and certificates" do
+    before do
       opts = {
-        'pid_file' => '/tmp/test-nats-4555.pid',
-        'host' => '127.0.0.1',
-        'port' => 4555
+        "pid_file" => "/tmp/test-nats-4555.pid",
+        "host" => "127.0.0.1",
+        "port" => 4555
       }
-      config = ERB.new(%Q(
+      config = ERB.new(%(
         net:  "<%= opts['host'] %>"
         port: <%= opts['port'] %>
 
@@ -208,20 +191,20 @@ describe 'Client - TLS spec' do
       @tlsverify = NatsServerControl.init_with_config_from_string(config.result(binding), opts)
       @tlsverify.start_server
     end
-    after(:each) do
+
+    after do
       @tlsverify.kill_server
     end
 
-    it 'should allow custom secure connection contexts' do
+    it "should allow custom secure connection contexts" do
       errors = []
       closes = 0
-      reconnects = 0
       disconnects = 0
       reconnects = 0
 
       nats = NATS::IO::Client.new
-      nats.on_close      { closes += 1 }
-      nats.on_reconnect  { reconnects += 1 }
+      nats.on_close { closes += 1 }
+      nats.on_reconnect { reconnects += 1 }
       nats.on_disconnect { disconnects += 1 }
       nats.on_error do |e|
         errors << e
@@ -235,7 +218,7 @@ describe 'Client - TLS spec' do
         tls_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
 
         nats.connect({
-          servers: ['tls://127.0.0.1:4555'],
+          servers: ["tls://127.0.0.1:4555"],
           reconnect: false,
           tls: {
             context: tls_context
@@ -243,7 +226,7 @@ describe 'Client - TLS spec' do
         })
 
         nats.subscribe("hello") do |msg, reply|
-          nats.publish(reply, 'ok')
+          nats.publish(reply, "ok")
         end
 
         response = nats.request("hello", "world")
@@ -252,7 +235,7 @@ describe 'Client - TLS spec' do
     end
   end
 
-  context 'when server requires TLS and client enables host verification', :tls_verify_hostname do
+  context "when server requires TLS and client enables host verification", :tls_verify_hostname do
     let(:tls_context) {
       ctx = OpenSSL::SSL::SSLContext.new
       ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
@@ -261,14 +244,15 @@ describe 'Client - TLS spec' do
 
       ctx
     }
-    before(:each) do
+
+    before do
       @tls_verify_host_server_uri = URI.parse("nats://127.0.0.1:4556")
       opts = {
-        'pid_file' => "/tmp/test-nats-#{@tls_verify_host_server_uri.port}.pid",
-        'host' => '127.0.0.1',
-        'port' => @tls_verify_host_server_uri.port
+        "pid_file" => "/tmp/test-nats-#{@tls_verify_host_server_uri.port}.pid",
+        "host" => "127.0.0.1",
+        "port" => @tls_verify_host_server_uri.port
       }
-      config = ERB.new(%Q(
+      config = ERB.new(%(
         net:  "<%= opts['host'] %>"
         port: <%= opts['port'] %>
 
@@ -291,11 +275,11 @@ describe 'Client - TLS spec' do
       @tls_verify_host.start_server
     end
 
-    after(:each) do
+    after do
       @tls_verify_host.kill_server
     end
 
-    it 'should be able to connect and verify server hostname' do
+    it "should be able to connect and verify server hostname" do
       expect do
         nats = NATS::IO::Client.new
 
@@ -308,7 +292,7 @@ describe 'Client - TLS spec' do
         })
 
         nats.subscribe("hello") do |msg, reply|
-          nats.publish(reply, 'ok')
+          nats.publish(reply, "ok")
         end
 
         response = nats.request("hello", "world")
@@ -316,7 +300,7 @@ describe 'Client - TLS spec' do
       end.to_not raise_error
     end
 
-    it 'should not be able to connect if using wrong server hostname' do
+    it "should not be able to connect if using wrong server hostname" do
       expect do
         nats = NATS::IO::Client.new
 
@@ -329,7 +313,7 @@ describe 'Client - TLS spec' do
         })
 
         nats.subscribe("hello") do |msg, reply|
-          nats.publish(reply, 'ok')
+          nats.publish(reply, "ok")
         end
 
         response = nats.request("hello", "world")
@@ -338,15 +322,15 @@ describe 'Client - TLS spec' do
     end
   end
 
-  context 'when bad server requires TLS', :tls_verify_hostname do
-    before(:each) do
+  context "when bad server requires TLS", :tls_verify_hostname do
+    before do
       @tls_verify_host_bad_server_uri = URI.parse("nats://127.0.0.1:4557")
       opts = {
-        'pid_file' => "/tmp/test-nats-#{@tls_verify_host_bad_server_uri.port}.pid",
-        'host' => '127.0.0.1',
-        'port' => @tls_verify_host_bad_server_uri.port
+        "pid_file" => "/tmp/test-nats-#{@tls_verify_host_bad_server_uri.port}.pid",
+        "host" => "127.0.0.1",
+        "port" => @tls_verify_host_bad_server_uri.port
       }
-      config = ERB.new(%Q(
+      config = ERB.new(%(
         net:  "<%= opts['host'] %>"
         port: <%= opts['port'] %>
 
@@ -369,11 +353,11 @@ describe 'Client - TLS spec' do
       @tls_verify_bad_host.start_server
     end
 
-    after(:each) do
+    after do
       @tls_verify_bad_host.kill_server
     end
 
-    it 'should be able to connect if client does not verify server hostname' do
+    it "should be able to connect if client does not verify server hostname" do
       ctx = OpenSSL::SSL::SSLContext.new
       ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
       ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
@@ -391,7 +375,7 @@ describe 'Client - TLS spec' do
         })
 
         nats.subscribe("hello") do |msg, reply|
-          nats.publish(reply, 'ok')
+          nats.publish(reply, "ok")
         end
 
         response = nats.request("hello", "world")
@@ -399,7 +383,7 @@ describe 'Client - TLS spec' do
       end.to_not raise_error
     end
 
-    it 'should not be able to connect if client enabled hostname verification' do
+    it "should not be able to connect if client enabled hostname verification" do
       ctx = OpenSSL::SSL::SSLContext.new
       ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
       ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
@@ -417,7 +401,7 @@ describe 'Client - TLS spec' do
         })
 
         nats.subscribe("hello") do |msg, reply|
-          nats.publish(reply, 'ok')
+          nats.publish(reply, "ok")
         end
 
         response = nats.request("hello", "world")
@@ -425,7 +409,7 @@ describe 'Client - TLS spec' do
       end.to raise_error(OpenSSL::SSL::SSLError)
     end
 
-    it 'should not be able to connect if client enabled hostname verification using tls as the scheme' do
+    it "should not be able to connect if client enabled hostname verification using tls as the scheme" do
       ctx = OpenSSL::SSL::SSLContext.new
       ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
       ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER

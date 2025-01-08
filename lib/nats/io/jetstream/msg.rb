@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +14,9 @@
 # limitations under the License.
 #
 
-require_relative 'msg/ack'
-require_relative 'msg/ack_methods'
-require_relative 'msg/metadata'
+require_relative "msg/ack"
+require_relative "msg/ack_methods"
+require_relative "msg/metadata"
 
 module NATS
   class JetStream

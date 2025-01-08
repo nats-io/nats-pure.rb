@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +18,15 @@ module NATS
   class JetStream
     module JS
       module Status
-        CtrlMsg        = ("100".freeze)
-        NoMsgs         = ("404".freeze)
-        NotFound       = ("404".freeze)
-        RequestTimeout = ("408".freeze)
-        ServiceUnavailable = ("503".freeze)
+        # rubocop:disable Naming/ConstantName
+
+        CtrlMsg = "100"
+        NoMsgs = "404"
+        NotFound = "404"
+        RequestTimeout = "408"
+        ServiceUnavailable = "503"
+
+        # rubocop:enable Naming/ConstantName
       end
     end
   end

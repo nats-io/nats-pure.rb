@@ -1,21 +1,6 @@
-# Copyright 2016-2021 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-require 'monitor'
-
-describe 'Client - v2.2 features' do
+describe "Client - v2.2 features" do
   before(:all) do
     @tmpdir = Dir.mktmpdir("ruby-jetstream")
     @s = NatsServerControl.new("nats://127.0.0.1:4523", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
@@ -27,13 +12,13 @@ describe 'Client - v2.2 features' do
     FileUtils.remove_entry(@tmpdir)
   end
 
-  it 'should receive a message with headers' do
+  it "should receive a message with headers" do
     mon = Monitor.new
     done = mon.new_cond
-    done2 = mon.new_cond
+    mon.new_cond
 
     nc = NATS::IO::Client.new
-    nc.connect(:servers => [@s.uri])
+    nc.connect(servers: [@s.uri])
 
     msgs = []
 
@@ -51,7 +36,7 @@ describe 'Client - v2.2 features' do
 
     # Single arity is now a NATS::Msg type
     msgs2 = []
-    sub2 = nc.subscribe("hello") do |msg|
+    nc.subscribe("hello") do |msg|
       msgs2 << msg
 
       if msgs.count >= 5
@@ -63,13 +48,13 @@ describe 'Client - v2.2 features' do
     nc.flush
 
     1.upto(5) do |n|
-      data = "hello world-#{'A' * n}"
-      msg = NATS::Msg.new(subject: 'hello',
-                          data: data,
-                          header: {
-                            'foo': 'bar',
-                            'hello': "hello-#{n}"
-                          })
+      data = "hello world-#{"A" * n}"
+      msg = NATS::Msg.new(subject: "hello",
+        data: data,
+        header: {
+          foo: "bar",
+          hello: "hello-#{n}"
+        })
       nc.publish_msg(msg)
       nc.flush
     end
@@ -80,14 +65,14 @@ describe 'Client - v2.2 features' do
 
     msgs.each_with_index do |msg, i|
       n = i + 1
-      expect(msg.data).to eql("hello world-#{'A' * n}")
-      expect(msg.header).to eql({"foo"=>"bar", "hello"=>"hello-#{n}"})
+      expect(msg.data).to eql("hello world-#{"A" * n}")
+      expect(msg.header).to eql({"foo" => "bar", "hello" => "hello-#{n}"})
     end
 
     msgs2.each_with_index do |msg, i|
       n = i + 1
-      expect(msg.data).to eql("hello world-#{'A' * n}")
-      expect(msg.header).to eql({"foo"=>"bar", "hello"=>"hello-#{n}"})
+      expect(msg.data).to eql("hello world-#{"A" * n}")
+      expect(msg.header).to eql({"foo" => "bar", "hello" => "hello-#{n}"})
     end
     sub1.unsubscribe
 
@@ -97,10 +82,10 @@ describe 'Client - v2.2 features' do
     nc.publish("quux", "first")
 
     # empty payload
-    nc.publish("quux", header: { "foo": "A"})
+    nc.publish("quux", header: {foo: "A"})
 
     # payload and header
-    nc.publish("quux", "third", header: { "foo": "B"})
+    nc.publish("quux", "third", header: {foo: "B"})
     nc.flush
 
     msg = sub3.next_msg
@@ -115,15 +100,15 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should make requests with headers' do
+  it "should make requests with headers" do
     nc = NATS::IO::Client.new
-    nc.connect(:servers => [@s.uri])
+    nc.connect(servers: [@s.uri])
 
     msgs = []
     seq = 0
     nc.subscribe("hello") do |data, reply, _, header|
       seq += 1
-      header['response'] = seq
+      header["response"] = seq
       msg = NATS::Msg.new(data: data, subject: reply, header: header)
       msgs << msg
 
@@ -131,17 +116,18 @@ describe 'Client - v2.2 features' do
     end
     nc.flush
 
-    1.upto(5) do |n|p
-      data = "hello world-#{'A' * n}"
-      msg = NATS::Msg.new(subject: 'hello',
-                          data: data,
-                          header: {
-                            'foo': 'bar',
-                            'hello': "hello-#{n}"
-                          })
+    1.upto(5) do |n|
+      p
+      data = "hello world-#{"A" * n}"
+      msg = NATS::Msg.new(subject: "hello",
+        data: data,
+        header: {
+          foo: "bar",
+          hello: "hello-#{n}"
+        })
       resp = nc.request_msg(msg, timeout: 1)
-      expect(resp.data).to eql("hello world-#{'A' * n}")
-      expect(resp.header).to eql({"foo" => "bar", "hello" => "hello-#{n}", "response" => "#{n}"})
+      expect(resp.data).to eql("hello world-#{"A" * n}")
+      expect(resp.header).to eql({"foo" => "bar", "hello" => "hello-#{n}", "response" => n.to_s})
       nc.flush
     end
     expect(msgs.count).to eql(5)
@@ -155,8 +141,8 @@ describe 'Client - v2.2 features' do
     end
 
     q2.push(1)
-    msg = nc.request("quux", timeout: 2, header: { "one": "1" })
-    expect(msg.data).to eql('')
+    msg = nc.request("quux", timeout: 2, header: {one: "1"})
+    expect(msg.data).to eql("")
     expect(msg.header).to eql({"one" => "1", "reply" => "ok"})
 
     expect do
@@ -164,13 +150,13 @@ describe 'Client - v2.2 features' do
     end.to raise_error TypeError
 
     expect do
-      nc.request("quux", timeout: 0.1, header: { "one": "1" })
+      nc.request("quux", timeout: 0.1, header: {one: "1"})
     end.to raise_error NATS::Timeout
     q2.push(2)
     nc.close
   end
 
-  it 'should raise no responders error by default' do
+  it "should raise no responders error by default" do
     nc = NATS.connect(servers: [@s.uri])
 
     expect do
@@ -202,7 +188,7 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should not raise no responders error if no responders disabled' do
+  it "should not raise no responders error if no responders disabled" do
     nc = NATS::IO::Client.new
     nc.connect(servers: [@s.uri], no_responders: false)
 
@@ -215,12 +201,16 @@ describe 'Client - v2.2 features' do
 
     # Timed out requests should be cleaned up.
     50.times do
-      nc.request("hi", "timeout", timeout: 0.001) rescue nil
+      nc.request("hi", "timeout", timeout: 0.001)
+    rescue
+      nil
     end
 
     msg = NATS::Msg.new(subject: "hi")
     50.times do
-      nc.request_msg(msg, timeout: 0.001) rescue nil
+      nc.request_msg(msg, timeout: 0.001)
+    rescue
+      nil
     end
 
     result = nc.instance_variable_get(:@resp_map)
@@ -237,7 +227,7 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should not raise no responders error if no responders disabled' do
+  it "should not raise no responders error if no responders disabled" do
     nc = NATS::IO::Client.new
     nc.connect(servers: [@s.uri], no_responders: false)
 
@@ -259,7 +249,7 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should handle responses with status and description headers' do
+  it "should handle responses with status and description headers" do
     nc = NATS::IO::Client.new
     nc.connect(servers: [@s.uri], no_responders: true)
 
@@ -294,7 +284,7 @@ describe 'Client - v2.2 features' do
     expect(resp).to_not be_nil
 
     # Get single message.
-    pull_req = { no_wait: true, batch: 1}
+    pull_req = {no_wait: true, batch: 1}
     resp = nc.request("$JS.API.CONSUMER.MSG.NEXT.foojs.sample", pull_req.to_json, old_style: true)
     expect(resp).to_not be_nil
     expect(resp.data).to eql("hello world")
@@ -303,14 +293,14 @@ describe 'Client - v2.2 features' do
     resp = nc.request("$JS.API.CONSUMER.MSG.NEXT.foojs.sample", pull_req.to_json, old_style: true)
     expect(resp).to_not be_nil
     expect(resp.header).to_not be_nil
-    expect(resp.header).to eql({"Status"=>"404", "Description"=>"No Messages"})
+    expect(resp.header).to eql({"Status" => "404", "Description" => "No Messages"})
 
     nc.close
   end
 
-  it 'should get a message with Subscription#next_msg' do
+  it "should get a message with Subscription#next_msg" do
     nc = NATS::IO::Client.new
-    nc.connect(:servers => [@s.uri])
+    nc.connect(servers: [@s.uri])
 
     sub = nc.subscribe("hello")
     msgs = []
@@ -319,13 +309,13 @@ describe 'Client - v2.2 features' do
     end.to raise_error(NATS::IO::Timeout)
 
     1.upto(5) do |n|
-      data = "hello world-#{'A' * n}"
-      msg = NATS::Msg.new(subject: 'hello',
-                          data: data,
-                          header: {
-                            'foo': 'bar',
-                            'hello': "hello-#{n}"
-                          })
+      data = "hello world-#{"A" * n}"
+      msg = NATS::Msg.new(subject: "hello",
+        data: data,
+        header: {
+          foo: "bar",
+          hello: "hello-#{n}"
+        })
       nc.publish_msg(msg)
       nc.flush
     end
@@ -335,13 +325,13 @@ describe 'Client - v2.2 features' do
       subject: "hello",
       reply: nil,
       data: a_string_starting_with("hello world"),
-      header: {"foo"=>"bar", "hello"=>"hello-1"}
+      header: {"foo" => "bar", "hello" => "hello-1"}
     )
 
     msgs.each_with_index do |msg, i|
       n = i + 1
-      expect(msg.data).to eql("hello world-#{'A' * n}")
-      expect(msg.header).to eql({"foo"=>"bar", "hello"=>"hello-#{n}"})
+      expect(msg.data).to eql("hello world-#{"A" * n}")
+      expect(msg.header).to eql({"foo" => "bar", "hello" => "hello-#{n}"})
     end
 
     expect do
@@ -351,9 +341,9 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should support NATS::Msg#respond' do
+  it "should support NATS::Msg#respond" do
     nc = NATS::IO::Client.new
-    nc.connect(:servers => [@s.uri])
+    nc.connect(servers: [@s.uri])
     nc.on_error do |e|
       puts "Error: #{e}"
       puts e.backtrace
@@ -369,13 +359,13 @@ describe 'Client - v2.2 features' do
     nc.flush
 
     1.upto(5) do |n|
-      data = "hello world-#{'A' * n}"
-      msg = NATS::Msg.new(subject: 'hello',
-                          data: data,
-                          header: {
-                            'foo': 'bar',
-                            'hello': "hello-#{n}"
-                          })
+      data = "hello world-#{"A" * n}"
+      msg = NATS::Msg.new(subject: "hello",
+        data: data,
+        header: {
+          foo: "bar",
+          hello: "hello-#{n}"
+        })
       resp = nc.request_msg(msg, timeout: 1)
       expect(resp.data).to eql("hi!")
       nc.flush
@@ -385,9 +375,9 @@ describe 'Client - v2.2 features' do
     nc.close
   end
 
-  it 'should make responses with headers NATS::Msg#respond_msg' do
+  it "should make responses with headers NATS::Msg#respond_msg" do
     nc = NATS::IO::Client.new
-    nc.connect(:servers => [@s.uri])
+    nc.connect(servers: [@s.uri])
     nc.on_error do |e|
       puts "Error: #{e}"
       puts e.backtrace
@@ -398,7 +388,7 @@ describe 'Client - v2.2 features' do
     nc.subscribe("hello") do |msg|
       seq += 1
       m = NATS::Msg.new(data: msg.data, subject: msg.reply, header: msg.header)
-      m.header['response'] = seq
+      m.header["response"] = seq
       msgs << m
 
       msg.respond_msg(m)
@@ -406,16 +396,16 @@ describe 'Client - v2.2 features' do
     nc.flush
 
     1.upto(5) do |n|
-      data = "hello world-#{'A' * n}"
-      msg = NATS::Msg.new(subject: 'hello',
-                          data: data,
-                          header: {
-                            'foo': 'bar',
-                            'hello': "hello-#{n}"
-                          })
+      data = "hello world-#{"A" * n}"
+      msg = NATS::Msg.new(subject: "hello",
+        data: data,
+        header: {
+          foo: "bar",
+          hello: "hello-#{n}"
+        })
       resp = nc.request_msg(msg, timeout: 1)
-      expect(resp.data).to eql("hello world-#{'A' * n}")
-      expect(resp.header).to eql({"foo" => "bar", "hello" => "hello-#{n}", "response" => "#{n}"})
+      expect(resp.data).to eql("hello world-#{"A" * n}")
+      expect(resp.header).to eql({"foo" => "bar", "hello" => "hello-#{n}", "response" => n.to_s})
       nc.flush
     end
     expect(msgs.count).to eql(5)
@@ -426,22 +416,21 @@ describe 'Client - v2.2 features' do
   it "should process inline status messages with headers" do
     nc = NATS::IO::Client.new
     tests = [
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-1\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-1"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-1\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-1"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-2\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-2"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-2\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-2"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-3\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-3"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-3\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-3"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-4\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-4"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-4\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-4"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-5\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-5"}},
-             {input: %Q(NATS/1.0\r\nfoo: bar\r\nhello: hello-5\r\n\r\n), expected: {"foo"=>"bar", "hello"=>"hello-5"}},
-             {input: %Q(NATS/1.0 408 Request Timeout\r\nNats-Pending-Messages: 1\r\nNats-Pending-Bytes: 0\r\n\r\n),
-                expected: { "Status" => "408", "Nats-Pending-Messages" => "1", "Nats-Pending-Bytes" => "0", "Description" => "Request Timeout"}
-             },
-             {input: %Q(NATS/1.0 404 No Messages\r\n\r\n),
-                expected: {"Status" => "404", "Description" => "No Messages"}}
-            ]
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-1\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-1"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-1\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-1"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-2\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-2"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-2\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-2"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-3\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-3"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-3\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-3"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-4\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-4"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-4\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-4"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-5\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-5"}},
+      {input: %(NATS/1.0\r\nfoo: bar\r\nhello: hello-5\r\n\r\n), expected: {"foo" => "bar", "hello" => "hello-5"}},
+      {input: %(NATS/1.0 408 Request Timeout\r\nNats-Pending-Messages: 1\r\nNats-Pending-Bytes: 0\r\n\r\n),
+       expected: {"Status" => "408", "Nats-Pending-Messages" => "1", "Nats-Pending-Bytes" => "0", "Description" => "Request Timeout"}},
+      {input: %(NATS/1.0 404 No Messages\r\n\r\n),
+       expected: {"Status" => "404", "Description" => "No Messages"}}
+    ]
     tests.each do |test|
       result = nc.send(:process_hdr, test[:input])
       expect(result).to eql(test[:expected])

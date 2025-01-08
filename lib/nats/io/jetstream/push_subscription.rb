@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +35,7 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The latest ConsumerInfo of the consumer.
-      def consumer_info(params={})
+      def consumer_info(params = {})
         @jsi.js.consumer_info(@jsi.stream, @jsi.consumer, params)
       end
     end

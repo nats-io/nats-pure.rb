@@ -11,8 +11,11 @@ require "nats-pure"
 require "nats/io/jetstream"
 require "nkeys"
 
+require "fileutils"
 require "tempfile"
 require "monitor"
+require "openssl"
+require "erb"
 
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].sort.each { |f| require f }
 
@@ -31,9 +34,9 @@ RSpec.configure do |config|
   config.filter_run_excluding(tls_verify_hostname: true) if defined?(JRUBY_VERSION)
 
   if Process.respond_to?(:fork)
-    config.after(:each) do
+    config.after do
       # Mark all clients as closed to avoid reconnects in fork tests
-      NATS::Client::const_get(:INSTANCES).each do |client|
+      NATS::Client.const_get(:INSTANCES).each do |client|
         client.close unless client.closed?
       end
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2018 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,27 +16,26 @@
 
 module NATS
   module Protocol
-
-    MSG      = /\AMSG\s+([^\s]+)\s+([^\s]+)\s+(([^\s]+)[^\S\r\n]+)?(\d+)\r\n/i
-    HMSG     = /\AHMSG\s+([^\s]+)\s+([^\s]+)\s+(([^\s]+)[^\S\r\n]+)?([\d]+)\s+(\d+)\r\n/i
-    OK       = /\A\+OK\s*\r\n/i
-    ERR      = /\A-ERR\s+('.+')?\r\n/i
-    PING     = /\APING\s*\r\n/i
-    PONG     = /\APONG\s*\r\n/i
-    INFO     = /\AINFO\s+([^\r\n]+)\r\n/i
-    UNKNOWN  = /\A(.*)\r\n/
+    MSG = /\AMSG\s+([^\s]+)\s+([^\s]+)\s+(([^\s]+)[^\S\r\n]+)?(\d+)\r\n/i
+    HMSG = /\AHMSG\s+([^\s]+)\s+([^\s]+)\s+(([^\s]+)[^\S\r\n]+)?([\d]+)\s+(\d+)\r\n/i
+    OK = /\A\+OK\s*\r\n/i
+    ERR = /\A-ERR\s+('.+')?\r\n/i
+    PING = /\APING\s*\r\n/i
+    PONG = /\APONG\s*\r\n/i
+    INFO = /\AINFO\s+([^\r\n]+)\r\n/i
+    UNKNOWN = /\A(.*)\r\n/
 
     AWAITING_CONTROL_LINE = 1
-    AWAITING_MSG_PAYLOAD  = 2
+    AWAITING_MSG_PAYLOAD = 2
 
-    CR_LF = ("\r\n".freeze)
-    CR_LF_SIZE = (CR_LF.bytesize)
+    CR_LF = "\r\n"
+    CR_LF_SIZE = CR_LF.bytesize
 
-    PING_REQUEST  = ("PING#{CR_LF}".freeze)
-    PONG_RESPONSE = ("PONG#{CR_LF}".freeze)
+    PING_REQUEST = "PING#{CR_LF}".freeze
+    PONG_RESPONSE = "PONG#{CR_LF}".freeze
 
-    SUB_OP = ('SUB'.freeze)
-    EMPTY_MSG = (''.freeze)
+    SUB_OP = "SUB"
+    EMPTY_MSG = ""
 
     class Parser
       def initialize(nc)
@@ -55,7 +56,7 @@ module NATS
 
       def parse(data)
         @buf = @buf ? @buf << data : data
-        while (@buf)
+        while @buf
           case @parse_state
           when AWAITING_CONTROL_LINE
             case @buf
@@ -91,23 +92,22 @@ module NATS
               # If we are here we do not have a complete line yet that we understand.
               return
             end
-            @buf = nil if (@buf && @buf.empty?)
+            @buf = nil if @buf && @buf.empty?
 
           when AWAITING_MSG_PAYLOAD
-            return unless (@needed && @buf.bytesize >= (@needed + CR_LF_SIZE))
+            return unless @needed && @buf.bytesize >= (@needed + CR_LF_SIZE)
             if @header_needed
               hbuf = @buf.slice(0, @header_needed)
-              payload = @buf.slice(@header_needed, (@needed-@header_needed))
+              payload = @buf.slice(@header_needed, (@needed - @header_needed))
               @nc.send(:process_msg, @sub, @sid, @reply, payload, hbuf)
-              @buf = @buf.slice((@needed + CR_LF_SIZE), @buf.bytesize)
             else
               @nc.send(:process_msg, @sub, @sid, @reply, @buf.slice(0, @needed), nil)
-              @buf = @buf.slice((@needed + CR_LF_SIZE), @buf.bytesize)
             end
+            @buf = @buf.slice((@needed + CR_LF_SIZE), @buf.bytesize)
 
             @sub = @sid = @reply = @needed = @header_needed = nil
             @parse_state = AWAITING_CONTROL_LINE
-            @buf = nil if (@buf && @buf.empty?)
+            @buf = nil if @buf && @buf.empty?
           end
         end
       end

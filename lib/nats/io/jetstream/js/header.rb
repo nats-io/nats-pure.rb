@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,15 +18,19 @@ module NATS
   class JetStream
     module JS
       module Header
-        Status              = ("Status".freeze)
-        Desc                = ("Description".freeze)
-        MsgID               = ("Nats-Msg-Id".freeze)
-        ExpectedStream      = ("Nats-Expected-Stream".freeze)
-        ExpectedLastSeq     = ("Nats-Expected-Last-Sequence".freeze)
-        ExpectedLastSubjSeq = ("Nats-Expected-Last-Subject-Sequence".freeze)
-        ExpectedLastMsgID   = ("Nats-Expected-Last-Msg-Id".freeze)
-        LastConsumerSeq     = ("Nats-Last-Consumer".freeze)
-        LastStreamSeq       = ("Nats-Last-Stream".freeze)
+        # rubocop:disable Naming/ConstantName
+
+        Status = "Status"
+        Desc = "Description"
+        MsgID = "Nats-Msg-Id"
+        ExpectedStream = "Nats-Expected-Stream"
+        ExpectedLastSeq = "Nats-Expected-Last-Sequence"
+        ExpectedLastSubjSeq = "Nats-Expected-Last-Subject-Sequence"
+        ExpectedLastMsgID = "Nats-Expected-Last-Msg-Id"
+        LastConsumerSeq = "Nats-Last-Consumer"
+        LastStreamSeq = "Nats-Last-Stream"
+
+        # rubocop:enable Naming/ConstantName
       end
     end
   end

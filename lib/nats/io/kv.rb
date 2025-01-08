@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +14,10 @@
 # limitations under the License.
 #
 
-require_relative 'kv/api'
-require_relative 'kv/bucket_status'
-require_relative 'kv/errors'
-require_relative 'kv/manager'
+require_relative "kv/api"
+require_relative "kv/bucket_status"
+require_relative "kv/errors"
+require_relative "kv/manager"
 
 module NATS
   class KeyValue
@@ -26,7 +28,7 @@ module NATS
     MSG_ROLLUP_ALL = "all"
     ROLLUP = "Nats-Rollup"
 
-    def initialize(opts={})
+    def initialize(opts = {})
       @name = opts[:name]
       @stream = opts[:stream]
       @pre = opts[:pre]
@@ -35,7 +37,7 @@ module NATS
     end
 
     # get returns the latest value for the key.
-    def get(key, params={})
+    def get(key, params = {})
       entry = nil
       begin
         entry = _get(key, params)
@@ -46,19 +48,19 @@ module NATS
       entry
     end
 
-    def _get(key, params={})
+    def _get(key, params = {})
       msg = nil
       subject = "#{@pre}#{key}"
 
-      if params[:revision]
-        msg = @js.get_msg(@stream,
-                          seq: params[:revision],
-                          direct: @direct)
+      msg = if params[:revision]
+        @js.get_msg(@stream,
+          seq: params[:revision],
+          direct: @direct)
       else
-        msg = @js.get_msg(@stream,
-                          subject: subject,
-                          seq: params[:revision],
-                          direct: @direct)
+        @js.get_msg(@stream,
+          subject: subject,
+          seq: params[:revision],
+          direct: @direct)
       end
 
       entry = Entry.new(bucket: @name, key: key, value: msg.data, revision: msg.seq)
@@ -70,9 +72,9 @@ module NATS
         )
       end
 
-      if not msg.headers.nil?
+      if !msg.headers.nil?
         op = msg.headers[KV_OP]
-        if op == KV_DEL or op == KV_PURGE
+        if (op == KV_DEL) || (op == KV_PURGE)
           raise KeyDeletedError.new(entry: entry, op: op)
         end
       end
@@ -122,7 +124,7 @@ module NATS
     EXPECTED_LAST_SUBJECT_SEQUENCE = "Nats-Expected-Last-Subject-Sequence"
 
     # update will update the value iff the latest revision matches.
-    def update(key, value, params={})
+    def update(key, value, params = {})
       hdrs = {}
       last = (params[:last] ||= 0)
       hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
@@ -141,7 +143,7 @@ module NATS
     end
 
     # delete will place a delete marker and remove all previous revisions.
-    def delete(key, params={})
+    def delete(key, params = {})
       hdrs = {}
       hdrs[KV_OP] = KV_DEL
       last = (params[:last] ||= 0)
@@ -168,10 +170,10 @@ module NATS
     end
 
     Entry = Struct.new(:bucket, :key, :value, :revision, :delta, :created, :operation, keyword_init: true) do
-      def initialize(opts={})
+      def initialize(opts = {})
         rem = opts.keys - members
         opts.delete_if { |k| rem.include?(k) }
-        super(opts)
+        super
       end
     end
   end

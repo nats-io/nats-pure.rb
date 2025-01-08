@@ -1,20 +1,19 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe 'Client - NATS v2 Auth' do
-
-  context 'with NKEYS and JWT' do
-    before(:each) do
+describe "Client - NATS v2 Auth" do
+  context "with NKEYS and JWT" do
+    before do
       config_opts = {
-        'pid_file'      => '/tmp/nats_nkeys_jwt.pid',
-        'host'          => '127.0.0.1',
-        'port'          => 4722,
+        "pid_file" => "/tmp/nats_nkeys_jwt.pid",
+        "host" => "127.0.0.1",
+        "port" => 4722
       }
-      @s = NatsServerControl.init_with_config_from_string(%Q(
+      @s = NatsServerControl.init_with_config_from_string(%(
         authorization {
           timeout: 2
         }
 
-        port = #{config_opts['port']}
+        port = #{config_opts["port"]}
         operator = "./spec/configs/nkeys/op.jwt"
 
         # This is for account resolution.
@@ -32,11 +31,11 @@ describe 'Client - NATS v2 Auth' do
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
     end
 
-    it 'should connect to server and publish messages' do
+    it "should connect to server and publish messages" do
       mon = Monitor.new
       done = mon.new_cond
 
@@ -46,15 +45,15 @@ describe 'Client - NATS v2 Auth' do
       nats.on_error do |e|
         errors << e
       end
-      nats.connect(servers: ['nats://127.0.0.1:4722'],
-                   reconnect: false,
-                   user_credentials: "./spec/configs/nkeys/foo-user.creds")
+      nats.connect(servers: ["nats://127.0.0.1:4722"],
+        reconnect: false,
+        user_credentials: "./spec/configs/nkeys/foo-user.creds")
       nats.subscribe("hello") do |msg|
         msgs << msg
         done.signal
       end
       nats.flush
-      nats.publish("hello", 'world')
+      nats.publish("hello", "world")
 
       mon.synchronize do
         done.wait(1)
@@ -63,7 +62,7 @@ describe 'Client - NATS v2 Auth' do
       expect(msgs.count).to eql(1)
     end
 
-    it 'should support user supplied credential callbacks' do
+    it "should support user supplied credential callbacks" do
       mon = Monitor.new
       done = mon.new_cond
 
@@ -83,13 +82,13 @@ describe 'Client - NATS v2 Auth' do
       user_jwt_called = false
       jwt_cb = proc {
         user_jwt_called = true
-        nats.send(:jwt_cb_for_creds_file, "./spec/configs/nkeys/foo-user.creds").call()
+        nats.send(:jwt_cb_for_creds_file, "./spec/configs/nkeys/foo-user.creds").call
       }
 
-      nats.connect(servers: ['nats://127.0.0.1:4722'],
-                   reconnect: false,
-                   user_signature_cb: sig_cb,
-                   user_jwt_cb: jwt_cb)
+      nats.connect(servers: ["nats://127.0.0.1:4722"],
+        reconnect: false,
+        user_signature_cb: sig_cb,
+        user_jwt_cb: jwt_cb)
 
       expect(user_sig_called).to be(true)
       expect(user_jwt_called).to be(true)
@@ -99,7 +98,7 @@ describe 'Client - NATS v2 Auth' do
         done.signal
       end
       nats.flush
-      nats.publish("hello", 'world')
+      nats.publish("hello", "world")
 
       mon.synchronize do
         done.wait(1)
@@ -108,39 +107,38 @@ describe 'Client - NATS v2 Auth' do
       expect(msgs.count).to eql(1)
     end
 
-    it 'should fail with auth error if no user credentials present' do
+    it "should fail with auth error if no user credentials present" do
       mon = Monitor.new
-      done = mon.new_cond
+      mon.new_cond
 
       errors = []
-      msgs = []
       nats = NATS::IO::Client.new
       nats.on_error do |e|
         errors << e
       end
 
       expect do
-        nats.connect(servers: ['nats://127.0.0.1:4722'],
-                     reconnect: false)
+        nats.connect(servers: ["nats://127.0.0.1:4722"],
+          reconnect: false)
       end.to raise_error(NATS::IO::AuthError)
 
       expect(errors.count).to eql(1)
     end
   end
 
-  context 'with NKEYS only' do
-    before(:each) do
+  context "with NKEYS only" do
+    before do
       config_opts = {
-        'pid_file'      => '/tmp/nats_nkeys.pid',
-        'host'          => '127.0.0.1',
-        'port'          => 4723,
+        "pid_file" => "/tmp/nats_nkeys.pid",
+        "host" => "127.0.0.1",
+        "port" => 4723
       }
-      @s = NatsServerControl.init_with_config_from_string(%Q(
+      @s = NatsServerControl.init_with_config_from_string(%(
         authorization {
           timeout: 2
         }
 
-        port = #{config_opts['port']}
+        port = #{config_opts["port"]}
 
         accounts {
           acme {
@@ -165,11 +163,11 @@ describe 'Client - NATS v2 Auth' do
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
     end
 
-    it 'should connect to the server and publish messages' do
+    it "should connect to the server and publish messages" do
       mon = Monitor.new
       done = mon.new_cond
 
@@ -179,15 +177,15 @@ describe 'Client - NATS v2 Auth' do
       nats.on_error do |e|
         errors << e
       end
-      nats.connect(servers: ['nats://127.0.0.1:4723'],
-                   reconnect: false,
-                   nkeys_seed: "./spec/configs/nkeys/foo-user.nk")
+      nats.connect(servers: ["nats://127.0.0.1:4723"],
+        reconnect: false,
+        nkeys_seed: "./spec/configs/nkeys/foo-user.nk")
       nats.subscribe("hello") do |msg|
         msgs << msg
         done.signal
       end
       nats.flush
-      nats.publish("hello", 'world')
+      nats.publish("hello", "world")
 
       mon.synchronize do
         done.wait(1)
@@ -196,7 +194,7 @@ describe 'Client - NATS v2 Auth' do
       expect(msgs.count).to eql(1)
     end
 
-    it 'should support user supplied nkey callbacks' do
+    it "should support user supplied nkey callbacks" do
       mon = Monitor.new
       done = mon.new_cond
 
@@ -210,7 +208,7 @@ describe 'Client - NATS v2 Auth' do
       user_nkey_called = false
       user_nkey_cb = proc {
         user_nkey_called = true
-        nats.send(:nkey_cb_for_nkey_file, "./spec/configs/nkeys/foo-user.nk").call()
+        nats.send(:nkey_cb_for_nkey_file, "./spec/configs/nkeys/foo-user.nk").call
       }
 
       user_sig_called = false
@@ -219,10 +217,10 @@ describe 'Client - NATS v2 Auth' do
         nats.send(:signature_cb_for_nkey_file, "./spec/configs/nkeys/foo-user.nk").call(nonce)
       }
 
-      nats.connect(servers: ['nats://127.0.0.1:4723'],
-                   reconnect: false,
-                   user_nkey_cb: user_nkey_cb,
-                   user_signature_cb: sig_cb)
+      nats.connect(servers: ["nats://127.0.0.1:4723"],
+        reconnect: false,
+        user_nkey_cb: user_nkey_cb,
+        user_signature_cb: sig_cb)
 
       expect(user_sig_called).to be(true)
       expect(user_nkey_called).to be(true)
@@ -232,7 +230,7 @@ describe 'Client - NATS v2 Auth' do
         done.signal
       end
       nats.flush
-      nats.publish("hello", 'world')
+      nats.publish("hello", "world")
 
       mon.synchronize do
         done.wait(1)

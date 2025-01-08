@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,19 +18,21 @@ module NATS
   class JetStream
     module Msg
       module Ack
-        # Ack types
-        Ack      = ("+ACK".freeze)
-        Nak      = ("-NAK".freeze)
-        Progress = ("+WPI".freeze)
-        Term     = ("+TERM".freeze)
+        # rubocop:disable Naming/ConstantName
 
-        Empty = (''.freeze)
-        DotSep = ('.'.freeze)
-        NoDomainName = ('_'.freeze)
+        # Ack types
+        Ack = "+ACK"
+        Nak = "-NAK"
+        Progress = "+WPI"
+        Term = "+TERM"
+
+        Empty = ""
+        DotSep = "."
+        NoDomainName = "_"
 
         # Position
-        Prefix0 = ('$JS'.freeze)
-        Prefix1 = ('ACK'.freeze)
+        Prefix0 = "$JS"
+        Prefix1 = "ACK"
         Domain = 2
         AccHash = 3
         Stream = 4
@@ -50,6 +54,8 @@ module NATS
         V2TokenCounts = 12
 
         SequencePair = Struct.new(:stream, :consumer)
+
+        # rubocop:enable Naming/ConstantName
       end
       private_constant :Ack
     end

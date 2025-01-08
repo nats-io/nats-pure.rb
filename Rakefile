@@ -12,5 +12,4 @@ rescue LoadError
   task(:rubocop) {}
 end
 
-# TODO: Add rubocop as soon as we fix the style issues
-task default: %w[spec]
+task default: %w[rubocop spec]

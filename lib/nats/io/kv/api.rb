@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,11 +29,12 @@ module NATS
         :placement,
         :republish,
         :direct,
-        keyword_init: true) do
-        def initialize(opts={})
+        keyword_init: true
+      ) do
+        def initialize(opts = {})
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
         end
       end
     end

@@ -1,25 +1,10 @@
-# Copyright 2016-2023 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
 return unless Process.respond_to?(:fork) # Skip if fork is not supported (Windows, JRuby, etc)
 return unless Process.respond_to?(:_fork) # Skip if around fork callbacks are not supported (before Ruby 3.1)
 
-require 'spec_helper'
-
-describe 'Client - Fork detection' do
-
-  before(:each) do
+describe "Client - Fork detection" do
+  before do
     @tmpdir = Dir.mktmpdir("ruby-jetstream-fork")
     @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
     @s.start_server(true)
@@ -36,15 +21,15 @@ describe 'Client - Fork detection' do
     end
   end
 
-  after(:each) do
+  after do
     @s.kill_server
     FileUtils.remove_entry(@tmpdir)
   end
 
-  let(:options) { { } }
+  let(:options) { {} }
   let!(:nats) { NATS.connect("nats://127.0.0.1:4524", options) }
 
-  it 'should be able to publish messages from child process after forking' do
+  it "should be able to publish messages from child process after forking" do
     received = nil
     nats.subscribe("forked-topic") do |msg|
       received = msg.data
@@ -61,47 +46,47 @@ describe 'Client - Fork detection' do
     nats.close
   end
 
-  it 'should be able to make requests messages from child process after forking' do
-    received = nil
+  it "should be able to make requests messages from child process after forking" do
     nats.subscribe("service") do |msg|
       msg.respond("pong")
     end
 
     resp = nats.request("service", "ping")
     expect(resp.data).to eq("pong")
-    expect(nats.stats).to eq({:in_msgs=>2, :out_msgs=>2, :in_bytes=>8, :out_bytes=>8, :reconnects=>0})
+    expect(nats.stats).to eq({in_msgs: 2, out_msgs: 2, in_bytes: 8, out_bytes: 8, reconnects: 0})
 
     pid = fork do
-      expect(nats.stats).to eq({:in_msgs=>0, :out_msgs=>0, :in_bytes=>0, :out_bytes=>0, :reconnects=>0})
+      expect(nats.stats).to eq({in_msgs: 0, out_msgs: 0, in_bytes: 0, out_bytes: 0, reconnects: 0})
       resp = nats.request("service", "ping")
 
       expect(resp.data).to eq("pong")
-      expect(nats.stats).to eq({:in_msgs=>1, :out_msgs=>1, :in_bytes=>4, :out_bytes=>4, :reconnects=>0})
+      expect(nats.stats).to eq({in_msgs: 1, out_msgs: 1, in_bytes: 4, out_bytes: 4, reconnects: 0})
 
       nats.publish("dev.null")
-      expect(nats.stats).to eq({:in_msgs=>1, :out_msgs=>2, :in_bytes=>4, :out_bytes=>4, :reconnects=>0})
-      subs = nats.instance_variable_get('@subs')
+      expect(nats.stats).to eq({in_msgs: 1, out_msgs: 2, in_bytes: 4, out_bytes: 4, reconnects: 0})
+      subs = nats.instance_variable_get("@subs")
       expect(subs.count).to eq(1)
-      spool = nats.instance_variable_get('@server_pool')
+      spool = nats.instance_variable_get("@server_pool")
       expect(spool.count).to eql(1)
       nats.close
     end
     Process.wait(pid)
     expect($?.exitstatus).to be_zero
-    expect(nats.stats).to eq({:in_msgs=>3, :out_msgs=>3, :in_bytes=>12, :out_bytes=>12, :reconnects=>0})
-    subs = nats.instance_variable_get('@subs')
+    expect(nats.stats).to eq({in_msgs: 3, out_msgs: 3, in_bytes: 12, out_bytes: 12, reconnects: 0})
+    subs = nats.instance_variable_get("@subs")
     expect(subs.count).to eq(2)
-    spool = nats.instance_variable_get('@server_pool')
+    spool = nats.instance_variable_get("@server_pool")
     expect(spool.count).to eql(1)
     nats.close
   end
 
-  it 'should be able to receive messages from parent process after forking' do
+  it "should be able to receive messages from parent process after forking" do
     from_child, to_parent = IO.pipe
     from_parent, to_child = IO.pipe
 
     pid = fork do # child process
-      to_child.close; from_child.close # close unused ends
+      to_child.close
+      from_child.close # close unused ends
 
       received = false
       nats.subscribe("forked-topic") do |msg|
@@ -124,12 +109,14 @@ describe 'Client - Fork detection' do
 
       to_parent.write("timed out to receieve message") unless received
     ensure
-      to_parent.close; from_parent.close
+      to_parent.close
+      from_parent.close
       nats.close
     end
 
     # parent process
-    to_parent.close; from_parent.close # close unused ends
+    to_parent.close
+    from_parent.close # close unused ends
 
     from_child.gets
     nats.publish("forked-topic", "hey from the parent process")
@@ -140,7 +127,8 @@ describe 'Client - Fork detection' do
     result = from_child.read
     expect(result).to eq("hey from the parent process")
 
-    to_child.close; from_child.close
+    to_child.close
+    from_child.close
     Process.wait(pid)
   end
 
@@ -172,7 +160,7 @@ describe 'Client - Fork detection' do
   end
 
   context "when reconnection is disabled" do
-    let(:options) { { reconnect: false } }
+    let(:options) { {reconnect: false} }
 
     it "raises an error in child process after fork is detected" do
       callback_error = nil

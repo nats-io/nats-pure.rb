@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2018 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +14,7 @@
 # limitations under the License.
 #
 
-require 'nats/io/client'
+require "nats/io/client"
 
 $stdout.sync = true
 nats = NATS::IO::Client.new
@@ -55,7 +57,10 @@ msgs_received = 0
 bytes_sent = 0
 bytes_received = 0
 
-nats.subscribe("hello") {|msg| msgs_received += 1; bytes_received += msg.data.size }
+nats.subscribe("hello") { |msg|
+  msgs_received += 1
+  bytes_received += msg.data.size
+}
 
 Thread.new do
   loop do

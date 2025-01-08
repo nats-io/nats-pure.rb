@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +14,7 @@
 # limitations under the License.
 #
 
-require 'time'
+require "time"
 
 module NATS
   class JetStream
@@ -21,13 +23,13 @@ module NATS
         attr_reader :sequence, :num_delivered, :num_pending, :timestamp, :stream, :consumer, :domain
 
         def initialize(opts)
-          @sequence      = Ack::SequencePair.new(opts[Ack::StreamSeq].to_i, opts[Ack::ConsumerSeq].to_i)
-          @domain        = opts[Ack::Domain]
+          @sequence = Ack::SequencePair.new(opts[Ack::StreamSeq].to_i, opts[Ack::ConsumerSeq].to_i)
+          @domain = opts[Ack::Domain]
           @num_delivered = opts[Ack::NumDelivered].to_i
-          @num_pending   = opts[Ack::NumPending].to_i
-          @timestamp     = Time.at((opts[Ack::Timestamp].to_i / 1_000_000_000.0))
-          @stream        = opts[Ack::Stream]
-          @consumer      = opts[Ack::Consumer]
+          @num_pending = opts[Ack::NumPending].to_i
+          @timestamp = Time.at((opts[Ack::Timestamp].to_i / 1_000_000_000.0))
+          @stream = opts[Ack::Stream]
+          @consumer = opts[Ack::Consumer]
           # TODO: Not exposed in Go client either right now.
           # account      = opts[Ack::AccHash]
         end

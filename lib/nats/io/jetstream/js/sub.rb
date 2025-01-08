@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +20,7 @@ module NATS
       class Sub
         attr_reader :js, :stream, :consumer, :nms
 
-        def initialize(opts={})
+        def initialize(opts = {})
           @js = opts[:js]
           @stream = opts[:stream]
           @consumer = opts[:consumer]

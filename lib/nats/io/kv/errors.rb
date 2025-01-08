@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +14,7 @@
 # limitations under the License.
 #
 
-require_relative '../errors'
+require_relative "../errors"
 
 module NATS
   class KeyValue
@@ -21,7 +23,7 @@ module NATS
     # When a key is not found.
     class KeyNotFoundError < Error
       attr_reader :entry, :op
-      def initialize(params={})
+      def initialize(params = {})
         @entry = params[:entry]
         @op = params[:op]
         @message = params[:message]
@@ -52,6 +54,7 @@ module NATS
       def initialize(msg)
         @msg = msg
       end
+
       def to_s
         "nats: #{@msg}"
       end

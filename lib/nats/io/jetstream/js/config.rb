@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +18,14 @@ module NATS
   class JetStream
     module JS
       module Config
+        # rubocop:disable Naming/ConstantName
+
         # AckPolicy
-        AckExplicit = ("explicit".freeze)
-        AckAll      = ("all".freeze)
-        AckNone     = ("none".freeze)
+        AckExplicit = "explicit"
+        AckAll = "all"
+        AckNone = "none"
+
+        # rubocop:enable Naming/ConstantName
       end
     end
   end

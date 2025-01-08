@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Update Ruby DNS resolver to point custom hosts to 127.0.0.1
 
 LOCAL_HOSTS = <<~TXT
@@ -35,13 +37,11 @@ require "socket"
 
 class << Socket
   # :stopdoc:
-  alias original_getaddrinfo getaddrinfo
+  alias_method :original_getaddrinfo, :getaddrinfo
   # :startdoc:
   def getaddrinfo(host, *args)
-    begin
-      return original_getaddrinfo(Resolv.getaddress(host).to_s, *args)
-    rescue Resolv::ResolvError
-      original_getaddrinfo(host, *args)
-    end
+    original_getaddrinfo(Resolv.getaddress(host).to_s, *args)
+  rescue Resolv::ResolvError
+    original_getaddrinfo(host, *args)
   end
 end

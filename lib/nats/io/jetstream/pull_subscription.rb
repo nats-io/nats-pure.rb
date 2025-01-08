@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +14,7 @@
 # limitations under the License.
 #
 
-require_relative 'errors'
+require_relative "errors"
 
 module NATS
   class JetStream
@@ -39,7 +41,7 @@ module NATS
     module PullSubscription
       # next_msg is not available for pull based subscriptions.
       # @raise [NATS::JetStream::Error]
-      def next_msg(params={})
+      def next_msg(params = {})
         raise ::NATS::JetStream::Error.new("nats: pull subscription cannot use next_msg")
       end
 
@@ -49,7 +51,7 @@ module NATS
       # @param params [Hash] Options to customize the fetch request.
       # @option params [Float] :timeout Duration of the fetch request before it expires.
       # @return [Array<NATS::Msg>]
-      def fetch(batch=1, params={})
+      def fetch(batch = 1, params = {})
         if batch < 1
           raise ::NATS::JetStream::Error.new("nats: invalid batch size")
         end
@@ -80,7 +82,7 @@ module NATS
               if JS.is_status_msg(msg)
                 case msg.header["Status"]
                 when JS::Status::NoMsgs
-                  msg = nil
+                  nil
                 when JS::Status::RequestTimeout
                   # Skip
                 else
@@ -194,26 +196,25 @@ module NATS
           # Check if have not received yet a single message.
           duration = MonotonicTime.since(start_time)
 
-          if msgs.empty? and duration > timeout
+          if msgs.empty? && (duration > timeout)
             raise NATS::Timeout.new("nats: fetch timeout")
           end
 
           needed = batch - msgs.count
-          while needed > 0 and MonotonicTime.since(start_time) < timeout
+          while (needed > 0) && (MonotonicTime.since(start_time) < timeout)
             duration = MonotonicTime.since(start_time)
 
             # Wait for the rest of the messages.
             synchronize do
-
               # Wait until there is a message delivered.
               if @pending_queue.empty?
                 deadline = timeout - duration
-                wait_start = MonotonicTime.now
+                MonotonicTime.now
 
                 wait_for_msgs_cond.wait(deadline) if deadline > 0
 
                 duration = MonotonicTime.since(start_time)
-                if msgs.empty? && @pending_queue.empty? and duration > timeout
+                if msgs.empty? && @pending_queue.empty? && (duration > timeout)
                   raise NATS::Timeout.new("nats: fetch timeout")
                 end
               end
@@ -256,7 +257,7 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The latest ConsumerInfo of the consumer.
-      def consumer_info(params={})
+      def consumer_info(params = {})
         @jsi.js.consumer_info(@jsi.stream, @jsi.consumer, params)
       end
     end

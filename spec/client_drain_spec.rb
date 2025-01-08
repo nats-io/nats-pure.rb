@@ -1,8 +1,6 @@
-require 'spec_helper'
-require 'monitor'
+# frozen_string_literal: true
 
-describe 'Client - Drain' do
-
+describe "Client - Drain" do
   before(:all) do
     @s = NatsServerControl.new
     @s.start_server(true)
@@ -12,7 +10,7 @@ describe 'Client - Drain' do
     @s.kill_server
   end
 
-  it 'should gracefully drain a connection' do
+  it "should gracefully drain a connection" do
     nc = NATS.connect(drain_timeout: 5)
     nc2 = NATS.connect
 
@@ -31,10 +29,10 @@ describe 'Client - Drain' do
     reqs_started = Queue.new
     wait_reqs = Future.new
 
-    t = Thread.new do
+    Thread.new do
       wait_subs.wait_for(2)
       40.times do |i|
-        ('a'..'b').each do
+        ("a".."b").each do
           payload = "REQ:#{_1}:#{i}"
           nc2.publish(_1, payload * 128)
           sleep 0.01
@@ -43,11 +41,11 @@ describe 'Client - Drain' do
 
       wait_pubs.set_result(:ok)
 
-      ('a'..'b').map do |sub|
+      ("a".."b").map do |sub|
         Thread.new do
           reqs_started << sub
           payload = "REQ:#{sub}"
-          msg = nc2.request(sub, payload)
+          nc2.request(sub, payload)
         end
       end.each(&:join)
 
@@ -57,7 +55,7 @@ describe 'Client - Drain' do
     # A queue to control the speed of processing messages
     sub_queue = Queue.new
     subs = []
-    ('a'..'b').each do |subject|
+    ("a".."b").each do |subject|
       sub = nc.subscribe(subject) do |msg|
         ft = sub_queue.pop
         msg.respond("OK:#{msg.data}") if msg.reply
@@ -80,7 +78,8 @@ describe 'Client - Drain' do
 
     wait_pubs.wait_for(2)
 
-    reqs_started.pop; reqs_started.pop
+    reqs_started.pop
+    reqs_started.pop
 
     # Start draining process asynchronously.
     nc.drain
@@ -92,7 +91,7 @@ describe 'Client - Drain' do
     expect(wait_reqs.wait_for(2)).to eql(:ok)
   end
 
-  it 'should report drain timeout error' do
+  it "should report drain timeout error" do
     nc = NATS.connect(drain_timeout: 0.5)
     nc2 = NATS.connect
 
@@ -107,10 +106,10 @@ describe 'Client - Drain' do
     wait_subs = Future.new
     wait_pubs = Future.new
 
-    t = Thread.new do
+    Thread.new do
       wait_subs.wait_for(2)
       10.times do |i|
-        ('a'..'b').each do
+        ("a".."b").each do
           payload = "REQ:#{_1}:#{i}"
           nc2.publish(_1, payload * 128)
           sleep 0.01
@@ -124,7 +123,7 @@ describe 'Client - Drain' do
     # A queue to control the speed of processing messages
     sub_queue = Queue.new
     subs = []
-    ('a'..'b').each do |subject|
+    ("a".."b").each do |subject|
       sub = nc.subscribe(subject) do |msg|
         ft = sub_queue.pop
         sleep 0.01
