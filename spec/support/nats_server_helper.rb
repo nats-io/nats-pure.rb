@@ -1,3 +1,5 @@
+require "socket"
+
 class NatsServerControl
   BIN_PATH = File.expand_path(File.join(__dir__, "../../scripts/nats-server"))
 
@@ -92,17 +94,19 @@ class NatsServerControl
   def wait_for_server(uri, max_wait = 5) # :nodoc:
     start = Time.now
     while (Time.now - start < max_wait) # Wait max_wait seconds max
-      break if server_running?(uri)
+      return if server_running?(uri)
       sleep(0.1)
     end
+
+    raise "NATS Server did not start in #{max_wait} seconds"
   end
 
   def server_running?(uri) # :nodoc:
-    require 'socket'
-    s = TCPSocket.new(uri.host, uri.port)
-    s.close
-    return true
+    s = TCPSocket.new(uri.host, uri.port, nil, nil, connect_timeout: 0.5)
+    true
   rescue
-    return false
+    false
+  ensure
+    s&.close
   end
 end
