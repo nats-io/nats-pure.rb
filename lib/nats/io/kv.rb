@@ -19,6 +19,8 @@ require_relative 'kv/manager'
 
 module NATS
   class KeyValue
+    include MonitorMixin
+
     KV_OP = "KV-Operation"
     KV_DEL = "DEL"
     KV_PURGE = "PURGE"
@@ -173,6 +175,163 @@ module NATS
         opts.delete_if { |k| rem.include?(k) }
         super(opts)
       end
+    end
+
+    # watch will be signaled when any key is updated.
+    def watchall(params={})
+      watch(">", params)
+    end
+
+    # keys returns a list of the keys from a KeyValue store.
+    # Optionally filters the keys based on the provided filter list.
+    def keys(params={})
+      params[:ignore_deletes] = true
+      params[:meta_only] = true
+      watcher = watchall(">", params)
+      keys = []
+      # TODO: 
+    end
+
+    # history retrieves a list of the entries so far.
+    def history(key, params={})
+      # params[:ignore_deletes] = true
+      # params[:meta_only] = true
+      # watcher = watchall(">", params)
+      # keys = []
+      # TODO:
+      params[:include_history] = true
+      watcher = self.watch(key, params)
+
+      # entries = 
+    end
+
+    # watch will be signaled when a key that matches the keys
+    # pattern is updated.
+    # The first update after starting the watch is nil in case
+    # there are no pending updates.
+    def watch(keys, params={})
+      params[:headers_only] ||= false
+      params[:include_history] ||= false
+      params[:ignore_deletes] ||= false
+      params[:idle_heartbeat] ||= 5 * 60 # 5 min
+      subject = "#{@pre}#{keys}"
+      init_setup = new_cond
+      init_setup_done = false
+      watcher = KeyWatcher.new(@js)
+
+      # Basic ordered consumer.
+      ordered = {
+        :flow_control => true,
+        :ack_policy => "none",
+        :max_deliver => 1,
+        :ack_wait => 22 * 3600,
+        :idle_heartbeat => params[:idle_heartbeat],
+        :num_replicas => 1,
+        :mem_storage => true,
+        :manual_ack => true,
+      }
+
+      # watch_updates callback.
+      sub = @js.subscribe(subject, ordered) do |msg|
+        synchronize do
+          if !init_setup_done
+            init_setup.wait(@js.opts[:timeout])
+          end
+        end
+
+        meta = msg.metadata
+        op = nil
+        if msg.header and msg.header[KV_OP]
+          op = msg.header[KV_OP]
+          
+          # TODO: keys() uses this
+          if params[:ignore_deletes]
+            p :pending_to_implement
+            # TODO: Implement
+          end
+        end
+
+        # Convert the msg into an Entry.
+        key = msg.subject[@pre.size...msg.subject.size]
+        entry = Entry.new(
+                          bucket: @name,
+                          key: key,
+                          value: msg.data,
+                          revision: meta.sequence.stream,
+                          delta: meta.num_pending,
+                          created: meta.timestamp,
+                          operation: op,
+                          )
+        watcher._updates.push(entry)
+
+        # When there are no more updates send an empty marker
+        # to signal that it is done, this will unblock iterators.
+        if meta.num_pending == 0 and (!watcher._init_done)
+          watcher._updates.push(nil)
+          watcher._init_done = true
+        end
+      end # end of callback
+      watcher._sub = sub
+
+      # Check from consumer info what is the number of messages
+      # awaiting to be consumed to send the initial signal marker.
+      pending = 0
+      begin
+        cinfo = sub.consumer_info
+        pending = cinfo.num_pending
+
+        synchronize do 
+          init_setup_done = true
+          # If no delivered and/or pending messages, then signal
+          # that this is the start.
+          # The consumer subscription will start receiving messages
+          # so need to check those that have already made it.
+          received = sub.delivered
+          init_setup.signal
+
+          # When there are no more updates send an empty marker
+          # to signal that it is done, this will unblock iterators.
+          if cinfo.num_pending == 0 and received == 0
+            watcher._updates.push(nil)
+            watcher._init_done = true
+          end          
+        end
+        
+      rescue => err
+        # cancel init
+        sub.unsubscribe
+        raise err
+      end
+
+      watcher
+    end
+  end
+
+  class KeyWatcher
+    include MonitorMixin
+    attr_accessor :received, :pending, :_sub, :_updates, :_init_done, :_watcher_cond
+    
+    def initialize(js)
+      @js = js
+      @_sub = nil
+      @_updates = SizedQueue.new(256)
+      @_init_done = false
+      @pending = nil
+    end
+
+    def stop
+      @_sub.unsubscribe()
+    end
+
+    def updates(params={})
+      params[:timeout] ||= 5
+
+      result = nil
+      MonotonicTime::with_nats_timeout(params[:timeout]) do
+        result = @_updates.pop(timeout: params[:timeout])
+      end
+
+      result
     end
   end
 end

@@ -15,23 +15,23 @@
 module NATS
   class KeyValue
     class BucketStatus
-      attr_reader :bucket
+      attr_reader :bucket, :stream_info
 
       def initialize(info, bucket)
-        @nfo = info
+        @stream_info = info
         @bucket = bucket
       end
 
       def values
-        @nfo.state.messages
+        @stream_info.state.messages
       end
 
       def history
-        @nfo.config.max_msgs_per_subject
+        @stream_info.config.max_msgs_per_subject
       end
 
       def ttl
-        @nfo.config.max_age / ::NATS::NANOSECONDS
+        @stream_info.config.max_age / ::NATS::NANOSECONDS
       end
     end
   end

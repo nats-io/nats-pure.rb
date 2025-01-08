@@ -32,4 +32,5 @@ Gem::Specification.new do |s|
   s.files += %w[LICENSE README.md]
 
   s.add_dependency "concurrent-ruby", "~> 1.0"
+  s.add_dependency "base64", "~> 0.2"
 end

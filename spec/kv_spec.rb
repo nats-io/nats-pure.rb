@@ -398,4 +398,169 @@ describe 'KeyValue' do
 
     nc.close
   end
+
+  it 'should support watch' do
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "WATCH",
+    )
+
+    # Same as watch all the updates.
+    w = kv.watchall
+
+    # First update when there are no pending entries will be None
+    # to mark that there are no more pending updates.
+    e = w.updates(timeout: 1)
+    expect(e).to eql(nil)
+
+    kv.create("name", "alice:1")
+    e = w.updates
+    expect(e.delta) == 0
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:1'
+    expect(e.revision) == 1
+
+    kv.put("name", "alice:2")
+    e = w.updates
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:2'
+    expect(e.revision) == 2
+
+    kv.put("name", "alice:3")
+    e = w.updates
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:3'
+    expect(e.revision) == 3
+
+    kv.put("age", "22")
+    e = w.updates
+    expect(e.key) == 'age'
+    expect(e.value) == '22'
+    expect(e.revision) == 4
+
+    kv.put("age", "33")
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'age'
+    expect(e.value) == '33'
+    expect(e.revision) == 5
+
+    kv.delete('age')
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'age'
+    expect(e.value) == ''
+    expect(e.revision) == 6
+    expect(e.operation) == 'DEL'
+
+    kv.purge('name')
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'name'
+    expect(e.value) == ''
+    expect(e.revision) == 7
+    expect(e.operation) == 'PURGE'
+
+    # No new updates at this point...
+    expect do
+      w.updates(timeout: 0.5)
+    end.to raise_error NATS::Timeout
+
+    # Stop the watcher.
+    w.stop
+
+    # Now try wildcard matching and make sure we only get last value when starting.
+    kv.create("new", "hello world")
+    kv.put("t.name", "a")
+    kv.put("t.name", "b")
+    kv.put("t.age", "c")
+    kv.put("t.age", "d")
+    kv.put("t.a", "a")
+    kv.put("t.b", "b")
+
+    w = kv.watch("t.*")
+
+    # There are values present so nil is _not_ sent to as an update.
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(3)
+    expect(e.key).to eql("t.name")
+    expect(e.value).to eql("b")
+    expect(e.revision).to eql(10)
+    expect(e.operation).to eql(nil)
+
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(2)
+    expect(e.key).to eql("t.age")
+    expect(e.value).to eql("d")
+    expect(e.revision).to eql(12)
+    expect(e.operation).to eql(nil)
+
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(1)
+    expect(e.key).to eql("t.a")
+    expect(e.value).to eql("a")
+    expect(e.revision).to eql(13)
+    expect(e.operation).to eql(nil)
+
+    # Consume next pending update.
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(0)
+    expect(e.key).to eql("t.b")
+    expect(e.value).to eql("b")
+    expect(e.revision).to eql(14)
+    expect(e.operation).to eql(nil)
+
+    # There are no more updates so client will be sent a marker to signal
+    # that there are no more updates.
+    e = w.updates
+    expect(e).to eql(nil)
+
+    # After getting the empty marker, subsequent watch attempts will be a timeout error.
+    expect do
+      w.updates(timeout: 1)
+    end.to raise_error NATS::Timeout
+
+    kv.put("t.hello", "hello world")
+    e = w.updates
+    expect(e.delta).to eql(0)
+    expect(e.key).to eql("t.hello")
+    expect(e.revision).to eql(15)
+
+    # Default watch timeout should 5 minutes
+    ci = js.consumer_info("KV_WATCH", w._sub.jsi.consumer)
+    ci.config.inactive_threshold == 300.0
+
+    nc.close
+  end
+
+  it 'should support history' do
+    nc = NATS.connect(@s.uri)
+    nc.on_error do |e|
+      puts e
+    end
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "WATCHHISTORY",
+      history: 10
+    )
+    status = kv.status
+    expect(status.stream_info.config.max_msgs_per_subject).to eql(10)
+
+    50.times { |i| kv.put("age", "index:#{i}") }
+
+    vl = kv.history("age")
+    p vl
+
+    # i = 0
+    # vl.each do |e|
+    #   p e
+    # end
+    
+    nc.close
+  end
 end
