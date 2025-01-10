@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,21 +14,20 @@
 # limitations under the License.
 #
 
-require_relative 'parser'
-require_relative 'version'
-require_relative 'errors'
-require_relative 'msg'
-require_relative 'subscription'
-require_relative 'jetstream'
+require_relative "parser"
+require_relative "version"
+require_relative "errors"
+require_relative "msg"
+require_relative "subscription"
+require_relative "jetstream"
 
-require 'nats/nuid'
-require 'thread'
-require 'socket'
-require 'json'
-require 'monitor'
-require 'uri'
-require 'securerandom'
-require 'concurrent'
+require "nats/nuid"
+require "socket"
+require "json"
+require "monitor"
+require "uri"
+require "securerandom"
+require "concurrent"
 
 begin
   require "openssl"
@@ -46,7 +47,7 @@ module NATS
     #   nc.publish("hello", "world")
     #   nc.close
     #
-    def connect(uri=nil, opts={})
+    def connect(uri = nil, opts = {})
       nc = NATS::Client.new
       nc.connect(uri, opts)
 
@@ -100,25 +101,25 @@ module NATS
     include MonitorMixin
     include Status
 
-    attr_reader :status, :server_info, :server_pool, :options, :connected_server, :stats, :uri, :subscription_executor, :reloader
+    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader
 
-    DEFAULT_PORT = { nats: 4222, ws: 80, wss: 443 }.freeze
-    DEFAULT_URI = ("nats://localhost:#{DEFAULT_PORT[:nats]}".freeze)
+    DEFAULT_PORT = {nats: 4222, ws: 80, wss: 443}.freeze
+    DEFAULT_URI = "nats://localhost:#{DEFAULT_PORT[:nats]}".freeze
 
-    CR_LF = ("\r\n".freeze)
-    CR_LF_SIZE = (CR_LF.bytesize)
+    CR_LF = "\r\n"
+    CR_LF_SIZE = CR_LF.bytesize
 
-    PING_REQUEST  = ("PING#{CR_LF}".freeze)
-    PONG_RESPONSE = ("PONG#{CR_LF}".freeze)
+    PING_REQUEST = "PING#{CR_LF}".freeze
+    PONG_RESPONSE = "PONG#{CR_LF}".freeze
 
-    NATS_HDR_LINE  = ("NATS/1.0#{CR_LF}".freeze)
+    NATS_HDR_LINE = "NATS/1.0#{CR_LF}".freeze
     STATUS_MSG_LEN = 3
-    STATUS_HDR     = ("Status".freeze)
-    DESC_HDR       = ("Description".freeze)
-    NATS_HDR_LINE_SIZE = (NATS_HDR_LINE.bytesize)
+    STATUS_HDR = "Status"
+    DESC_HDR = "Description"
+    NATS_HDR_LINE_SIZE = NATS_HDR_LINE.bytesize
 
-    SUB_OP = ('SUB'.freeze)
-    EMPTY_MSG = (''.freeze)
+    SUB_OP = "SUB"
+    EMPTY_MSG = ""
 
     INSTANCES = ObjectSpace::WeakMap.new # tracks all alive client instances
     private_constant :INSTANCES
@@ -172,7 +173,7 @@ module NATS
       @ping_interval_thread = nil
 
       # Info that we get from the server
-      @server_info = { }
+      @server_info = {}
 
       # URI from server to which we are currently connected
       @uri = nil
@@ -181,7 +182,7 @@ module NATS
       @status = nil
 
       # Subscriptions
-      @subs = { }
+      @subs = {}
       @ssid = 0
 
       # Ping interval
@@ -204,10 +205,10 @@ module NATS
       @last_err = nil
 
       # Async callbacks, no ops by default.
-      @err_cb = proc { }
-      @close_cb = proc { }
-      @disconnect_cb = proc { }
-      @reconnect_cb = proc { }
+      @err_cb = proc {}
+      @close_cb = proc {}
+      @disconnect_cb = proc {}
+      @reconnect_cb = proc {}
 
       # Secure TLS options
       @tls = nil
@@ -251,7 +252,7 @@ module NATS
     end
 
     # Prepare connecting to NATS, but postpone real connection until first usage.
-    def connect(uri=nil, opts={})
+    def connect(uri = nil, opts = {})
       if uri || opts.any?
         @initial_uri = uri
         @initial_options = opts
@@ -295,8 +296,8 @@ module NATS
       when String
         # Initialize TLS defaults in case any url is using it.
         srvs = opts[:servers] = process_uri(uri)
-        if srvs.any? {|u| %w[tls wss].include? u.scheme } and !opts[:tls]
-          opts[:tls] = { context: tls_context }
+        if srvs.any? { |u| %w[tls wss].include? u.scheme } && !opts[:tls]
+          opts[:tls] = {context: tls_context}
         end
         @single_url_connect_used = true if srvs.size == 1
       when Hash
@@ -314,14 +315,14 @@ module NATS
       opts[:max_outstanding_pings] = NATS::IO::DEFAULT_PING_MAX if opts[:max_outstanding_pings].nil?
 
       # Override with ENV
-      opts[:verbose] = ENV['NATS_VERBOSE'].downcase == 'true' unless ENV['NATS_VERBOSE'].nil?
-      opts[:pedantic] = ENV['NATS_PEDANTIC'].downcase == 'true' unless ENV['NATS_PEDANTIC'].nil?
-      opts[:reconnect] = ENV['NATS_RECONNECT'].downcase == 'true' unless ENV['NATS_RECONNECT'].nil?
-      opts[:reconnect_time_wait] = ENV['NATS_RECONNECT_TIME_WAIT'].to_i unless ENV['NATS_RECONNECT_TIME_WAIT'].nil?
-      opts[:ignore_discovered_urls] = ENV['NATS_IGNORE_DISCOVERED_URLS'].downcase == 'true' unless ENV['NATS_IGNORE_DISCOVERED_URLS'].nil?
-      opts[:max_reconnect_attempts] = ENV['NATS_MAX_RECONNECT_ATTEMPTS'].to_i unless ENV['NATS_MAX_RECONNECT_ATTEMPTS'].nil?
-      opts[:ping_interval] = ENV['NATS_PING_INTERVAL'].to_i unless ENV['NATS_PING_INTERVAL'].nil?
-      opts[:max_outstanding_pings] = ENV['NATS_MAX_OUTSTANDING_PINGS'].to_i unless ENV['NATS_MAX_OUTSTANDING_PINGS'].nil?
+      opts[:verbose] = ENV["NATS_VERBOSE"].downcase == "true" unless ENV["NATS_VERBOSE"].nil?
+      opts[:pedantic] = ENV["NATS_PEDANTIC"].downcase == "true" unless ENV["NATS_PEDANTIC"].nil?
+      opts[:reconnect] = ENV["NATS_RECONNECT"].downcase == "true" unless ENV["NATS_RECONNECT"].nil?
+      opts[:reconnect_time_wait] = ENV["NATS_RECONNECT_TIME_WAIT"].to_i unless ENV["NATS_RECONNECT_TIME_WAIT"].nil?
+      opts[:ignore_discovered_urls] = ENV["NATS_IGNORE_DISCOVERED_URLS"].downcase == "true" unless ENV["NATS_IGNORE_DISCOVERED_URLS"].nil?
+      opts[:max_reconnect_attempts] = ENV["NATS_MAX_RECONNECT_ATTEMPTS"].to_i unless ENV["NATS_MAX_RECONNECT_ATTEMPTS"].nil?
+      opts[:ping_interval] = ENV["NATS_PING_INTERVAL"].to_i unless ENV["NATS_PING_INTERVAL"].nil?
+      opts[:max_outstanding_pings] = ENV["NATS_MAX_OUTSTANDING_PINGS"].to_i unless ENV["NATS_MAX_OUTSTANDING_PINGS"].nil?
       opts[:connect_timeout] ||= NATS::IO::DEFAULT_CONNECT_TIMEOUT
       opts[:drain_timeout] ||= NATS::IO::DEFAULT_DRAIN_TIMEOUT
       @options = opts
@@ -331,14 +332,14 @@ module NATS
       uris.shuffle! unless @options[:dont_randomize_servers]
       uris.each do |u|
         nats_uri = case u
-                   when URI
-                     u.dup
-                   else
-                     URI.parse(u)
-                   end
+        when URI
+          u.dup
+        else
+          URI.parse(u)
+        end
         @server_pool << {
-          :uri => nats_uri,
-          :hostname => nats_uri.hostname
+          uri: nats_uri,
+          hostname: nats_uri.hostname
         }
       end
 
@@ -355,7 +356,7 @@ module NATS
       @user_credentials ||= opts[:user_credentials]
       @nkeys_seed ||= opts[:nkeys_seed]
 
-      setup_nkeys_connect if @user_credentials or @nkeys_seed
+      setup_nkeys_connect if @user_credentials || @nkeys_seed
 
       # Tokens, if set will take preference over the user@server uri token
       @auth_token ||= opts[:auth_token]
@@ -378,7 +379,7 @@ module NATS
         srv = select_next_server
 
         # Use the hostname from the server for TLS hostname verification.
-        if client_using_secure_connection? and single_url_connect_used?
+        if client_using_secure_connection? && single_url_connect_used?
           # Always reuse the original hostname used to connect.
           @hostname ||= srv[:hostname]
         else
@@ -451,8 +452,8 @@ module NATS
       self
     end
 
-    def publish(subject, msg=EMPTY_MSG, opt_reply=nil, **options, &blk)
-      raise NATS::IO::BadSubject if !subject or subject.empty?
+    def publish(subject, msg = EMPTY_MSG, opt_reply = nil, **options, &blk)
+      raise NATS::IO::BadSubject if !subject || subject.empty?
       if options[:header]
         return publish_msg(NATS::Msg.new(subject: subject, data: msg, reply: opt_reply, header: options[:header]))
       end
@@ -469,10 +470,10 @@ module NATS
     # Publishes a NATS::Msg that may include headers.
     def publish_msg(msg)
       raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
-      raise NATS::IO::BadSubject if !msg.subject or msg.subject.empty?
+      raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
 
-      msg.reply ||= ''
-      msg.data ||= ''
+      msg.reply ||= "".dup
+      msg.data ||= "".dup
       msg_size = msg.data.bytesize
 
       # Accounting
@@ -480,7 +481,7 @@ module NATS
       @stats[:out_bytes] += msg_size
 
       if msg.header
-        hdr = ''
+        hdr = "".dup
         hdr << NATS_HDR_LINE
         msg.header.each do |k, v|
           hdr << "#{k}: #{v}#{CR_LF}"
@@ -498,7 +499,7 @@ module NATS
 
     # Create subscription which is dispatched asynchronously
     # messages to a callback.
-    def subscribe(subject, opts={}, &callback)
+    def subscribe(subject, opts = {}, &callback)
       raise NATS::IO::ConnectionDrainingError.new("nats: connection draining") if draining?
 
       sid = nil
@@ -509,7 +510,7 @@ module NATS
         sub.nc = self
         sub.sid = sid
       end
-      opts[:pending_msgs_limit]  ||= NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
+      opts[:pending_msgs_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_MSGS_LIMIT
       opts[:pending_bytes_limit] ||= NATS::IO::DEFAULT_SUB_PENDING_BYTES_LIMIT
 
       sub.subject = subject
@@ -517,7 +518,7 @@ module NATS
       sub.received = 0
       sub.queue = opts[:queue] if opts[:queue]
       sub.max = opts[:max] if opts[:max]
-      sub.pending_msgs_limit  = opts[:pending_msgs_limit]
+      sub.pending_msgs_limit = opts[:pending_msgs_limit]
       sub.pending_bytes_limit = opts[:pending_bytes_limit]
       sub.pending_queue = SizedQueue.new(sub.pending_msgs_limit)
       sub.processing_concurrency = opts[:processing_concurrency] if opts.key?(:processing_concurrency)
@@ -541,8 +542,8 @@ module NATS
     # It times out in case the request is not retrieved within the
     # specified deadline.
     # If given a callback, then the request happens asynchronously.
-    def request(subject, payload="", **opts, &blk)
-      raise NATS::IO::BadSubject if !subject or subject.empty?
+    def request(subject, payload = "", **opts, &blk)
+      raise NATS::IO::BadSubject if !subject || subject.empty?
 
       # If a block was given then fallback to method using auto unsubscribe.
       return old_request(subject, payload, opts, &blk) if blk
@@ -573,7 +574,7 @@ module NATS
       # Publish request and wait for reply.
       publish(subject, payload, inbox)
       begin
-        MonotonicTime::with_nats_timeout(timeout) do
+        MonotonicTime.with_nats_timeout(timeout) do
           @resp_sub.synchronize do
             future.wait(timeout)
           end
@@ -590,7 +591,7 @@ module NATS
         @resp_map.delete(token)
       end
 
-      if response and response.header
+      if response&.header
         status = response.header[STATUS_HDR]
         raise NATS::IO::NoRespondersError if status == "503"
       end
@@ -601,7 +602,7 @@ module NATS
     # request_msg makes a NATS request using a NATS::Msg that may include headers.
     def request_msg(msg, **opts)
       raise TypeError, "nats: expected NATS::Msg, got #{msg.class.name}" unless msg.is_a?(Msg)
-      raise NATS::IO::BadSubject if !msg.subject or msg.subject.empty?
+      raise NATS::IO::BadSubject if !msg.subject || msg.subject.empty?
 
       token = nil
       inbox = nil
@@ -621,13 +622,13 @@ module NATS
         @resp_map[token][:future] = future
       end
       msg.reply = inbox
-      msg.data ||= ''
-      msg_size = msg.data.bytesize
+      msg.data ||= ""
+      msg.data.bytesize
 
       # Publish request and wait for reply.
       publish_msg(msg)
       begin
-        MonotonicTime::with_nats_timeout(timeout) do
+        MonotonicTime.with_nats_timeout(timeout) do
           @resp_sub.synchronize do
             future.wait(timeout)
           end
@@ -644,7 +645,7 @@ module NATS
         @resp_map.delete(token)
       end
 
-      if response and response.header
+      if response&.header
         status = response.header[STATUS_HDR]
         raise NATS::IO::NoRespondersError if status == "503"
       end
@@ -656,7 +657,7 @@ module NATS
     # expecting a single response or raising a timeout in case the request
     # is not retrieved within the specified deadline.
     # If given a callback, then the request happens asynchronously.
-    def old_request(subject, payload, opts={}, &blk)
+    def old_request(subject, payload, opts = {}, &blk)
       return unless subject
       inbox = new_inbox
 
@@ -705,13 +706,13 @@ module NATS
         # Publish the request and then wait for the response...
         publish(subject, payload, inbox)
 
-        MonotonicTime::with_nats_timeout(timeout) do
+        MonotonicTime.with_nats_timeout(timeout) do
           future.wait(timeout)
         end
       end
       response = sub.response
 
-      if response and response.header
+      if response&.header
         status = response.header[STATUS_HDR]
         raise NATS::IO::NoRespondersError if status == "503"
       end
@@ -720,7 +721,7 @@ module NATS
     end
 
     # Send a ping and wait for a pong back within a timeout.
-    def flush(timeout=10)
+    def flush(timeout = 10)
       # Schedule sending a PING, and block until we receive PONG back,
       # or raise a timeout in case the response is past the deadline.
       pong = @pongs.new_cond
@@ -730,18 +731,18 @@ module NATS
         # Flush once pong future has been prepared
         @pending_queue << PING_REQUEST
         @flush_queue << :ping
-        MonotonicTime::with_nats_timeout(timeout) do
+        MonotonicTime.with_nats_timeout(timeout) do
           pong.wait(timeout)
         end
       end
     end
 
-    alias :servers :server_pool
+    alias_method :servers, :server_pool
 
     # discovered_servers returns the NATS Servers that have been discovered
     # via INFO protocol updates.
     def discovered_servers
-      servers.select {|s| s[:discovered] }
+      servers.select { |s| s[:discovered] }
     end
 
     # Close connection to NATS, flushing in case connection is alive
@@ -782,7 +783,7 @@ module NATS
     end
 
     def draining?
-      if @status == DRAINING_PUBS or @status == DRAINING_SUBS
+      if (@status == DRAINING_PUBS) || (@status == DRAINING_SUBS)
         return true
       end
 
@@ -835,7 +836,7 @@ module NATS
     # @option params [String] :domain JetStream Domain to use for the requests.
     # @option params [Float] :timeout Default timeout to use for JS requests.
     # @return [NATS::JetStream]
-    def jetstream(opts={})
+    def jetstream(opts = {})
       ::NATS::JetStream.new(self, opts)
     end
     alias_method :JetStream, :jetstream
@@ -857,10 +858,8 @@ module NATS
       # so has to be done under the lock.
       synchronize do
         # Symbolize keys from parsed info line
-        @server_info = parsed_info.reduce({}) do |info, (k,v)|
+        @server_info = parsed_info.each_with_object({}) do |(k, v), info|
           info[k.to_sym] = v
-
-          info
         end
 
         # Detect any announced server that we might not be aware of...
@@ -879,7 +878,7 @@ module NATS
               srv[:uri].hostname == u.hostname && srv[:uri].port == u.port
             end
 
-            if not present
+            if !present
               # Let explicit user and pass options set the credentials.
               u.user = options[:user] if options[:user]
               u.password = options[:pass] if options[:pass]
@@ -891,7 +890,7 @@ module NATS
               end
 
               # NOTE: Auto discovery won't work here when TLS host verification is enabled.
-              srv = { :uri => u, :reconnect_attempts => 0, :discovered => true, :hostname => u.hostname }
+              srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname}
               srvs << srv
             end
           end
@@ -914,13 +913,13 @@ module NATS
         # Check if the first line has an inline status and description.
         if lines.count > 0
           status_hdr = lines.first.rstrip
-          status = status_hdr.slice(NATS_HDR_LINE_SIZE-1, STATUS_MSG_LEN)
+          status = status_hdr.slice(NATS_HDR_LINE_SIZE - 1, STATUS_MSG_LEN)
 
-          if status and !status.empty?
+          if status && !status.empty?
             hdr[STATUS_HDR] = status
 
-            if NATS_HDR_LINE_SIZE+2 < status_hdr.bytesize
-              desc = status_hdr.slice(NATS_HDR_LINE_SIZE+STATUS_MSG_LEN, status_hdr.bytesize)
+            if NATS_HDR_LINE_SIZE + 2 < status_hdr.bytesize
+              desc = status_hdr.slice(NATS_HDR_LINE_SIZE + STATUS_MSG_LEN, status_hdr.bytesize)
               hdr[DESC_HDR] = desc unless desc.empty?
             end
           end
@@ -933,7 +932,7 @@ module NATS
             hdr[key] = value
           end
         rescue => e
-          err = e
+          e
         end
       end
 
@@ -946,7 +945,7 @@ module NATS
       # Take first pong wait and signal any flush in case there was one
       @pongs.synchronize do
         pong = @pongs.pop
-        pong.signal unless pong.nil?
+        pong&.signal
       end
       @pings_outstanding -= 1
       @pongs_received += 1
@@ -966,10 +965,9 @@ module NATS
       # while holding the lock.
       e = synchronize do
         current = server_pool.first
-        case
-        when err =~ /'Stale Connection'/
+        if err =~ /'Stale Connection'/
           @last_err = NATS::IO::StaleConnectionError.new(err)
-        when current && current[:auth_required]
+        elsif current && current[:auth_required]
           # We cannot recover from auth errors so mark it to avoid
           # retrying to unecessarily next time.
           current[:error_received] = true
@@ -1019,8 +1017,8 @@ module NATS
         elsif sub.pending_queue
           # Async subscribers use a sized queue for processing
           # and should be able to consume messages in parallel.
-          if sub.pending_queue.size >= sub.pending_msgs_limit \
-            or sub.pending_size >= sub.pending_bytes_limit then
+          if (sub.pending_queue.size >= sub.pending_msgs_limit) \
+            || (sub.pending_size >= sub.pending_bytes_limit)
             err = NATS::IO::SlowConsumer.new("nats: slow consumer, messages dropped")
           else
             hdr = process_hdr(header)
@@ -1034,10 +1032,12 @@ module NATS
         end
       end
 
-      synchronize do
-        @last_err = err
-        err_cb_call(self, err, sub) if @err_cb
-      end if err
+      if err
+        synchronize do
+          @last_err = err
+          err_cb_call(self, err, sub) if @err_cb
+        end
+      end
     end
 
     def select_next_server
@@ -1103,7 +1103,7 @@ module NATS
 
     # Auto unsubscribes the server by sending UNSUB command and throws away
     # subscription in case already present and has received enough messages.
-    def unsubscribe(sub, opt_max=nil)
+    def unsubscribe(sub, opt_max = nil)
       sid = nil
       closed = nil
       sub.synchronize do
@@ -1120,7 +1120,7 @@ module NATS
       return unless sub
       synchronize do
         sub.max = opt_max
-        @subs.delete(sid) unless (sub.max && (sub.received < sub.max))
+        @subs.delete(sid) unless sub.max && (sub.received < sub.max)
       end
 
       sub.synchronize do
@@ -1141,7 +1141,7 @@ module NATS
       @flush_queue << :drain
 
       synchronize { sub = @subs[sid] }
-      return unless sub
+      nil unless sub
     end
 
     def do_drain
@@ -1158,16 +1158,16 @@ module NATS
       force_flush!
 
       # Wait until all subs have no pending messages.
-      drain_timeout = MonotonicTime::now + @options[:drain_timeout]
+      drain_timeout = MonotonicTime.now + @options[:drain_timeout]
       to_delete = []
 
       loop do
-        break if MonotonicTime::now > drain_timeout
+        break if MonotonicTime.now > drain_timeout
         sleep 0.1
 
         # Wait until all subs are done.
         @subs.each do |_, sub|
-          if sub != @resp_sub and sub.pending_queue.size == 0
+          if (sub != @resp_sub) && (sub.pending_queue.size == 0)
             to_delete << sub
           end
         end
@@ -1180,7 +1180,7 @@ module NATS
 
         # Wait until only the resp mux is remaining or there are no subscriptions.
         if @subs.count == 1
-          sid, sub = @subs.first
+          _, sub = @subs.first
           if sub == @resp_sub
             break
           end
@@ -1192,7 +1192,7 @@ module NATS
       subscription_executor.shutdown
       subscription_executor.wait_for_termination(@options[:drain_timeout])
 
-      if MonotonicTime::now > drain_timeout
+      if MonotonicTime.now > drain_timeout
         e = NATS::IO::DrainTimeoutError.new("nats: draining connection timed out")
         err_cb_call(self, e, nil) if @err_cb
       end
@@ -1229,27 +1229,26 @@ module NATS
 
     def connect_command
       cs = {
-            :verbose  => @options[:verbose],
-            :pedantic => @options[:pedantic],
-            :lang     => NATS::IO::LANG,
-            :version  => NATS::IO::VERSION,
-            :protocol => NATS::IO::PROTOCOL
+        verbose: @options[:verbose],
+        pedantic: @options[:pedantic],
+        lang: NATS::IO::LANG,
+        version: NATS::IO::VERSION,
+        protocol: NATS::IO::PROTOCOL
       }
       cs[:name] = @options[:name] if @options[:name]
 
-      case
-      when auth_connection?
+      if auth_connection?
         if @uri.password
           cs[:user] = @uri.user
           cs[:pass] = @uri.password
         else
           cs[:auth_token] = @uri.user
         end
-      when @user_jwt_cb && @signature_cb
+      elsif @user_jwt_cb && @signature_cb
         nonce = @server_info[:nonce]
         cs[:jwt] = @user_jwt_cb.call
         cs[:sig] = @signature_cb.call(nonce)
-      when @user_nkey_cb && @signature_cb
+      elsif @user_nkey_cb && @signature_cb
         nonce = @server_info[:nonce]
         cs[:nkey] = @user_nkey_cb.call
         cs[:sig] = @signature_cb.call(nonce)
@@ -1260,10 +1259,10 @@ module NATS
       if @server_info[:headers]
         cs[:headers] = @server_info[:headers]
         cs[:no_responders] = if @options[:no_responders] == false
-                               @options[:no_responders]
-                             else
-                               @server_info[:headers]
-                             end
+          @options[:no_responders]
+        else
+          @server_info[:headers]
+        end
       end
 
       "CONNECT #{cs.to_json}#{CR_LF}"
@@ -1283,9 +1282,9 @@ module NATS
 
         # If we were connected and configured to reconnect,
         # then trigger disconnect and start reconnection logic
-        if connected? and should_reconnect?
+        if connected? && should_reconnect?
           @status = RECONNECTING
-          @io.close if @io
+          @io&.close
           @io = nil
 
           # TODO: Reconnecting pending buffer?
@@ -1293,18 +1292,16 @@ module NATS
           # Do reconnect under a different thread than the one
           # in which we got the error.
           Thread.new do
-            begin
-              # Abort currently running reads in case they're around
-              # FIXME: There might be more graceful way here...
-              @read_loop_thread.exit if @read_loop_thread.alive?
-              @flusher_thread.exit if @flusher_thread.alive?
-              @ping_interval_thread.exit if @ping_interval_thread.alive?
+            # Abort currently running reads in case they're around
+            # FIXME: There might be more graceful way here...
+            @read_loop_thread.exit if @read_loop_thread.alive?
+            @flusher_thread.exit if @flusher_thread.alive?
+            @ping_interval_thread.exit if @ping_interval_thread.alive?
 
-              attempt_reconnect
-            rescue NATS::IO::NoServersError => e
-              @last_err = e
-              close
-            end
+            attempt_reconnect
+          rescue NATS::IO::NoServersError => e
+            @last_err = e
+            close
           end
 
           Thread.exit
@@ -1322,26 +1319,24 @@ module NATS
     # Gathers data from the socket and sends it to the parser.
     def read_loop
       loop do
-        begin
-          should_bail = synchronize do
-            # FIXME: In case of reconnect as well?
-            @status == CLOSED or @status == RECONNECTING
-          end
-          if !@io or @io.closed? or should_bail
-            return
-          end
-
-          # TODO: Remove timeout and just wait to be ready
-          data = @io.read(NATS::IO::MAX_SOCKET_READ_BYTES)
-          @parser.parse(data) if data
-        rescue Errno::ETIMEDOUT
-          # FIXME: We do not really need a timeout here...
-          retry
-        rescue => e
-          # In case of reading/parser errors, trigger
-          # reconnection logic in case desired.
-          process_op_error(e)
+        should_bail = synchronize do
+          # FIXME: In case of reconnect as well?
+          @status == CLOSED or @status == RECONNECTING
         end
+        if !@io || @io.closed? || should_bail
+          return
+        end
+
+        # TODO: Remove timeout and just wait to be ready
+        data = @io.read(NATS::IO::MAX_SOCKET_READ_BYTES)
+        @parser.parse(data) if data
+      rescue Errno::ETIMEDOUT
+        # FIXME: We do not really need a timeout here...
+        retry
+      rescue => e
+        # In case of reading/parser errors, trigger
+        # reconnection logic in case desired.
+        process_op_error(e)
       end
     end
 
@@ -1353,7 +1348,7 @@ module NATS
         @flush_queue.pop
 
         should_bail = synchronize do
-          (@status != CONNECTED && !draining? ) || @status == CONNECTING
+          (@status != CONNECTED && !draining?) || @status == CONNECTING
         end
         return if should_bail
 
@@ -1374,17 +1369,19 @@ module NATS
       # until reaching the max pending queue size.
       cmds = []
       cmds << @pending_queue.pop until @pending_queue.empty?
-      begin
-        @io.write(cmds.join) unless cmds.empty?
-      rescue => e
-        synchronize do
-          @last_err = e
-          err_cb_call(self, e, nil) if @err_cb
-        end
+      if @io
+        begin
+          @io.write(cmds.join) unless cmds.empty?
+        rescue => e
+          synchronize do
+            @last_err = e
+            err_cb_call(self, e, nil) if @err_cb
+          end
 
-        process_op_error(e)
-        return
-      end if @io
+          process_op_error(e)
+          nil
+        end
+      end
     end
 
     def ping_interval_loop
@@ -1410,27 +1407,26 @@ module NATS
     def process_connect_init
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
-      if !line or line.empty?
+      if !line || line.empty?
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not received")
       end
 
-      if match = line.match(NATS::Protocol::INFO)
+      if (match = line.match(NATS::Protocol::INFO))
         info_json = match.captures.first
         process_info(info_json)
       else
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
       end
 
-      case
-      when (server_using_secure_connection? and client_using_secure_connection?)
+      if server_using_secure_connection? && client_using_secure_connection?
         @io.setup_tls!
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
-      when (server_using_secure_connection? and !client_using_secure_connection? and @uri.scheme != "ws")
-        raise NATS::IO::ConnectError.new('TLS/SSL required by server')
+      elsif server_using_secure_connection? && !client_using_secure_connection? && (@uri.scheme != "ws")
+        raise NATS::IO::ConnectError.new("TLS/SSL required by server")
       # Server < v2.9.19 requiring TLS/SSL over websocket but not requiring it over standard protocol
       # doesn't send `tls_required` in its INFO so we need to check the URI scheme for WebSocket.
-      when (client_using_secure_connection? and !server_using_secure_connection? and @uri.scheme != "wss")
-        raise NATS::IO::ConnectError.new('TLS/SSL not supported by server')
+      elsif client_using_secure_connection? && !server_using_secure_connection? && (@uri.scheme != "wss")
+        raise NATS::IO::ConnectError.new("TLS/SSL not supported by server")
       else
         # Otherwise, use a regular connection.
       end
@@ -1451,6 +1447,7 @@ module NATS
 
       case next_op
       when NATS::Protocol::PONG
+        # do nothing
       when NATS::Protocol::ERR
         if @server_info[:auth_required]
           raise NATS::IO::AuthError.new($1)
@@ -1464,7 +1461,7 @@ module NATS
 
     # Reconnect logic, this is done while holding the lock.
     def attempt_reconnect
-      @disconnect_cb.call(@last_err) if @disconnect_cb
+      @disconnect_cb&.call(@last_err)
 
       # Clear sticky error
       @last_err = nil
@@ -1475,7 +1472,7 @@ module NATS
         srv = select_next_server
 
         # Set hostname to use for TLS hostname verification
-        if client_using_secure_connection? and single_url_connect_used?
+        if client_using_secure_connection? && single_url_connect_used?
           # Reuse original hostname name in case of using TLS.
           @hostname ||= srv[:hostname]
         else
@@ -1541,10 +1538,10 @@ module NATS
 
       # Dispatch the reconnected callback while holding lock
       # which we should have already
-      @reconnect_cb.call if @reconnect_cb
+      @reconnect_cb&.call
     end
 
-    def close_connection(conn_status, do_cbs=true)
+    def close_connection(conn_status, do_cbs = true)
       synchronize do
         @connect_called = false
         if @status == CLOSED
@@ -1559,15 +1556,15 @@ module NATS
 
       # FIXME: More graceful way of handling the following?
       # Ensure ping interval and flusher are not running anymore
-      if @ping_interval_thread and @ping_interval_thread.alive?
+      if @ping_interval_thread&.alive?
         @ping_interval_thread.exit
       end
 
-      if @flusher_thread and @flusher_thread.alive?
+      if @flusher_thread&.alive?
         @flusher_thread.exit
       end
 
-      if @read_loop_thread and @read_loop_thread.alive?
+      if @read_loop_thread&.alive?
         @read_loop_thread.exit
       end
 
@@ -1582,24 +1579,26 @@ module NATS
 
         # Try to write any pending flushes in case
         # we have a connection then close it.
-        should_flush = (@pending_queue && @io && @io.socket && !@io.closed?)
-        begin
-          cmds = []
-          cmds << @pending_queue.pop until @pending_queue.empty?
+        should_flush = @pending_queue && @io && @io.socket && !@io.closed?
+        if should_flush
+          begin
+            cmds = []
+            cmds << @pending_queue.pop until @pending_queue.empty?
 
-          # FIXME: Fails when empty on TLS connection?
-          @io.write(cmds.join) unless cmds.empty?
-        rescue => e
-          @last_err = e
-          err_cb_call(self, e, nil) if @err_cb
-        end if should_flush
+            # FIXME: Fails when empty on TLS connection?
+            @io.write(cmds.join) unless cmds.empty?
+          rescue => e
+            @last_err = e
+            err_cb_call(self, e, nil) if @err_cb
+          end
+        end
 
         # Destroy any remaining subscriptions.
         @subs.clear
 
         if do_cbs
-          @disconnect_cb.call(@last_err) if @disconnect_cb
-          @close_cb.call if @close_cb
+          @disconnect_cb&.call(@last_err)
+          @close_cb&.call
         end
 
         @status = conn_status
@@ -1631,11 +1630,11 @@ module NATS
 
       # Subscription handling thread pool
       @subscription_executor = Concurrent::ThreadPoolExecutor.new(
-        name: 'nats:subscription', # threads will be given names like nats:subscription-worker-1
+        name: "nats:subscription", # threads will be given names like nats:subscription-worker-1
         max_threads: NATS::IO::DEFAULT_TOTAL_SUB_CONCURRENCY,
         # JRuby has a bug on certain Java version of not creating new threads:
         # https://github.com/ruby-concurrency/concurrent-ruby/issues/864
-        min_threads: defined?(JRUBY_VERSION) ? 2 : 0,
+        min_threads: defined?(JRUBY_VERSION) ? 2 : 0
       )
     end
 
@@ -1643,7 +1642,7 @@ module NATS
     # for the new style request response.
     def start_resp_mux_sub!
       @resp_sub_prefix = new_inbox
-      @resp_map = Hash.new { |h,k| h[k] = { }}
+      @resp_map = Hash.new { |h, k| h[k] = {} }
 
       @resp_sub = Subscription.new
       @resp_sub.subject = "#{@resp_sub_prefix}.*"
@@ -1657,7 +1656,7 @@ module NATS
       @resp_sub.callback = proc do |msg|
         # Pick the token and signal the request under the mutex
         # from the subscription itself.
-        token = msg.subject.split('.').last
+        token = msg.subject.split(".").last
         future = nil
         synchronize do
           future = @resp_map[token][:future]
@@ -1689,7 +1688,7 @@ module NATS
       return false if server[:error_received]
 
       # We will retry a number of times to reconnect to a server.
-      return server[:reconnect_attempts] <= @options[:max_reconnect_attempts]
+      server[:reconnect_attempts] <= @options[:max_reconnect_attempts]
     end
 
     def should_delay_connect?(server)
@@ -1706,35 +1705,34 @@ module NATS
 
     def create_socket
       socket_class = case @uri.scheme
-        when "nats", "tls"
-          NATS::IO::Socket
-        when "ws", "wss"
-          require_relative 'websocket'
-          NATS::IO::WebSocket
-        else
-          raise NotImplementedError, "#{@uri.scheme} protocol is not supported, check NATS cluster URL spelling"
-        end
+      when "nats", "tls"
+        NATS::IO::Socket
+      when "ws", "wss"
+        require_relative "websocket"
+        NATS::IO::WebSocket
+      else
+        raise NotImplementedError, "#{@uri.scheme} protocol is not supported, check NATS cluster URL spelling"
+      end
 
       socket_class.new(
         uri: @uri,
-        tls: { context: tls_context, hostname: @hostname },
-        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT,
+        tls: {context: tls_context, hostname: @hostname},
+        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
       )
     end
 
     def setup_nkeys_connect
       begin
-        require 'nkeys'
-        require 'base64'
+        require "nkeys"
+        require "base64"
       rescue LoadError
         raise(Error, "nkeys is not installed")
       end
 
-      case
-      when @nkeys_seed
+      if @nkeys_seed
         @user_nkey_cb = nkey_cb_for_nkey_file(@nkeys_seed)
         @signature_cb = signature_cb_for_nkey_file(@nkeys_seed)
-      when @user_credentials
+      elsif @user_credentials
         # When the credentials are within a single decorated file.
         @user_jwt_cb = jwt_cb_for_creds_file(@user_credentials)
         @signature_cb = signature_cb_for_creds_file(@user_credentials)
@@ -1744,18 +1742,18 @@ module NATS
     def signature_cb_for_nkey_file(nkey)
       proc { |nonce|
         seed = File.read(nkey).chomp
-        kp = NKEYS::from_seed(seed)
+        kp = NKEYS.from_seed(seed)
         raw_signed = kp.sign(nonce)
         kp.wipe!
         encoded = Base64.urlsafe_encode64(raw_signed)
-        encoded.gsub('=', '')
+        encoded.gsub("=", "")
       }
     end
 
     def nkey_cb_for_nkey_file(nkey)
       proc {
         seed = File.read(nkey).chomp
-        kp = NKEYS::from_seed(seed)
+        kp = NKEYS.from_seed(seed)
 
         # Take a copy since original will be gone with the wipe.
         pub_key = kp.public_key.dup
@@ -1767,21 +1765,20 @@ module NATS
 
     def jwt_cb_for_creds_file(creds)
       proc {
-        jwt_start = "BEGIN NATS USER JWT".freeze
+        jwt_start = "BEGIN NATS USER JWT"
         found = false
         jwt = nil
 
         File.readlines(creds).each do |line|
-          case
-          when found
+          if found
             jwt = line.chomp
             break
-          when line.include?(jwt_start)
+          elsif line.include?(jwt_start)
             found = true
           end
         end
 
-        raise(Error, "No JWT found in #{creds}") if not found
+        raise(Error, "No JWT found in #{creds}") if !found
 
         jwt
       }
@@ -1789,23 +1786,22 @@ module NATS
 
     def signature_cb_for_creds_file(creds)
       proc { |nonce|
-        seed_start = "BEGIN USER NKEY SEED".freeze
+        seed_start = "BEGIN USER NKEY SEED"
         found = false
         seed = nil
 
         File.readlines(creds).each do |line|
-          case
-          when found
+          if found
             seed = line.chomp
             break
-          when line.include?(seed_start)
+          elsif line.include?(seed_start)
             found = true
           end
         end
 
-        raise(Error, "No nkey user seed found in #{creds}") if not found
+        raise(Error, "No nkey user seed found in #{creds}") if !found
 
-        kp = NKEYS::from_seed(seed)
+        kp = NKEYS.from_seed(seed)
         raw_signed = kp.sign(nonce)
 
         # seed is a reference so also cleared when doing wipe,
@@ -1814,14 +1810,12 @@ module NATS
         encoded = Base64.urlsafe_encode64(raw_signed)
 
         # Remove padding
-        encoded.gsub('=', '')
+        encoded.gsub("=", "")
       }
     end
 
     def process_uri(uris)
-      uris.split(',').map do |uri|
-        opts = {}
-
+      uris.split(",").map do |uri|
         # Scheme
         uri = "nats://#{uri}" if !uri.include?("://")
 
@@ -1865,7 +1859,7 @@ module NATS
     DEFAULT_DRAIN_TIMEOUT = 30
 
     # Default Pending Limits
-    DEFAULT_SUB_PENDING_MSGS_LIMIT  = 65536
+    DEFAULT_SUB_PENDING_MSGS_LIMIT = 65536
     DEFAULT_SUB_PENDING_BYTES_LIMIT = 65536 * 1024
 
     DEFAULT_TOTAL_SUB_CONCURRENCY = 24
@@ -1875,7 +1869,7 @@ module NATS
     class Socket
       attr_accessor :socket
 
-      def initialize(options={})
+      def initialize(options = {})
         @uri = options[:uri]
         @connect_timeout = options[:connect_timeout]
         @write_timeout = options[:write_timeout]
@@ -1887,13 +1881,11 @@ module NATS
       def connect
         addrinfo = ::Socket.getaddrinfo(@uri.hostname, nil, ::Socket::AF_UNSPEC, ::Socket::SOCK_STREAM)
         addrinfo.each_with_index do |ai, i|
-          begin
-            @socket = connect_addrinfo(ai, @uri.port, @connect_timeout)
-            break
-          rescue SystemCallError => e
-            # Give up if no more available
-            raise e if addrinfo.length == i+1
-          end
+          @socket = connect_addrinfo(ai, @uri.port, @connect_timeout)
+          break
+        rescue SystemCallError => e
+          # Give up if no more available
+          raise e if addrinfo.length == i + 1
         end
 
         # Set TCP no delay by default
@@ -1916,7 +1908,7 @@ module NATS
         @socket = tls_socket
       end
 
-      def read_line(deadline=nil)
+      def read_line(deadline = nil)
         # FIXME: Should accumulate and read in a non blocking way instead
         unless ::IO.select([@socket], nil, nil, deadline)
           raise NATS::IO::SocketTimeoutError
@@ -1924,10 +1916,9 @@ module NATS
         @socket.gets
       end
 
-      def read(max_bytes, deadline=nil)
-
+      def read(max_bytes, deadline = nil)
         begin
-          return @socket.read_nonblock(max_bytes)
+          @socket.read_nonblock(max_bytes)
         rescue ::IO::WaitReadable
           if ::IO.select([@socket], nil, nil, deadline)
             retry
@@ -1942,7 +1933,7 @@ module NATS
           end
         end
       rescue EOFError => e
-        if RUBY_ENGINE == 'jruby' and e.message == 'No message available'
+        if (RUBY_ENGINE == "jruby") && (e.message == "No message available")
           # FIXME: <EOFError: No message available> can happen in jruby
           # even though seems it is temporary and eventually possible
           # to read from socket.
@@ -1951,32 +1942,29 @@ module NATS
         raise Errno::ECONNRESET
       end
 
-      def write(data, deadline=nil)
+      def write(data, deadline = nil)
         length = data.bytesize
         total_written = 0
 
         loop do
-          begin
-            written = @socket.write_nonblock(data)
+          written = @socket.write_nonblock(data)
 
-            total_written += written
-            break total_written if total_written >= length
-            data = data.byteslice(written..-1)
-          rescue ::IO::WaitWritable
-            if ::IO.select(nil, [@socket], nil, deadline)
-              retry
-            else
-              raise NATS::IO::SocketTimeoutError
-            end
-          rescue ::IO::WaitReadable
-            if ::IO.select([@socket], nil, nil, deadline)
-              retry
-            else
-              raise NATS::IO::SocketTimeoutError
-            end
+          total_written += written
+          break total_written if total_written >= length
+          data = data.byteslice(written..-1)
+        rescue ::IO::WaitWritable
+          if ::IO.select(nil, [@socket], nil, deadline)
+            retry
+          else
+            raise NATS::IO::SocketTimeoutError
+          end
+        rescue ::IO::WaitReadable
+          if ::IO.select([@socket], nil, nil, deadline)
+            retry
+          else
+            raise NATS::IO::SocketTimeoutError
           end
         end
-
       rescue EOFError
         raise Errno::ECONNRESET
       end
@@ -2021,14 +2009,13 @@ module NATS
     # Implementation of MonotonicTime adapted from
     # https://github.com/ruby-concurrency/concurrent-ruby/
     class << self
-      case
-      when defined?(Process::CLOCK_MONOTONIC)
+      if defined?(Process::CLOCK_MONOTONIC)
         def now
           Process.clock_gettime(Process::CLOCK_MONOTONIC)
         end
-      when RUBY_ENGINE == 'jruby'
+      elsif RUBY_ENGINE == "jruby"
         def now
-          java.lang.System.nanoTime() / 1_000_000_000.0
+          java.lang.System.nanoTime / 1_000_000_000.0
         end
       else
         def now

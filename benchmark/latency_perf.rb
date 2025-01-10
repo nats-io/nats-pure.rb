@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2018 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +14,14 @@
 # limitations under the License.
 #
 
-require 'optparse'
+require "optparse"
 
-$LOAD_PATH << File.expand_path('../../lib', __FILE__)
-require 'nats/io/client'
+$LOAD_PATH << File.expand_path("../../lib", __FILE__)
+require "nats/io/client"
 
 $loop = 10000
 $hash = 250
-$sub  = 'test'
+$sub = "test"
 
 $subscriptions = 1
 $concurrency = 1
@@ -33,7 +35,7 @@ parser = OptionParser.new do |opts|
   opts.separator ""
   opts.separator "options:"
 
-  opts.on("-s SUBJECT", "Send subject (default: #{$sub})")             { |sub| $sub = sub }
+  opts.on("-s SUBJECT", "Send subject (default: #{$sub})") { |sub| $sub = sub }
   opts.on("-n ITERATIONS", "iterations to expect (default: #{$loop})") { |iter| $loop = iter.to_i }
   opts.on("-c SUBSCRIPTIONS", "Subscription number (default: (#{$subscriptions})") { |subscriptions| $subscriptions = subscriptions.to_i }
   opts.on("-t CONCURRENCY", "Subscription processing concurrency (default: (#{$concurrency})") { |concurrency| $concurrency = concurrency.to_i }
@@ -44,7 +46,7 @@ parser.parse(ARGV)
 $drain = $loop
 
 trap("TERM") { exit! }
-trap("INT")  { exit! }
+trap("INT") { exit! }
 
 nats = NATS::IO::Client.new
 
@@ -61,19 +63,19 @@ nats.on_reconnect do
   puts "nats: reconnected!"
 end
 
-nats.connect(:max_reconnect => 10)
+nats.connect(max_reconnect: 10)
 
 if $queue
   $subscriptions.times do
     sub = nats.subscribe($sub, queue: $queue) do |msg|
-      msg.respond("OK:"+msg.data)
+      msg.respond("OK:" + msg.data)
     end
     sub.processing_concurrency = $concurrency
   end
 else
   $subscriptions.times do
     sub = nats.subscribe($sub) do |msg|
-      msg.respond("OKOK:"+msg.data)
+      msg.respond("OKOK:" + msg.data)
     end
     sub.processing_concurrency = $concurrency
   end
@@ -87,17 +89,17 @@ $start = Time.now
 loop do
   begin
     nats.request($sub, "AAA-#{$drain}", timeout: 2)
-  rescue NATS::IO::Timeout => e
+  rescue NATS::IO::Timeout
     timeouts += 1
   end
 
-  $drain-=1
+  $drain -= 1
   if $drain == 0
-    ms = "%.2f" % (((Time.now-$start)/$loop)*1000.0)
+    ms = "%.2f" % (((Time.now - $start) / $loop) * 1000.0)
     puts "\nTest completed : #{ms} ms avg request/response latency\n"
     puts "Timeouts: #{timeouts}" if timeouts > 0
     exit!
-  else
-    printf('#') if $drain.modulo($hash) == 0
+  elsif $drain.modulo($hash) == 0
+    printf("#")
   end
 end

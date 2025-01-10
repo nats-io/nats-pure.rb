@@ -2,11 +2,10 @@ name: Lint Ruby
 
 on:
   workflow_dispatch:
-  # TODO: Autocorrect first
-  # push:
-  #   branches:
-  #   - main
-  # pull_request:
+  push:
+    branches:
+    - main
+  pull_request:
 
 jobs:
   rubocop:

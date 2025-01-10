@@ -1,6 +1,6 @@
 [![Gem Version](https://badge.fury.io/rb/nats-pure.svg)](https://rubygems.org/gems/nats-pure)
 [![License Apache 2.0](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Build](https://github.com/nats-io/nats-pure/workflows/Build/badge.svg)](https://github.com/nats-io/nats-pure/actions)
+[![Build](https://github.com/nats-io/nats-pure.rb/workflows/Build/badge.svg)](https://github.com/nats-io/nats-pure.rb/actions)
 [![Documentation](https://img.shields.io/badge/docs-link-brightgreen.svg)](https://docs.nats.io/)
 
 # NATS: Pure Ruby Client

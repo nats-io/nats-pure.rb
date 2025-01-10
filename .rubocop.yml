@@ -17,6 +17,8 @@ AllCops:
     - 'lib/.rbnext/**/*'
     - 'lib/generators/**/templates/*.rb'
     - '.github/**/*'
+    - 'examples/**/*'
+    - 'benchmark/**/*'
   DisplayCopNames: true
   SuggestExtensions: false
   NewCops: disable

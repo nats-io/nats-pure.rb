@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +18,6 @@ module NATS
   class JetStream
     # Error is any error that may arise when interacting with JetStream.
     class Error < NATS::IO::Error
-
       # When there is a NATS::IO::NoResponders error after making a publish request.
       class NoStreamResponse < Error; end
 
@@ -43,7 +44,7 @@ module NATS
       class APIError < Error
         attr_reader :code, :err_code, :description, :stream, :seq
 
-        def initialize(params={})
+        def initialize(params = {})
           @code = params[:code]
           @err_code = params[:err_code]
           @description = params[:description]
@@ -61,8 +62,8 @@ module NATS
       # running in cluster mode.
       # This condition is represented with a message that has 503 status code header.
       class ServiceUnavailable < APIError
-        def initialize(params={})
-          super(params)
+        def initialize(params = {})
+          super
           @code ||= 503
         end
       end
@@ -70,8 +71,8 @@ module NATS
       # When there is a hard failure in the JetStream.
       # This condition is represented with a message that has 500 status code header.
       class ServerError < APIError
-        def initialize(params={})
-          super(params)
+        def initialize(params = {})
+          super
           @code ||= 500
         end
       end
@@ -79,8 +80,8 @@ module NATS
       # When a JetStream object was not found.
       # This condition is represented with a message that has 404 status code header.
       class NotFound < APIError
-        def initialize(params={})
-          super(params)
+        def initialize(params = {})
+          super
           @code ||= 404
         end
       end
@@ -94,8 +95,8 @@ module NATS
       # When the JetStream client makes an invalid request.
       # This condition is represented with a message that has 400 status code header.
       class BadRequest < APIError
-        def initialize(params={})
-          super(params)
+        def initialize(params = {})
+          super
           @code ||= 400
         end
       end

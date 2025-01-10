@@ -1,88 +1,69 @@
-# Copyright 2016-2018 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-require 'fileutils'
+describe "Client - Authorization" do
+  let(:auth_server) { "nats://secret:password@127.0.0.1:9222" }
+  let(:auth_server_pid) { "/tmp/nats_authorization.pid" }
+  let(:auth_server_no_cred) { "nats://127.0.0.1:9222" }
 
-describe 'Client - Authorization' do
+  let(:another_auth_server) { "nats://secret:secret@127.0.0.1:9223" }
+  let(:another_auth_server_pid) { "/tmp/nats_another_authorization.pid" }
 
-  USER = 'secret'
-  PASS = 'password'
+  let(:token_auth_server) { "nats://secret@127.0.0.1:9222" }
+  let(:wrong_token_auth_server) { "nats://other@127.0.0.1:9222" }
 
-  TEST_AUTH_SERVER          = "nats://#{USER}:#{PASS}@127.0.0.1:9222"
-  TEST_AUTH_SERVER_PID      = '/tmp/nats_authorization.pid'
-  TEST_AUTH_SERVER_NO_CRED  = 'nats://127.0.0.1:9222'
-
-  TEST_ANOTHER_AUTH_SERVER  = "nats://#{USER}:secret@127.0.0.1:9223"
-  TEST_ANOTHER_AUTH_SERVER_PID = '/tmp/nats_another_authorization.pid'
-
-  TEST_TOKEN_AUTH_SERVER = "nats://#{USER}@127.0.0.1:9222"
-  TEST_WRONG_TOKEN_AUTH_SERVER = "nats://other@127.0.0.1:9222"
-
-  after (:each) do
+  after do
     @server_control.kill_server
-    FileUtils.rm_f TEST_AUTH_SERVER_PID
+    FileUtils.rm_f auth_server_pid
   end
 
-  it 'should connect to an authorized server with proper credentials' do
-    @server_control = NatsServerControl.new(TEST_AUTH_SERVER, TEST_AUTH_SERVER_PID)
+  it "should connect to an authorized server with proper credentials" do
+    @server_control = NatsServerControl.new(auth_server, auth_server_pid)
     @server_control.start_server
     nats = NATS::IO::Client.new
     expect do
-      nats.connect(:servers => [TEST_AUTH_SERVER], :reconnect => false)
+      nats.connect(servers: [auth_server], reconnect: false)
       nats.flush
     end.to_not raise_error
     nats.close
   end
 
-  it 'should connect to an authorized server with token' do
-    @server_control = NatsServerControl.new(TEST_TOKEN_AUTH_SERVER, TEST_AUTH_SERVER_PID)
+  it "should connect to an authorized server with token" do
+    @server_control = NatsServerControl.new(token_auth_server, auth_server_pid)
     @server_control.start_server
     nats = NATS::IO::Client.new
     expect do
-      nats.connect(:servers => [TEST_TOKEN_AUTH_SERVER], :reconnect => false)
+      nats.connect(servers: [token_auth_server], reconnect: false)
       nats.flush
     end.to_not raise_error
     nats.close
 
     expect do
-      nc = NATS.connect(TEST_TOKEN_AUTH_SERVER, reconnect: false)
+      nc = NATS.connect(token_auth_server, reconnect: false)
       nc.flush
       nc.close
     end.to_not raise_error
 
     expect do
-      nc = NATS.connect(TEST_AUTH_SERVER_NO_CRED, reconnect: false)
+      nc = NATS.connect(auth_server_no_cred, reconnect: false)
       nc.flush
       nc.close
     end.to raise_error(NATS::IO::AuthError)
 
     expect do
-      nc = NATS.connect(TEST_AUTH_SERVER_NO_CRED, reconnect: false, auth_token: 'secret')
+      nc = NATS.connect(auth_server_no_cred, reconnect: false, auth_token: "secret")
       nc.flush
       nc.close
     end.to_not raise_error
 
     expect do
-      nc = NATS.connect(TEST_WRONG_TOKEN_AUTH_SERVER, reconnect: false, auth_token: 'secret')
+      nc = NATS.connect(wrong_token_auth_server, reconnect: false, auth_token: "secret")
       nc.flush
       nc.close
     end.to_not raise_error
   end
 
-  it 'should fail to connect to an authorized server without proper credentials' do
-    @server_control = NatsServerControl.new(TEST_AUTH_SERVER, TEST_AUTH_SERVER_PID)
+  it "should fail to connect to an authorized server without proper credentials" do
+    @server_control = NatsServerControl.new(auth_server, auth_server_pid)
     @server_control.start_server
     nats = NATS::IO::Client.new
     errors = []
@@ -95,7 +76,7 @@ describe 'Client - Authorization' do
         errors << e
       end
       nats.connect({
-        servers: [TEST_AUTH_SERVER_NO_CRED],
+        servers: [auth_server_no_cred],
         reconnect: false
       })
     end.to raise_error(NATS::IO::AuthError)

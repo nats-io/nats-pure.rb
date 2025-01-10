@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-require_relative 'jetstream'
+require_relative "jetstream"
 
 module NATS
   class Msg
@@ -20,26 +22,26 @@ module NATS
     # Enhance it with ack related methods from JetStream to ack msgs.
     include JetStream::Msg::AckMethods
 
-    def initialize(opts={})
+    def initialize(opts = {})
       @subject = opts[:subject]
-      @reply   = opts[:reply]
-      @data    = opts[:data]
-      @header  = opts[:header]
-      @nc      = opts[:nc]
-      @sub     = opts[:sub]
-      @ackd    = false
-      @meta    = nil
+      @reply = opts[:reply]
+      @data = opts[:data]
+      @header = opts[:header]
+      @nc = opts[:nc]
+      @sub = opts[:sub]
+      @ackd = false
+      @meta = nil
     end
 
-    def respond(data='')
+    def respond(data = "")
       return unless @nc
-      if self.header
-        dmsg = self.dup
-        dmsg.subject = self.reply
+      if header
+        dmsg = dup
+        dmsg.subject = reply
         dmsg.data = data
         @nc.publish_msg(dmsg)
       else
-        @nc.publish(self.reply, data)
+        @nc.publish(reply, data)
       end
     end
 
@@ -50,7 +52,7 @@ module NATS
 
     def inspect
       hdr = ", header=#{@header}" if @header
-      dot = '...' if @data.length > 10
+      dot = "..." if @data.length > 10
       dat = "#{data.slice(0, 10)}#{dot}"
       "#<NATS::Msg(subject: \"#{@subject}\", reply: \"#{@reply}\", data: #{dat.inspect}#{hdr})>"
     end

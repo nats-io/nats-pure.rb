@@ -1,35 +1,19 @@
-# Copyright 2016-2023 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-require 'monitor'
-require 'tmpdir'
-
-describe 'JetStream' do
-  describe 'Publish' do
-    before(:each) do
+describe "JetStream" do
+  describe "Publish" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")
       @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
 
-    it 'should publish messages to a stream' do
+    it "should publish messages to a stream" do
       nc = NATS.connect(@s.uri)
 
       # Create sample Stream and pull based consumer from JetStream
@@ -56,7 +40,7 @@ describe 'JetStream' do
 
       # Assert stream name.
       expect do
-        ack = js.publish("foo.js", "hello world", stream: "bar")
+        js.publish("foo.js", "hello world", stream: "bar")
       end.to raise_error(NATS::JetStream::API::Error)
 
       begin
@@ -73,19 +57,19 @@ describe 'JetStream' do
     end
   end
 
-  describe 'Pull Subscribe' do
-    before(:each) do
+  describe "Pull Subscribe" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")
       @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
 
-    before(:each) do
+    before do
       nc = NATS.connect(@s.uri)
       stream_req = {
         name: "test",
@@ -96,7 +80,7 @@ describe 'JetStream' do
       nc.close
     end
 
-    after(:each) do
+    after do
       nc = NATS.connect(@s.uri)
       stream_req = {
         name: "test",
@@ -117,7 +101,7 @@ describe 'JetStream' do
       js.publish("world", "2")
       js.publish("hello.world", "3")
 
-      sub = js.pull_subscribe("hello", "psub", config: { max_waiting: 30 })
+      sub = js.pull_subscribe("hello", "psub", config: {max_waiting: 30})
       info = sub.consumer_info
       expect(info.config.max_waiting).to eql(30)
       expect(info.num_pending).to eql(1)
@@ -143,7 +127,7 @@ describe 'JetStream' do
       expect(info.num_pending).to eql(0)
     end
 
-    it 'should find the pull subscription by subject' do
+    it "should find the pull subscription by subject" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
 
@@ -165,7 +149,7 @@ describe 'JetStream' do
       sub.unsubscribe
     end
 
-    it 'should pull subscribe and fetch messages' do
+    it "should pull subscribe and fetch messages" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
 
@@ -233,14 +217,14 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
-          num_waiting: 0,
-          num_ack_pending: 0,
-          num_pending: 8,
-        })
+        num_waiting: 0,
+        num_ack_pending: 0,
+        num_pending: 8
+      })
       expect(info[:delivered]).to include({
-          consumer_seq: 2,
-          stream_seq: 2
-        })
+        consumer_seq: 2,
+        stream_seq: 2
+      })
       expect(info[:delivered][:consumer_seq]).to eql(2)
       expect(info[:delivered][:stream_seq]).to eql(2)
 
@@ -273,9 +257,9 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
-          consumer_seq: 10,
-          stream_seq: 10
-        })
+        consumer_seq: 10,
+        stream_seq: 10
+      })
       expect(sub.pending_queue.size).to eql(0)
 
       # Publish 5 more messages.
@@ -285,9 +269,9 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
-          consumer_seq: 10,
-          stream_seq: 10
-        })
+        consumer_seq: 10,
+        stream_seq: 10
+      })
 
       # Only 5 messages will be received, with 2 pending though won't be delivered yet.
       # This should take as long as the timeout but should not throw an exception since
@@ -306,9 +290,9 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
-          consumer_seq: 15,
-          stream_seq: 15
-        })
+        consumer_seq: 15,
+        stream_seq: 15
+      })
 
       # 10 more messages
       16.upto(25) { |n| js.publish("test", "hello: #{n}") }
@@ -321,9 +305,9 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
-          consumer_seq: 15,
-          stream_seq: 15
-        })
+        consumer_seq: 15,
+        stream_seq: 15
+      })
 
       # Get 10 messages which are the total (25).
       msgs = sub.fetch(10)
@@ -344,14 +328,14 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
-          num_waiting: 0,
-          num_ack_pending: 0,
-          num_pending: 0,
-        })
+        num_waiting: 0,
+        num_ack_pending: 0,
+        num_pending: 0
+      })
       expect(info[:delivered]).to include({
-          consumer_seq: 25,
-          stream_seq: 25
-        })
+        consumer_seq: 25,
+        stream_seq: 25
+      })
       # expect(sub.pending_queue.size).to eql(0)
       expect(i).to eql(26)
 
@@ -364,28 +348,26 @@ describe 'JetStream' do
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
-          num_waiting: 0,
-          num_ack_pending: 0,
-          num_pending: 0,
-        })
+        num_waiting: 0,
+        num_ack_pending: 0,
+        num_pending: 0
+      })
       expect(info[:delivered]).to include({
-          consumer_seq: 25,
-          stream_seq: 25
-        })
+        consumer_seq: 25,
+        stream_seq: 25
+      })
 
       # Make a lot of requests to get a request timeout error.
       ts = []
       errors = []
       3.times do
         ts << Thread.new do
-          begin
-            msgs = sub.fetch(2, timeout: 0.2)
-          rescue => e
-            errors << e
-          end
+          msgs = sub.fetch(2, timeout: 0.2)
+        rescue => e
+          errors << e
         end
       end
-      ts.each {|t| t.join }
+      ts.each { |t| t.join }
 
       expect(errors.count > 0).to eql(true)
       e = errors.first
@@ -412,12 +394,10 @@ describe 'JetStream' do
       ts = []
       5.times do
         ts << Thread.new do
-          begin
-            msgs = sub.fetch(1, timeout: 0.5)
-            expect(msgs).to be_empty
-          rescue => e
-            errors << e
-          end
+          msgs = sub.fetch(1, timeout: 0.5)
+          expect(msgs).to be_empty
+        rescue => e
+          errors << e
         end
       end
       ts.each do |t|
@@ -430,7 +410,7 @@ describe 'JetStream' do
       nc.close
     end
 
-    it 'should unsubscribe' do
+    it "should unsubscribe" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
 
@@ -450,7 +430,7 @@ describe 'JetStream' do
       sub = js.pull_subscribe("test", "delsub", stream: "test")
 
       expect do
-        msgs = sub.fetch(1, timeout: 0.5)
+        sub.fetch(1, timeout: 0.5)
       end.to raise_error(NATS::IO::Timeout)
 
       ack = js.publish("test", "hello")
@@ -472,7 +452,8 @@ describe 'JetStream' do
       end.to raise_error(NATS::IO::BadSubscription)
     end
 
-    it 'should account pending data' do
+    # TODO: What do we test here?
+    it "should account pending data" do
       nc = NATS.connect(@s.uri)
       nc2 = NATS.connect(@s.uri)
       js = nc.jetstream
@@ -484,168 +465,164 @@ describe 'JetStream' do
 
       js.add_stream(name: "limitstest", subjects: [subject])
 
-      # Continuously send messages until reaching pending bytes limit.
-      t = Thread.new do
-        payload = 'A' * 1024 * 1024
-        loop do
-          nc2.publish(subject, payload)
-          sleep 0.01
+      begin
+        # Continuously send messages until reaching pending bytes limit.
+        t = Thread.new do
+          payload = "A" * 1024
+          loop do
+            nc2.publish(subject, payload)
+            sleep 0.01
+          end
         end
-      end
 
-      sub = js.pull_subscribe(subject, "test")
-      65.times do |i|
-        msgs = sub.fetch(1)
-        msgs.each do |msg|
-          msg.ack
+        sub = js.pull_subscribe(subject, "test")
+        65.times do |i|
+          msgs = sub.fetch(1)
+          msgs.each do |msg|
+            msg.ack
+          end
         end
-      end
 
-      sub = js.pull_subscribe(subject, "test")
-      65.times do |i|
-        msgs = sub.fetch(2)
-        msgs.each do |msg|
-          msg.ack
+        sub = js.pull_subscribe(subject, "test")
+        65.times do |i|
+          msgs = sub.fetch(2)
+          msgs.each do |msg|
+            msg.ack
+          end
         end
+      ensure
+        nc.close
+        nc2.close
+        t.exit
       end
-
-      t.exit
-      nc.close
-      nc2.close
     end
 
-    it 'should create and bind to consumer with name' do
+    it "should create and bind to consumer with name" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
 
-      js.add_stream(name: "ctests", subjects: ['a', 'b', 'c.>'])
-      js.publish('a', 'hello world!')
-      js.publish('b', 'hello world!!')
-      js.publish('c.d', 'hello world!!!')
-      js.publish('c.d.e', 'hello world!!!!')
+      js.add_stream(name: "ctests", subjects: ["a", "b", "c.>"])
+      js.publish("a", "hello world!")
+      js.publish("b", "hello world!!")
+      js.publish("c.d", "hello world!!!")
+      js.publish("c.d.e", "hello world!!!!")
 
       tsub = nc.subscribe("$JS.API.CONSUMER.>")
 
       # ephemeral consumer
-      consumer_name = 'ephemeral'
+      consumer_name = "ephemeral"
       cinfo = js.add_consumer("ctests", name: consumer_name, ack_policy: "explicit")
       expect(cinfo.config.name).to eql(consumer_name)
 
       msg = tsub.next_msg
-      expect(msg.subject).to eql('$JS.API.CONSUMER.CREATE.ctests.ephemeral')
+      expect(msg.subject).to eql("$JS.API.CONSUMER.CREATE.ctests.ephemeral")
 
-      sub = js.pull_subscribe("", "", stream: 'ctests', consumer: 'ephemeral')
+      sub = js.pull_subscribe("", "", stream: "ctests", consumer: "ephemeral")
       cinfo = sub.consumer_info
       expect(cinfo.config.name).to eql(consumer_name)
       msgs = sub.fetch(1)
-      expect(msgs.first.data).to eql('hello world!')
+      expect(msgs.first.data).to eql("hello world!")
       msgs.first.ack_sync
-      msg = tsub.next_msg()
-      expect(msg.subject).to eql('$JS.API.CONSUMER.INFO.ctests.ephemeral')
+      msg = tsub.next_msg
+      expect(msg.subject).to eql("$JS.API.CONSUMER.INFO.ctests.ephemeral")
       tsub.unsubscribe
 
       # Create durable pull consumer with a name.
       tsub = nc.subscribe("$JS.API.CONSUMER.>")
-      consumer_name = 'durable'
+      consumer_name = "durable"
       cinfo = js.add_consumer("ctests",
-                              name: consumer_name,
-                              durable_name: consumer_name,
-                              ack_policy: "explicit",
-                              )
+        name: consumer_name,
+        durable_name: consumer_name,
+        ack_policy: "explicit")
       expect(cinfo.config.name).to eql(consumer_name)
-      msg = tsub.next_msg()
-      expect(msg.subject).to eql('$JS.API.CONSUMER.CREATE.ctests.durable')
-      sub = js.pull_subscribe("", "durable", stream: 'ctests')
+      msg = tsub.next_msg
+      expect(msg.subject).to eql("$JS.API.CONSUMER.CREATE.ctests.durable")
+      sub = js.pull_subscribe("", "durable", stream: "ctests")
       cinfo = sub.consumer_info
       expect(cinfo.config.name).to eql(consumer_name)
       msgs = sub.fetch(1)
-      expect(msgs.first.data).to eql('hello world!')
+      expect(msgs.first.data).to eql("hello world!")
       msgs.first.ack_sync
-      msg = tsub.next_msg()
-      expect(msg.subject).to eql('$JS.API.CONSUMER.INFO.ctests.durable')
+      msg = tsub.next_msg
+      expect(msg.subject).to eql("$JS.API.CONSUMER.INFO.ctests.durable")
       tsub.unsubscribe
 
       # Create durable pull consumer with a name and a filter_subject
       tsub = nc.subscribe("$JS.API.CONSUMER.>")
-      consumer_name = 'durable2'
+      consumer_name = "durable2"
       cinfo = js.add_consumer("ctests",
-                              name: consumer_name,
-                              durable_name: consumer_name,
-                              filter_subject: 'b',
-                              ack_policy: "explicit",
-                              )
+        name: consumer_name,
+        durable_name: consumer_name,
+        filter_subject: "b",
+        ack_policy: "explicit")
       expect(cinfo.config.name).to eql(consumer_name)
-      msg = tsub.next_msg()
-      expect(msg.subject).to eql('$JS.API.CONSUMER.CREATE.ctests.durable2.b')
-      sub = js.pull_subscribe("", "durable2", stream: 'ctests')
+      msg = tsub.next_msg
+      expect(msg.subject).to eql("$JS.API.CONSUMER.CREATE.ctests.durable2.b")
+      sub = js.pull_subscribe("", "durable2", stream: "ctests")
       msgs = sub.fetch(1)
-      expect(msgs.first.data).to eql('hello world!!')
+      expect(msgs.first.data).to eql("hello world!!")
       msgs.first.ack_sync
       tsub.unsubscribe
 
       # Create durable pull consumer with a name and a filter_subject
       tsub = nc.subscribe("$JS.API.CONSUMER.>")
-      consumer_name = 'durable3'
+      consumer_name = "durable3"
       cinfo = js.add_consumer("ctests",
-                              name: consumer_name,
-                              durable_name: consumer_name,
-                              filter_subject: '>',
-                              ack_policy: "explicit",
-                              )
+        name: consumer_name,
+        durable_name: consumer_name,
+        filter_subject: ">",
+        ack_policy: "explicit")
       expect(cinfo.config.name).to eql(consumer_name)
-      msg = tsub.next_msg()
-      expect(msg.subject).to eql('$JS.API.CONSUMER.CREATE.ctests.durable3')
-      sub = js.pull_subscribe("", "durable3", stream: 'ctests')
+      msg = tsub.next_msg
+      expect(msg.subject).to eql("$JS.API.CONSUMER.CREATE.ctests.durable3")
+      sub = js.pull_subscribe("", "durable3", stream: "ctests")
       msgs = sub.fetch(1)
-      expect(msgs.first.data).to eql('hello world!')
+      expect(msgs.first.data).to eql("hello world!")
       msgs.first.ack_sync
       tsub.unsubscribe
 
       # name and durable must match if both present.
       expect do
         js.add_consumer("ctests",
-                        name: "foo",
-                        durable_name: "bar",
-                        ack_policy: "explicit",
-                        )
+          name: "foo",
+          durable_name: "bar",
+          ack_policy: "explicit")
       end.to raise_error NATS::JetStream::Error::BadRequest
       begin
         js.add_consumer("ctests",
-                        name: "foo",
-                        durable_name: "bar",
-                        ack_policy: "explicit",
-                        )
+          name: "foo",
+          durable_name: "bar",
+          ack_policy: "explicit")
       rescue => e
-        expect(e.description).to eql(%Q(consumer name in subject does not match durable name in request))
+        expect(e.description).to eql(%(consumer name in subject does not match durable name in request))
       end
 
       # consumer name and inactive
-      consumer_name = 'inactive'
+      consumer_name = "inactive"
       cinfo = js.add_consumer("ctests",
-                              name: consumer_name,
-                              durable_name: consumer_name,
-                              inactive_threshold: 2,
-                              ack_policy: "explicit",
-                              mem_storage: true
-                              )
+        name: consumer_name,
+        durable_name: consumer_name,
+        inactive_threshold: 2,
+        ack_policy: "explicit",
+        mem_storage: true)
       expect(cinfo.config.inactive_threshold).to eql(2000000000)
       expect(cinfo.config.mem_storage).to eql(true)
     end
   end
 
-  describe 'Push Subscribe' do
-    before(:each) do
+  describe "Push Subscribe" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")
       @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
 
-    before(:each) do
+    before do
       nc = NATS.connect(@s.uri)
       stream_req = {
         name: "test",
@@ -656,7 +633,7 @@ describe 'JetStream' do
       nc.close
     end
 
-    after(:each) do
+    after do
       nc = NATS.connect(@s.uri)
       stream_req = {
         name: "test",
@@ -709,8 +686,8 @@ describe 'JetStream' do
       end
       msgs = future.wait_for(1)
       expect(msgs.count).to eql(2)
-      expect(msgs[0].data).to eql('1')
-      expect(msgs[1].data).to eql('2')
+      expect(msgs[0].data).to eql("1")
+      expect(msgs[1].data).to eql("2")
 
       info = sub.consumer_info
       expect(info.stream_name).to eql("hello")
@@ -797,7 +774,7 @@ describe 'JetStream' do
       end
 
       50.times do |i|
-        js.publish("test", "#{i}")
+        js.publish("test", i.to_s)
       end
 
       # Each should get at least a couple of messages
@@ -808,13 +785,13 @@ describe 'JetStream' do
 
     it "should create subscribers with custom config" do
       js = nc.jetstream
-      js.add_stream(name:"custom", subjects:["custom"])
+      js.add_stream(name: "custom", subjects: ["custom"])
 
       1.upto(10).each do |i|
         js.publish("custom", "n:#{i}")
       end
 
-      sub = js.subscribe("custom", durable: 'example', config: { deliver_policy: 'new' })
+      sub = js.subscribe("custom", durable: "example", config: {deliver_policy: "new"})
 
       js.publish("custom", "last")
       msg = sub.next_msg
@@ -830,17 +807,17 @@ describe 'JetStream' do
     end
   end
 
-  describe 'Domain' do
-    before(:each) do
+  describe "Domain" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream-domain")
       config_opts = {
-        'pid_file'      => '/tmp/nats_js_domain_1.pid',
-        'host'          => '127.0.0.1',
-        'port'          => 4729,
+        "pid_file" => "/tmp/nats_js_domain_1.pid",
+        "host" => "127.0.0.1",
+        "port" => 4729
       }
       @domain = "estre"
-      @s = NatsServerControl.init_with_config_from_string(%Q(
-        port = #{config_opts['port']}
+      @s = NatsServerControl.init_with_config_from_string(%(
+        port = #{config_opts["port"]}
         jetstream {
           domain = #{@domain}
           store_dir = "#{@tmpdir}"
@@ -849,12 +826,12 @@ describe 'JetStream' do
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
 
-    it 'should produce, consume and ack messages in a stream' do
+    it "should produce, consume and ack messages in a stream" do
       nc = NATS.connect(@s.uri)
 
       # Create stream in the domain.
@@ -865,7 +842,7 @@ describe 'JetStream' do
         subjects: [subject]
       }
       resp = nc.request("$JS.#{@domain}.API.STREAM.CREATE.#{stream_name}",
-                        stream_req.to_json)
+        stream_req.to_json)
       expect(resp).to_not be_nil
 
       # Now create a consumer in the domain.
@@ -881,7 +858,7 @@ describe 'JetStream' do
         }
       }
       resp = nc.request("$JS.#{@domain}.API.CONSUMER.DURABLE.CREATE.#{stream_name}.#{durable_name}",
-                        consumer_req.to_json)
+        consumer_req.to_json)
       expect(resp).to_not be_nil
 
       # Create producer with custom domain.
@@ -923,28 +900,28 @@ describe 'JetStream' do
       js = nc.jetstream(domain: "estre")
       info = js.account_info
       expected = a_hash_including({
-        :type => "io.nats.jetstream.api.v1.account_info_response",
-        :memory => 0,
-        :storage => 66,
-        :streams => 1,
-        :consumers => 1,
-        :limits => a_hash_including({
-          :max_memory => -1,
-          :max_storage => -1,
-          :max_streams => -1,
-          :max_consumers => -1,
-          :max_ack_pending => -1,
-          :memory_max_stream_bytes => -1,
-          :storage_max_stream_bytes => -1,
-          :max_bytes_required => false
+        type: "io.nats.jetstream.api.v1.account_info_response",
+        memory: 0,
+        storage: 66,
+        streams: 1,
+        consumers: 1,
+        limits: a_hash_including({
+          max_memory: -1,
+          max_storage: -1,
+          max_streams: -1,
+          max_consumers: -1,
+          max_ack_pending: -1,
+          memory_max_stream_bytes: -1,
+          storage_max_stream_bytes: -1,
+          max_bytes_required: false
         }),
-        :domain => "estre",
-        :api => {:total => 5, :errors => 0}
+        domain: "estre",
+        api: {total: 5, errors: 0}
       })
       expect(info).to match(expected)
     end
 
-    it 'should nack messages with a delay' do
+    it "should nack messages with a delay" do
       nc = NATS.connect(@s.uri)
 
       # Create stream in the domain.
@@ -1004,7 +981,7 @@ describe 'JetStream' do
       expect(msg.nak(timeout: 2)).to be_a(NATS::Msg)
     end
 
-    it 'should bail when stream or consumer does not exist in domain' do
+    it "should bail when stream or consumer does not exist in domain" do
       nc = NATS.connect(@s.uri)
       js = nc.JetStream(domain: @domain)
 
@@ -1020,7 +997,7 @@ describe 'JetStream' do
 
       # Stream that does not exist.
       expect do
-        sub = js.pull_subscribe("foo", "bar", stream: "nonexistent")
+        js.pull_subscribe("foo", "bar", stream: "nonexistent")
       end.to raise_error(NATS::JetStream::Error::StreamNotFound)
 
       # Now create the stream.
@@ -1126,31 +1103,31 @@ describe 'JetStream' do
       expect do
         raise NATS::JetStream::Error::ServiceUnavailable
       end.to raise_error(an_instance_of(NATS::JetStream::Error::ServiceUnavailable)
-                           .and having_attributes(code: 503))
+                           .and(having_attributes(code: 503)))
 
       expect do
         raise NATS::JetStream::Error::NotFound
       end.to raise_error(an_instance_of(NATS::JetStream::Error::NotFound)
-                           .and having_attributes(code: 404))
+                           .and(having_attributes(code: 404)))
 
       expect do
         raise NATS::JetStream::Error::BadRequest
       end.to raise_error(an_instance_of(NATS::JetStream::Error::BadRequest)
-                           .and having_attributes(code: 400))
+                           .and(having_attributes(code: 400)))
     end
   end
 
-  describe 'JSM' do
-    before(:each) do
+  describe "JSM" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jsm")
       config_opts = {
-        'pid_file'      => '/tmp/nats_jsm_1.pid',
-        'host'          => '127.0.0.1',
-        'port'          => 4730,
+        "pid_file" => "/tmp/nats_jsm_1.pid",
+        "host" => "127.0.0.1",
+        "port" => 4730
       }
       @domain = "estre"
-      @s = NatsServerControl.init_with_config_from_string(%Q(
-        port = #{config_opts['port']}
+      @s = NatsServerControl.init_with_config_from_string(%(
+        port = #{config_opts["port"]}
         jetstream {
           domain = #{@domain}
           store_dir = "#{@tmpdir}"
@@ -1159,7 +1136,7 @@ describe 'JetStream' do
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
@@ -1172,13 +1149,13 @@ describe 'JetStream' do
       }
       resp = nc.jsm.add_stream(stream_config)
       expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
-      expect(resp.type).to eql('io.nats.jetstream.api.v1.stream_create_response')
-      expect(resp.config.name).to eql('mystream')
+      expect(resp.type).to eql("io.nats.jetstream.api.v1.stream_create_response")
+      expect(resp.config.name).to eql("mystream")
       expect(resp.config.num_replicas).to eql(1)
 
-      resp = nc.jsm.add_stream(name: 'stream2')
+      resp = nc.jsm.add_stream(name: "stream2")
       expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
-      expect(resp.config.name).to eql('stream2')
+      expect(resp.config.name).to eql("stream2")
       expect(resp.config.num_replicas).to eql(1)
 
       # Can also use the types for the request.
@@ -1188,7 +1165,7 @@ describe 'JetStream' do
       config = NATS::JetStream::API::StreamConfig.new(stream_config)
       resp = nc.jsm.add_stream(config)
       expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
-      expect(resp.config.name).to eql('stream3')
+      expect(resp.config.name).to eql("stream3")
       expect(resp.config.num_replicas).to eql(1)
 
       expect do
@@ -1204,14 +1181,13 @@ describe 'JetStream' do
         nc.jsm.add_stream(name: "foo.bar*baz")
       end.to raise_error(ArgumentError)
 
-      placement = { cluster: "foo", tags: ["a"]}
+      placement = {cluster: "foo", tags: ["a"]}
       resp = nc.jsm.add_stream(name: "v29",
-                               subjects: ["v29"],
-                               num_replicas: 1,
-                               no_ack: true,
-                               # allow_direct: true,
-                               placement: placement
-                               )
+        subjects: ["v29"],
+        num_replicas: 1,
+        no_ack: true,
+        # allow_direct: true,
+        placement: placement)
       expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
       # expect(resp.config.allow_direct).to eql(true)
       expect(resp.config.no_ack).to eql(true)
@@ -1293,7 +1269,7 @@ describe 'JetStream' do
       js.publish("foo", "Hello World!")
 
       # Now lookup the consumer using the ephemeral name.
-      info = nc.jsm.consumer_info(stream_name, consumer.name)
+      nc.jsm.consumer_info(stream_name, consumer.name)
 
       # Fetch with pull subscribe.
       psub = js.pull_subscribe("foo", "test-create")
@@ -1314,7 +1290,7 @@ describe 'JetStream' do
       end.to raise_error NATS::Timeout
 
       # Create durable consumer
-      consumer_config = {
+      {
         durable_name: "test-create2",
         num_replicas: 3
       }
@@ -1328,8 +1304,8 @@ describe 'JetStream' do
       stream_name = "to-delete"
       consumer_name = "dur"
       nc.jsm.add_stream(name: stream_name)
-      nc.jsm.add_consumer(stream_name, { durable_name: consumer_name})
-      info = nc.jsm.consumer_info(stream_name, consumer_name)
+      nc.jsm.add_consumer(stream_name, {durable_name: consumer_name})
+      nc.jsm.consumer_info(stream_name, consumer_name)
       ok = nc.jsm.delete_consumer(stream_name, consumer_name)
       expect(ok).to eql(true)
     end

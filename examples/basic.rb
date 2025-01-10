@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2018 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +14,11 @@
 # limitations under the License.
 #
 
-require 'nats/io/client'
+require "nats/io/client"
 
 nats = NATS::IO::Client.new
 
-nats.connect(:servers => ["nats://127.0.0.1:4222"])
+nats.connect(servers: ["nats://127.0.0.1:4222"])
 puts "Connected to #{nats.connected_server}"
 
 nats.subscribe(">") do |msg, reply, subject|

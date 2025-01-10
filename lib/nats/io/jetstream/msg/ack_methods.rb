@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,10 +22,10 @@ module NATS
           ensure_is_acked_once!
 
           resp = if params[:timeout]
-                   @nc.request(@reply, Ack::Ack, **params)
-                 else
-                   @nc.publish(@reply, Ack::Ack)
-                 end
+            @nc.request(@reply, Ack::Ack, **params)
+          else
+            @nc.publish(@reply, Ack::Ack)
+          end
           @sub.synchronize { @ackd = true }
 
           resp
@@ -42,15 +44,15 @@ module NATS
         def nak(**params)
           ensure_is_acked_once!
           payload = if params[:delay]
-                      payload = "#{Ack::Nak} #{{ delay: params[:delay] }.to_json}"
-                    else
-                      Ack::Nak
-                    end
+            "#{Ack::Nak} #{{delay: params[:delay]}.to_json}"
+          else
+            Ack::Nak
+          end
           resp = if params[:timeout]
-                   @nc.request(@reply, payload, **params)
-                 else
-                   @nc.publish(@reply, payload)
-                 end
+            @nc.request(@reply, payload, **params)
+          else
+            @nc.publish(@reply, payload)
+          end
           @sub.synchronize { @ackd = true }
 
           resp
@@ -60,10 +62,10 @@ module NATS
           ensure_is_acked_once!
 
           resp = if params[:timeout]
-                   @nc.request(@reply, Ack::Term, **params)
-                 else
-                   @nc.publish(@reply, Ack::Term)
-                 end
+            @nc.request(@reply, Ack::Term, **params)
+          else
+            @nc.publish(@reply, Ack::Term)
+          end
           @sub.synchronize { @ackd = true }
 
           resp
@@ -91,15 +93,14 @@ module NATS
           tokens = reply.split(Ack::DotSep)
           n = tokens.count
 
-          case
-          when n < Ack::V1TokenCounts || (n > Ack::V1TokenCounts and n < Ack::V2TokenCounts)
+          if n < Ack::V1TokenCounts || ((n > Ack::V1TokenCounts) && (n < Ack::V2TokenCounts))
             raise NotJSMessage.new("nats: not a jetstream message")
-          when tokens[0] != Ack::Prefix0 || tokens[1] != Ack::Prefix1
+          elsif tokens[0] != Ack::Prefix0 || tokens[1] != Ack::Prefix1
             raise NotJSMessage.new("nats: not a jetstream message")
-          when n == Ack::V1TokenCounts
+          elsif n == Ack::V1TokenCounts
             tokens.insert(Ack::Domain, Ack::Empty)
             tokens.insert(Ack::AccHash, Ack::Empty)
-          when tokens[Ack::Domain] == Ack::NoDomainName
+          elsif tokens[Ack::Domain] == Ack::NoDomainName
             tokens[Ack::Domain] = Ack::Empty
           end
 

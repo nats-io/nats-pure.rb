@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +14,8 @@
 # limitations under the License.
 #
 
-require 'nats/io/client'
-require 'nats/nuid'
+require "nats/io/client"
+require "nats/nuid"
 
 # A thread safe Ruby client for the NATS messaging system (https://nats.io).
 #
@@ -25,15 +27,15 @@ require 'nats/nuid'
 #
 #   resp = nc.request("foo")
 #   puts "Received: #{msg.data}"
-# 
-# 
+#
+#
 # @example Stream example
 #   nc = NATS.connect("demo.nats.io")
 #   sub = nc.subscribe("foo")
-# 
+#
 #   nc.publish("foo")
 #   msg = sub.next_msg
 #   puts "Received: #{msg.data}"
-# 
+#
 module NATS
 end

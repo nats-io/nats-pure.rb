@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2016-2018 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +14,8 @@
 # limitations under the License.
 #
 
-require 'nats/io/client'
-require 'openssl'
+require "nats/io/client"
+require "openssl"
 
 nats = NATS::IO::Client.new
 
@@ -33,20 +35,20 @@ tls_context.verify_hostname = true
 # Set the RootCAs
 tls_context.cert_store = OpenSSL::X509::Store.new
 ca_file = File.read("./spec/configs/certs/nats-service.localhost/ca.pem")
-tls_context.cert_store.add_cert(OpenSSL::X509::Certificate.new ca_file)
+tls_context.cert_store.add_cert(OpenSSL::X509::Certificate.new(ca_file))
 
 # The server is setup to use a wildcard certificate for:
-# 
+#
 # *.clients.nats-service.localhost
 #
 # so given the options above, having a wrong domain would
 # make the client connection fail with an error
-# 
+#
 # Error: SSL_connect returned=1 errno=0 state=error: certificate verify failed (error number 1)
-# 
+#
 server = "nats://server-A.clients.nats-service.localhost:4222"
 
-nats.connect(servers: [server], tls: { context: tls_context })
+nats.connect(servers: [server], tls: {context: tls_context})
 puts "Connected to #{nats.connected_server}"
 
 nats.subscribe(">") do |msg, reply, subject|

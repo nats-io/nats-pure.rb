@@ -1,63 +1,48 @@
-# Copyright 2016-2018 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-
-describe 'Client - Cluster TLS reconnect' do
-
+describe "Client - Cluster TLS reconnect" do
   before(:all) do
     s1_config_opts = {
-      'pid_file'      => '/tmp/nats_cluster_s1.pid',
-      'host'          => '127.0.0.1',
-      'port'          => 4232,
-      'cluster_port'  => 6232,
-      'wsport'        => 8232,
-      'advertise'     => 'server-A.clients.nats-service.localhost:8232',
-      'name'          => 'server-A'
+      "pid_file" => "/tmp/nats_cluster_s1.pid",
+      "host" => "127.0.0.1",
+      "port" => 4232,
+      "cluster_port" => 6232,
+      "wsport" => 8232,
+      "advertise" => "server-A.clients.nats-service.localhost:8232",
+      "name" => "server-A"
     }
 
     s2_config_opts = {
-      'pid_file'      => '/tmp/nats_cluster_s2.pid',
-      'host'          => '127.0.0.1',
-      'port'          => 4233,
-      'cluster_port'  => 6233,
-      'wsport'        => 8233,
-      'advertise'     => 'server-B.clients.nats-service.localhost:8233',
-      'name'          => 'server-B'
+      "pid_file" => "/tmp/nats_cluster_s2.pid",
+      "host" => "127.0.0.1",
+      "port" => 4233,
+      "cluster_port" => 6233,
+      "wsport" => 8233,
+      "advertise" => "server-B.clients.nats-service.localhost:8233",
+      "name" => "server-B"
     }
 
     s3_config_opts = {
-      'pid_file'      => '/tmp/nats_cluster_s3.pid',
-      'host'          => '127.0.0.1',
-      'port'          => 4234,
-      'cluster_port'  => 6234,
-      'wsport'        => 8234,
-      'advertise'     => 'server-C.clients.nats-service.localhost:8234',
-      'name'          => 'server-C'
+      "pid_file" => "/tmp/nats_cluster_s3.pid",
+      "host" => "127.0.0.1",
+      "port" => 4234,
+      "cluster_port" => 6234,
+      "wsport" => 8234,
+      "advertise" => "server-C.clients.nats-service.localhost:8234",
+      "name" => "server-C"
     }
 
     nodes = []
     configs = [s1_config_opts, s2_config_opts, s3_config_opts]
     configs.each do |config_opts|
-      nodes << NatsServerControl.init_with_config_from_string(%Q(
-        host: '#{config_opts['host']}'
-        port:  #{config_opts['port']}
-        pid_file: '#{config_opts['pid_file']}'
-        server_name: '#{config_opts['name']}'
+      nodes << NatsServerControl.init_with_config_from_string(%(
+        host: '#{config_opts["host"]}'
+        port:  #{config_opts["port"]}
+        pid_file: '#{config_opts["pid_file"]}'
+        server_name: '#{config_opts["name"]}'
 
         websocket {
-          port: #{config_opts['wsport']}
+          port: #{config_opts["wsport"]}
           tls {
             cert_file:  "./spec/configs/certs/nats-service.localhost/server.pem"
             key_file:   "./spec/configs/certs/nats-service.localhost/server-key.pem"
@@ -65,7 +50,7 @@ describe 'Client - Cluster TLS reconnect' do
             timeout:   10
           }
           # NOTE: Force to reconnect using any other hostname other than the initial one.
-          advertise: '#{config_opts['advertise']}'
+          advertise: '#{config_opts["advertise"]}'
         }
 
         tls {
@@ -77,8 +62,8 @@ describe 'Client - Cluster TLS reconnect' do
 
         cluster {
           name: "TEST"
-          host: '#{config_opts['host']}'
-          port: #{config_opts['cluster_port']}
+          host: '#{config_opts["host"]}'
+          port: #{config_opts["cluster_port"]}
 
           authorization {
             user: foo
@@ -87,7 +72,7 @@ describe 'Client - Cluster TLS reconnect' do
           }
 
           routes = [
-            'nats-route://foo:bar@127.0.0.1:#{s1_config_opts['cluster_port']}'
+            'nats-route://foo:bar@127.0.0.1:#{s1_config_opts["cluster_port"]}'
           ]
         }
       ), config_opts)
@@ -96,17 +81,17 @@ describe 'Client - Cluster TLS reconnect' do
     @s1, @s2, @s3 = nodes
   end
 
-  context 'with auto discovery using seed node' do
-    before(:each) do
+  context "with auto discovery using seed node" do
+    before do
       # Only start initial seed node
       @s1.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s1.kill_server
     end
 
-    it 'should reconnect to nodes discovered from seed server' do
+    it "should reconnect to nodes discovered from seed server" do
       # Nodes join to cluster before we try to connect
       [@s2, @s3].each do |s|
         s.start_server(true)
@@ -148,14 +133,15 @@ describe 'Client - Cluster TLS reconnect' do
         ctx.verify_hostname = true
 
         nats.connect("tls://server-A.clients.nats-service.localhost:4232", {
-                     dont_randomize_servers: true, reconnect: true, tls: {
-                       context: ctx
-                     }})
+          dont_randomize_servers: true, reconnect: true, tls: {
+            context: ctx
+          }
+        })
         expect(nats.connected_server.to_s).to eql("tls://server-A.clients.nats-service.localhost:4232")
 
-        nats.subscribe("hello") { |msg, reply| nats.publish(reply, '') }
+        nats.subscribe("hello") { |msg, reply| nats.publish(reply, "") }
         nats.flush
-        nats.request("hello", 'world')
+        nats.request("hello", "world")
 
         @s1.kill_server
         sleep 0.1
@@ -168,7 +154,7 @@ describe 'Client - Cluster TLS reconnect' do
         expect(nats.connected_server.to_s).to_not eql("")
         expect(["tls://127.0.0.1:4233", "tls://127.0.0.1:4234"].include?(nats.connected_server.to_s)).to eql(true)
 
-        nats.request("hello", 'world', timeout: 1)
+        nats.request("hello", "world", timeout: 1)
 
         expect(reconnects).to eql(1)
         expect(disconnects).to eql(1)
@@ -184,8 +170,8 @@ describe 'Client - Cluster TLS reconnect' do
       end
     end
 
-    it 'should reconnect to nodes discovered from seed server with WebSockets' do
-      skip 'flaky'
+    it "should reconnect to nodes discovered from seed server with WebSockets" do
+      skip "flaky"
       # Nodes join to cluster before we try to connect
       [@s2, @s3].each do |s|
         s.start_server(true)
@@ -227,14 +213,15 @@ describe 'Client - Cluster TLS reconnect' do
         ctx.verify_hostname = true
 
         nats.connect("wss://server-A.clients.nats-service.localhost:8232", {
-                     dont_randomize_servers: true, reconnect: true, tls: {
-                       context: ctx
-                     }})
+          dont_randomize_servers: true, reconnect: true, tls: {
+            context: ctx
+          }
+        })
         expect(nats.connected_server.to_s).to eql("wss://server-A.clients.nats-service.localhost:8232")
 
-        nats.subscribe("hello") { |msg, reply| nats.publish(reply, '') }
+        nats.subscribe("hello") { |msg, reply| nats.publish(reply, "") }
         nats.flush
-        nats.request("hello", 'world')
+        nats.request("hello", "world")
 
         expect(nats.connected?).to eql(true)
         @s1.kill_server
@@ -250,7 +237,7 @@ describe 'Client - Cluster TLS reconnect' do
         expect(nats.instance_variable_get("@hostname")).to eql("server-A.clients.nats-service.localhost")
         expect(nats.connected_server.to_s).to_not eql("")
         expect(["wss://server-B.clients.nats-service.localhost:8233", "wss://server-C.clients.nats-service.localhost:8234"].include?(nats.connected_server.to_s)).to eql(true)
-        nats.request("hello", 'world', timeout: 1)
+        nats.request("hello", "world", timeout: 1)
 
         expect(reconnects).to eql(1)
         expect(disconnects).to eql(1)
