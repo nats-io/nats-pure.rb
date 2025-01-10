@@ -557,4 +557,45 @@ describe "Client - Specification" do
       end.to_not raise_error
     end
   end
+
+  describe "#close" do
+    context "when client has established a connection" do
+      # Close all dangling nats threads from previous tests
+      before do
+        Thread.list.each do |thread|
+          thread.exit if thread.name&.start_with?("nats:")
+        end
+      end
+
+      let(:responder) { NATS.connect(servers: [@s.uri]) }
+      let(:requester) { NATS.connect(servers: [@s.uri]) }
+
+      it "closes all its threads" do
+        responder.subscribe("foo") { |msg| msg.respond("bar") }
+        requester.request("foo")
+
+        nats_threads = Thread.list.select do |thread|
+          thread.name&.start_with?("nats:")
+        end
+
+        requester.close
+        responder.close
+
+        expect(Thread.list & nats_threads).to be_empty
+      end
+    end
+
+    context "when client has not established a connection yet" do
+      let(:nats) { NATS::IO::Client.new }
+
+      it "closes without a hitch" do
+        nats.close
+        expect(nats.closed?).to be_truthy
+      end
+
+      it "closes all its threads" do
+        expect { nats.close }.not_to change { Thread.list.count }
+      end
+    end
+  end
 end

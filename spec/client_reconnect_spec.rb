@@ -619,4 +619,40 @@ describe "Client - Reconnect" do
       expect(nats.status).to eql(NATS::IO::CLOSED)
     end
   end
+
+  describe "#process_op_error" do
+    # Close all dangling nats threads from previous tests
+    before do
+      Thread.list.each do |thread|
+        thread.exit if thread.name&.start_with?("nats:")
+      end
+    end
+
+    let(:responder) { NATS.connect }
+
+    let(:requester) do
+      NATS.connect(
+        reconnect: true,
+        reconnect_time_wait: 2,
+        max_reconnect_attempts: 1
+      )
+    end
+
+    it "closes all its threads before reconnection" do
+      responder.subscribe("foo") { |msg| msg.respond("bar") }
+      requester.request("foo")
+
+      nats_threads = Thread.list.select do |thread|
+        thread.name&.start_with?("nats:")
+      end
+
+      @s.restart
+      sleep 2
+
+      expect(Thread.list & nats_threads).to be_empty
+
+      responder.close
+      requester.close
+    end
+  end
 end

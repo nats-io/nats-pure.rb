@@ -6,12 +6,13 @@ export DEFAULT_NATS_SERVER_VERSION=latest
 export NATS_SERVER_VERSION="${NATS_SERVER_VERSION:=$DEFAULT_NATS_SERVER_VERSION}"
 
 platform=$(uname -s)
+server_path=tmp/nats-server/nats-server-$platform-$NATS_SERVER_VERSION
 
-if [ ! -f ./tmp/nats-server/nats-server-$platform ]; then
+if [ ! -f ./$server_path ]; then
   echo "NATS server is not installed, downloading..."
   mkdir -p tmp/nats-server
   curl -sf https://binaries.nats.dev/nats-io/nats-server/v2@$NATS_SERVER_VERSION | PREFIX=$(pwd)/tmp/nats-server/ sh
-  mv tmp/nats-server/nats-server tmp/nats-server/nats-server-$platform
+  mv tmp/nats-server/nats-server $server_path
 fi
 
-./tmp/nats-server/nats-server-$platform $@
+./$server_path $@
