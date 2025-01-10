@@ -12,15 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
-require_relative "jetstream"
 
 module NATS
   class Msg
     attr_accessor :subject, :reply, :data, :header
-
-    # Enhance it with ack related methods from JetStream to ack msgs.
-    include JetStream::Msg::AckMethods
 
     def initialize(opts = {})
       @subject = opts[:subject]
