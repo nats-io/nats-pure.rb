@@ -99,7 +99,7 @@ describe "Client - Drain" do
   end
 
   it "should report drain timeout error" do
-    nc = NATS.connect(drain_timeout: 0.5)
+    nc = NATS.connect(drain_timeout: 0.5, close_timeout: 1)
     nc2 = NATS.connect
 
     future = Future.new
@@ -157,5 +157,8 @@ describe "Client - Drain" do
     result = future.wait_for(2)
     expect(result).to eql(:error)
     expect(errors.first).to be_a(NATS::IO::DrainTimeoutError)
+
+    nc.close
+    nc2.close
   end
 end

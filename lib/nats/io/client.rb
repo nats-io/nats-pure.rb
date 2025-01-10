@@ -325,6 +325,7 @@ module NATS
       opts[:max_outstanding_pings] = ENV["NATS_MAX_OUTSTANDING_PINGS"].to_i unless ENV["NATS_MAX_OUTSTANDING_PINGS"].nil?
       opts[:connect_timeout] ||= NATS::IO::DEFAULT_CONNECT_TIMEOUT
       opts[:drain_timeout] ||= NATS::IO::DEFAULT_DRAIN_TIMEOUT
+      opts[:close_timeout] ||= NATS::IO::DEFAULT_CLOSE_TIMEOUT
       @options = opts
 
       # Process servers in the NATS cluster and pick one to connect
@@ -1298,6 +1299,8 @@ module NATS
             @flusher_thread.exit if @flusher_thread.alive?
             @ping_interval_thread.exit if @ping_interval_thread.alive?
 
+            @subscription_executor.shutdown
+
             attempt_reconnect
           rescue NATS::IO::NoServersError => e
             @last_err = e
@@ -1567,6 +1570,9 @@ module NATS
       if @read_loop_thread&.alive?
         @read_loop_thread.exit
       end
+
+      @subscription_executor&.shutdown
+      @subscription_executor&.wait_for_termination(options[:close_timeout])
 
       # TODO: Delete any other state which we are not using here too.
       synchronize do
@@ -1857,6 +1863,7 @@ module NATS
     DEFAULT_CONNECT_TIMEOUT = 2
     DEFAULT_READ_WRITE_TIMEOUT = 2
     DEFAULT_DRAIN_TIMEOUT = 30
+    DEFAULT_CLOSE_TIMEOUT = 30
 
     # Default Pending Limits
     DEFAULT_SUB_PENDING_MSGS_LIMIT = 65536

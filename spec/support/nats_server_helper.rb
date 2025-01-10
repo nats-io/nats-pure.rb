@@ -99,6 +99,11 @@ class NatsServerControl
     end
   end
 
+  def restart
+    kill_server
+    start_server(true)
+  end
+
   def wait_for_server(uri, max_wait = 5) # :nodoc:
     wait = max_wait.to_f
     loop do

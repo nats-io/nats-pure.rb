@@ -619,4 +619,28 @@ describe "Client - Reconnect" do
       expect(nats.status).to eql(NATS::IO::CLOSED)
     end
   end
+
+  it "closes all its threads before reconnection" do
+    responder = NATS.connect
+    requester = NATS.connect(
+      reconnect: true,
+      reconnect_time_wait: 2,
+      max_reconnect_attempts: 1
+    )
+
+    responder.subscribe("foo") { |msg| msg.respond("bar") }
+    requester.request("foo")
+
+    nats_threads = Thread.list.select do |thread|
+      thread.name&.start_with?("nats:")
+    end
+
+    @s.restart
+    sleep 2
+
+    expect(Thread.list & nats_threads).to be_empty
+
+    responder.close
+    requester.close
+  end
 end
