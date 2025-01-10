@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-require_relative "msg"
-require_relative "client"
-require_relative "errors"
 require_relative "kv"
 require_relative "jetstream/api"
 require_relative "jetstream/errors"

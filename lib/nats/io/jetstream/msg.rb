@@ -25,4 +25,9 @@ module NATS
     module Msg
     end
   end
+
+  class Msg
+    # Enhance it with ack related methods from JetStream to ack msgs.
+    include JetStream::Msg::AckMethods
+  end
 end
