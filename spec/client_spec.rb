@@ -560,6 +560,13 @@ describe "Client - Specification" do
 
   describe "#close" do
     context "when client has established a connection" do
+      # Close all dangling nats threads from previous tests
+      before do
+        Thread.list.each do |thread|
+          thread.exit if thread.name&.start_with?("nats:")
+        end
+      end
+
       let(:responder) { NATS.connect(servers: [@s.uri]) }
       let(:requester) { NATS.connect(servers: [@s.uri]) }
 
