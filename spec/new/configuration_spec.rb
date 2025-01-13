@@ -2,7 +2,7 @@
 
 RSpec.shared_examples "boolean option" do |name, env, default|
   describe ":#{name}" do
-    let(:option) { config.send(name) }
+    let(:option) { subject.send(name) }
 
     context "when hash options are provided" do
       let(:options) { { name => true } }
@@ -82,7 +82,7 @@ end
 
 RSpec.shared_examples "integer option" do |name, env, default|
   describe ":#{name}" do
-    let(:option) { config.send(name) }
+    let(:option) { subject.send(name) }
 
     context "when hash options are provided" do
       let(:options) { { name => 5 } }
@@ -159,7 +159,7 @@ RSpec.shared_examples "integer option" do |name, env, default|
 end
 
 RSpec.describe NATS::Configuration do
-  let(:config) { NATS::Configuration.new(options) }
+  subject { NATS::Configuration.new(options) }
 
   include_examples "boolean option", :verbose, "NATS_VERBOSE", false
   include_examples "boolean option", :pedantic, "NATS_PEDANTIC", false
