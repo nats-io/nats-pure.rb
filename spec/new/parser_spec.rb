@@ -3,7 +3,63 @@
 RSpec.describe NATS::Parser do
   subject { described_class.new }
 
-  let(:message) { subject.parse(data) }
+  let(:result) { subject.parse(data) }
+  let(:message) { result.message }
+  let(:leftover) { result.leftover }
+
+  describe "#parse" do
+    context "when data contains only a message definition" do
+      let(:data) { "PING\r\n" }
+
+      it "returns NATS::Parser::Result" do
+        expect(result).to be_a(NATS::Parser::Result)
+      end
+
+      it "parses the message" do
+        expect(message).to be_a(NATS::Message::Ping)
+      end
+
+      it "sets leftover to an empty string" do
+        expect(leftover).to eq("")
+      end
+    end
+
+    context "when data contains a message definition with a leftover" do
+      let(:data) { "PING\r\nleftover" }
+
+      it "returns NATS::Parser::Result" do
+        expect(result).to be_a(NATS::Parser::Result)
+      end
+
+      it "parses the message" do
+        expect(message).to be_a(NATS::Message::Ping)
+      end
+
+      it "sets leftover" do
+        expect(leftover).to eq("leftover")
+      end
+    end
+
+    context "when data does not contain a message definition" do
+      let(:data) { "unknown" }
+
+      it "returns NATS::Parser::Result" do
+        expect(result).to be_a(NATS::Parser::Result)
+      end
+
+      it "parses the message as Unknow" do
+        expect(message).to be_a(NATS::Message::Unknown)
+      end
+
+      it "parses the message as Unknow" do
+        expect(message).to have_attributes(data: "unknown")
+      end
+
+      it "sets leftover to an empty string" do
+        expect(leftover).to eq("")
+      end
+    end
+  end
 
   describe "INFO" do
     context "when message is valid" do
@@ -45,24 +101,24 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "INFO {\"server_id\":100}" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when there is no space between INFO and options" do
       let(:data) { "INFO{\"server_id\":100}\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message does not have options" do
       let(:data) { "INFO\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
@@ -77,8 +133,8 @@ RSpec.describe NATS::Parser do
     context "when message has a preceeding" do
       let(:data) { "message\r\nINFO {\"server_id\":100}\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -147,40 +203,40 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "MSG foo 10 bar 100" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when there is no space between MSG and options" do
       let(:data) { "MSGfoo 10 bar 100\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message does not contain all params" do
       let(:data) { "MSG foo bar\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message contain invalid params" do
       let(:data) { "MSG foo bar invalid\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\nMSG foo 10 bar 100\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -272,7 +328,7 @@ RSpec.describe NATS::Parser do
           reply_to: "bar",
           header_bytes: 30, 
           total_bytes: 100,
-          payload: nil
+          payload: ""
         )
       end
     end
@@ -280,40 +336,40 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "HMSG foo 10 bar 30 100" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when there is no space between MSG and options" do
       let(:data) { "HMSGfoo 10 bar 30 100\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message does not contain all params" do
       let(:data) { "HMSG foo bar\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message contain invalid params" do
       let(:data) { "HMSG foo 10 bar invalid invalid\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\nHMSG foo 10 bar 30 100\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -346,16 +402,16 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "PING" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\nPING\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -388,16 +444,16 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "PONG" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\nPONG\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -430,24 +486,24 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "OK" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message does not have + before OK" do
       let(:data) { "OK\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\n+OK\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
   end
@@ -492,49 +548,41 @@ RSpec.describe NATS::Parser do
     context "when message does not contain CRLF" do
       let(:data) { "-ERR 'Error'" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
-    context "when there is no space between INFO and options" do
+    context "when there is no space between -ERR and options" do
       let(:data) { "-ERR'Error'\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message options does not have - before ERR" do
       let(:data) { "ERR 'Error'\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message is in lower case" do
       let(:data) { "-err 'Error'\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
     end
 
     context "when message has a preceeding" do
       let(:data) { "message\r\n-ERR 'Error'\r\n" }
 
-      it "returns nil" do
-        expect(message).to be_nil
+      it "returns NATS::Message::Unknown" do
+        expect(message).to be_a(NATS::Message::Unknown)
       end
-    end
-  end
-
-  context "when data does not contain a message definition" do
-    let(:data) { "payload" }
-
-    it "returns nil" do
-      expect(message).to be_nil
     end
   end
 end

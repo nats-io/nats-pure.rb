@@ -72,5 +72,13 @@ module NATS
         @message = params["message"]
       end
     end
+
+    class Unknown < Server
+      attr_reader :data
+
+      def initialize(params)
+        @data = params["data"]
+      end
+    end
   end
 end
