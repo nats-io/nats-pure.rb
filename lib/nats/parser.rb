@@ -2,6 +2,15 @@
 
 module NATS
   class Parser
+    class Result
+      attr_reader :message, :leftover
+
+      def initialize(message:, leftover:)
+        @message = message
+        @leftover = leftover
+      end
+    end
+
     REGEX = {
       NATS::Message::Info => /\AINFO\s+(?<options>[^\r\n]+)\r\n/i,
       NATS::Message::Msg => /\AMSG\s+(?<subject>[^\s]+)\s+(?<sid>[^\s]+)\s+((?<reply_to>[^\s]+)[^\S\r\n]+)?(?<bytes>\d+)\r\n/i,
@@ -15,8 +24,15 @@ module NATS
     def parse(data)
       REGEX.find do |type, regex|
         match = data.match(regex)
-        break type.new(match.named_captures) if match
+        break result(type, match) if match
       end
+    end
+
+    def result(type, match)
+      Result.new(
+        message: type.new(match.named_captures)
+        leftover: $'
+      )
     end
   end
 end
