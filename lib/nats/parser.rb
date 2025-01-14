@@ -20,9 +20,6 @@ module NATS
       end
     end
 
-    def result(type, match)
-    end
-
     class Result
       attr_reader :message, :leftover
 
