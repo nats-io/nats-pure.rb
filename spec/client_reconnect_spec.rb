@@ -657,7 +657,7 @@ describe "Client - Reconnect" do
   end
 
   describe "#reconnect" do
-    let(:nats) { nats = NATS.connect }
+    let(:nats) { NATS.connect }
 
     context "when client is connected" do
       it "succesfully reconnects" do
