@@ -655,4 +655,102 @@ describe "Client - Reconnect" do
       requester.close
     end
   end
+
+  describe "#reconnect" do
+    let(:nats) { nats = NATS.connect }
+
+    context "when client is connected" do
+      it "succesfully reconnects" do
+        reconnected = false
+        nats.on_reconnect { reconnected = true }
+
+        expect(nats.reconnect).to be(true)
+        sleep 0.1 until reconnected
+
+        expect(nats.stats[:reconnects]).to eq(1)
+
+        nats.close
+      end
+
+      it "resumes subscribtions work" do
+        messages = []
+
+        nats.subscribe("foo") do |msg|
+          sleep 0.5
+          messages << msg
+        end
+        nats.flush
+
+        nats.publish("foo", "bar")
+        nats.flush
+
+        nats.reconnect
+
+        nats.publish("foo", "qux")
+        nats.flush
+
+        sleep 2
+        expect(messages).to match_array([
+          have_attributes(class: NATS::Msg, subject: "foo", data: "bar"),
+          have_attributes(class: NATS::Msg, subject: "foo", data: "qux")
+        ])
+
+        nats.close
+      end
+    end
+
+    context "when client is reconnecting" do
+      it "does not reconnect twice" do
+        disconnections = 0
+        reconnected = false
+
+        nats.on_disconnect do
+          disconnections += 1
+          sleep 0.5
+        end
+
+        nats.on_reconnect { reconnected = true }
+
+        # Initiate the first reconnect
+        nats.reconnect
+
+        # Initiate the second reconnect
+        expect(nats.reconnect).to be(true)
+        sleep 0.1 until reconnected
+
+        expect(disconnections).to eq(1)
+        expect(nats.stats[:reconnects]).to eq(1)
+
+        nats.close
+      end
+    end
+
+    context "when client is disconnected" do
+      it "raises error" do
+        nats.send(:close_connection, NATS::Status::DISCONNECTED, false)
+
+        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
+    end
+
+    context "when client is closed" do
+      it "raises error" do
+        nats.close
+
+        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
+    end
+
+    context "when client is draining" do
+      it "raises error" do
+        nats.subscribe("reconnect") { sleep 1 }
+        nats.flush
+
+        nats.publish("reconnect", "draining")
+        nats.drain
+
+        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
+    end
+  end
 end

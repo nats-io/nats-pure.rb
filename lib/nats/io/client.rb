@@ -270,6 +270,19 @@ module NATS
       self
     end
 
+    def reconnect
+      synchronize do
+        return true if reconnecting?
+
+        if closed? || draining? || disconnected?
+          raise NATS::IO::ConnectionClosedError
+        end
+
+        initiate_reconnect
+        true
+      end
+    end
+
     private def parse_and_validate_options
       # Reset these in case we have reconnected via fork.
       @server_pool = []
@@ -1284,29 +1297,7 @@ module NATS
         # If we were connected and configured to reconnect,
         # then trigger disconnect and start reconnection logic
         if connected? && should_reconnect?
-          @status = RECONNECTING
-          @io&.close
-          @io = nil
-
-          # TODO: Reconnecting pending buffer?
-
-          # Do reconnect under a different thread than the one
-          # in which we got the error.
-          Thread.new do
-            # Abort currently running reads in case they're around
-            # FIXME: There might be more graceful way here...
-            @read_loop_thread.exit if @read_loop_thread.alive?
-            @flusher_thread.exit if @flusher_thread.alive?
-            @ping_interval_thread.exit if @ping_interval_thread.alive?
-
-            @subscription_executor.shutdown
-
-            attempt_reconnect
-          rescue NATS::IO::NoServersError => e
-            @last_err = e
-            close
-          end
-
+          initiate_reconnect
           Thread.exit
           return
         end
@@ -1317,6 +1308,31 @@ module NATS
 
       # Otherwise close the connection to NATS
       close
+    end
+
+    def initiate_reconnect
+      @status = RECONNECTING
+      @io&.close
+      @io = nil
+
+      # TODO: Reconnecting pending buffer?
+
+      # Do reconnect under a different thread than the one
+      # in which we got the error.
+      Thread.new do
+        # Abort currently running reads in case they're around
+        # FIXME: There might be more graceful way here...
+        @read_loop_thread.exit if @read_loop_thread.alive?
+        @flusher_thread.exit if @flusher_thread.alive?
+        @ping_interval_thread.exit if @ping_interval_thread.alive?
+
+        @subscription_executor.shutdown
+
+        attempt_reconnect
+      rescue NATS::IO::NoServersError => e
+        @last_err = e
+        close
+      end
     end
 
     # Gathers data from the socket and sends it to the parser.
