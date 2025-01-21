@@ -664,7 +664,7 @@ describe "Client - Reconnect" do
         reconnected = false
         nats.on_reconnect { reconnected = true }
 
-        expect(nats.reconnect).to be(true)
+        expect(nats.force_reconnect).to be(true)
         sleep 0.1 until reconnected
 
         expect(nats.stats[:reconnects]).to eq(1)
@@ -672,7 +672,7 @@ describe "Client - Reconnect" do
         nats.close
       end
 
-      it "resumes subscribtions work" do
+      it "resumes subscriptions work" do
         messages = []
 
         nats.subscribe("foo") do |msg|
@@ -684,7 +684,7 @@ describe "Client - Reconnect" do
         nats.publish("foo", "bar")
         nats.flush
 
-        nats.reconnect
+        nats.force_reconnect
 
         nats.publish("foo", "qux")
         nats.flush
@@ -712,10 +712,10 @@ describe "Client - Reconnect" do
         nats.on_reconnect { reconnected = true }
 
         # Initiate the first reconnect
-        nats.reconnect
+        nats.force_reconnect
 
         # Initiate the second reconnect
-        expect(nats.reconnect).to be(true)
+        expect(nats.force_reconnect).to be(true)
         sleep 0.1 until reconnected
 
         expect(disconnections).to eq(1)
@@ -729,7 +729,7 @@ describe "Client - Reconnect" do
       it "raises error" do
         nats.send(:close_connection, NATS::Status::DISCONNECTED, false)
 
-        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
       end
     end
 
@@ -737,7 +737,7 @@ describe "Client - Reconnect" do
       it "raises error" do
         nats.close
 
-        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
       end
     end
 
@@ -749,7 +749,7 @@ describe "Client - Reconnect" do
         nats.publish("reconnect", "draining")
         nats.drain
 
-        expect { nats.reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
       end
     end
   end

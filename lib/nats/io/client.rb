@@ -270,7 +270,7 @@ module NATS
       self
     end
 
-    def reconnect
+    def force_reconnect
       synchronize do
         return true if reconnecting?
 
