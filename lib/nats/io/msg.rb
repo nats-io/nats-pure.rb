@@ -40,6 +40,21 @@ module NATS
       end
     end
 
+    def respond_with_error(error)
+      message = dup
+
+      message.header = {
+        "Nats-Service-Error" => error.message,
+        "Nats-Service-Error-Code" => 500
+      }
+
+      message.subject = reply
+      message.reply = nil
+      message.data = nil
+
+      respond_msg(message)
+    end
+
     def respond_msg(msg)
       return unless @nc
       @nc.publish_msg(msg)
