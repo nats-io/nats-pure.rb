@@ -18,6 +18,7 @@ RSpec.describe NATS::Service::Monitoring do
   let(:stats) { {**basic, started: "2025-01-24T05:40:37Z"} }
 
   let(:client) { NATS.connect }
+  let(:subs) { client.instance_variable_get("@subs") }
 
   before(:all) do
     @server = NatsServerControl.new
@@ -37,7 +38,7 @@ RSpec.describe NATS::Service::Monitoring do
       it "starts monitoring with the specified prefix" do
         subject
 
-        expect(client.subs.values).to include(
+        expect(subs.values).to include(
           having_attributes(subject: "$FOO.PING"),
           having_attributes(subject: "$FOO.PING.foo"),
           having_attributes(subject: "$FOO.PING.foo.bar"),
@@ -57,7 +58,7 @@ RSpec.describe NATS::Service::Monitoring do
       it "starts monitoring with the default prefix" do
         subject
 
-        expect(client.subs.values).to include(
+        expect(subs.values).to include(
           having_attributes(subject: "$SRV.PING"),
           having_attributes(subject: "$SRV.PING.foo"),
           having_attributes(subject: "$SRV.PING.foo.bar"),
@@ -119,7 +120,7 @@ RSpec.describe NATS::Service::Monitoring do
       it "drains monitoring subscriptions" do
         subject.stop
 
-        expect(client.subs.values).to include(
+        expect(subs.values).to include(
           having_attributes(subject: "$SRV.PING", drained: true),
           having_attributes(subject: "$SRV.PING.foo", drained: true),
           having_attributes(subject: "$SRV.PING.foo.bar", drained: true),

@@ -11,6 +11,8 @@ RSpec.describe NATS::Service::Endpoint do
   end
 
   let(:client) { NATS.connect }
+  let(:subs) { client.instance_variable_get("@subs") }
+
   let(:service) { client.add_service(name: "foo", queue: "queue") }
 
   subject do
@@ -192,7 +194,7 @@ RSpec.describe NATS::Service::Endpoint do
     it "drains handler subscription" do
       subject.stop
 
-      expect(client.subs.values).to include(
+      expect(subs.values).to include(
         having_attributes(subject: "foo.bar", drained: true)
       )
     end
