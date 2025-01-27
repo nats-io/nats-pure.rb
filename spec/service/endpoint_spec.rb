@@ -16,14 +16,18 @@ RSpec.describe NATS::Service::Endpoint do
   let(:service) { client.add_service(name: "foo", queue: "queue") }
 
   subject do
-    described_class.new(name: name, options: options, parent: service, &block)
+    described_class.new(name: name, options: options, parent: parent, &block)
   end
 
   let(:name) { "bar" }
   let(:options) { {} }
+  let(:parent) { service }
   let(:block) { ->(msg) { msg.respond("bar") } }
 
-  after { service.stop }
+  after do
+    service.stop
+    client.close
+  end
 
   describe "#initialize" do
     it "sets service" do
@@ -46,11 +50,25 @@ RSpec.describe NATS::Service::Endpoint do
       end
     end
 
+    context "when parent is a service" do
+      it "builds sets subject to name" do
+        expect(subject.subject).to eq("bar")
+      end
+    end
+
+    context "when parent is a group" do
+      let(:parent) { service.add_group("baz") }
+
+      it "builds subject based on parent.subject" do
+        expect(subject.subject).to eq("baz.bar")
+      end
+    end
+
     context "when options[:subject] is present" do
       let(:options) { {subject: "baz"} }
 
       it "builds subject based on options[:subject]" do
-        expect(subject.subject).to eq("foo.baz")
+        expect(subject.subject).to eq("baz")
       end
     end
 
@@ -58,7 +76,7 @@ RSpec.describe NATS::Service::Endpoint do
       let(:options) { {subject: nil} }
 
       it "builds subject based on endpoint name" do
-        expect(subject.subject).to eq("foo.bar")
+        expect(subject.subject).to eq("bar")
       end
     end
 
@@ -121,7 +139,7 @@ RSpec.describe NATS::Service::Endpoint do
     let(:request) do
       subject
       begin
-        client.request("foo.bar")
+        client.request("bar")
       rescue
         nil
       end
@@ -195,7 +213,7 @@ RSpec.describe NATS::Service::Endpoint do
       subject.stop
 
       expect(subs.values).to include(
-        having_attributes(subject: "foo.bar", drained: true)
+        having_attributes(subject: "bar", drained: true)
       )
     end
 
@@ -209,7 +227,7 @@ RSpec.describe NATS::Service::Endpoint do
   describe "#reset" do
     before do
       subject
-      3.times { client.request("foo.bar") }
+      3.times { client.request("bar") }
     end
 
     it "resets endpoint stats" do
@@ -220,7 +238,7 @@ RSpec.describe NATS::Service::Endpoint do
         processing_time: 0,
         average_processing_time: 0,
         num_errors: 0,
-        last_error: nil
+        last_error: ""
       )
     end
   end

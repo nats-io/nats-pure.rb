@@ -9,7 +9,7 @@ RSpec.describe NATS::Service::Stats do
       processing_time: 0,
       average_processing_time: 0,
       num_errors: 0,
-      last_error: nil
+      last_error: ""
     )
   end
 
@@ -27,7 +27,7 @@ RSpec.describe NATS::Service::Stats do
         processing_time: 0,
         average_processing_time: 0,
         num_errors: 0,
-        last_error: nil
+        last_error: ""
       )
     end
   end

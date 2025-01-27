@@ -43,14 +43,29 @@ module NATS
     def respond_with_error(error)
       message = dup
 
-      message.header = {
-        "Nats-Service-Error" => error.message,
-        "Nats-Service-Error-Code" => 500
-      }
-
       message.subject = reply
-      message.reply = nil
-      message.data = nil
+      message.reply = ""
+      message.data = ""
+
+      case error
+      when Exception
+        message.header = {
+          "Nats-Service-Error" => error.message,
+          "Nats-Service-Error-Code" => 500
+        }
+      when Hash
+        message.header = {
+          "Nats-Service-Error" => error[:description],
+          "Nats-Service-Error-Code" => error[:code]
+        }
+
+        message.data = error[:data]
+      else
+        message.header = {
+          "Nats-Service-Error" => error.to_s,
+          "Nats-Service-Error-Code" => 500
+        }
+      end
 
       respond_msg(message)
     end

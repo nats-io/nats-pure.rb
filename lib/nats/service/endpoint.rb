@@ -11,7 +11,7 @@ module NATS
         @name = name
 
         @service = parent.service
-        @subject = "#{parent.subject}.#{options[:subject] || name}"
+        @subject = build_subject(parent, options)
         @queue = options[:queue] || parent.queue
         @metadata = options[:metadata]
 
@@ -43,6 +43,12 @@ module NATS
           subject: options[:subject],
           queue: options[:queue]
         )
+      end
+
+      def build_subject(parent, options)
+        subject = options[:subject] || name
+
+        parent.subject ? "#{parent.subject}.#{subject}" : subject
       end
 
       def create_handler(block)

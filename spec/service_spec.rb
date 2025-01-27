@@ -27,6 +27,8 @@ RSpec.describe NATS::Service do
     }
   end
 
+  after { client.close }
+
   include_examples "extension"
 
   describe "#initialize" do
@@ -285,8 +287,8 @@ RSpec.describe NATS::Service do
       subject.add_endpoint("bar") { |msg| msg.respond("bar") }
       subject.add_endpoint("baz") { |msg| msg.respond("baz") }
 
-      client.request("foo.bar")
-      client.request("foo.baz")
+      client.request("bar")
+      client.request("baz")
     end
 
     it "resets all endpoints stats" do
@@ -298,7 +300,7 @@ RSpec.describe NATS::Service do
         processing_time: 0,
         average_processing_time: 0,
         num_errors: 0,
-        last_error: nil
+        last_error: ""
       )
     end
   end

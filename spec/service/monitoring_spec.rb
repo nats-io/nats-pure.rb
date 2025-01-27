@@ -29,7 +29,10 @@ RSpec.describe NATS::Service::Monitoring do
     @server.kill_server
   end
 
-  after { subject.stop }
+  after do
+    subject.stop
+    client.close
+  end
 
   describe "#initialize" do
     context "when prefix is specified" do

@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 RSpec.shared_examples "extension" do |params|
-  let(:subject_value) { "#{subject.subject}.baz" }
+  let(:subject_value) do
+    subject.is_a?(NATS::Service) ? "baz" : "#{subject.subject}.baz"
+  end
 
   describe "#add_group" do
     context "when queue is specified" do

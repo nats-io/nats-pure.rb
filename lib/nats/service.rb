@@ -23,8 +23,6 @@ module NATS
     attr_reader :client, :name, :id, :version, :description, :metadata, :queue
     attr_reader :monitoring, :status, :callbacks, :groups, :endpoints
 
-    alias_method :subject, :name
-
     def initialize(client, options)
       super()
       validate(options)
@@ -72,6 +70,10 @@ module NATS
 
     def service
       self
+    end
+
+    def subject
+      nil
     end
 
     private

@@ -3,13 +3,14 @@
 require_relative "extension_examples"
 
 RSpec.describe NATS::Service::Group do
-  subject { described_class.new(name: name, parent: service, queue: queue) }
+  subject { described_class.new(name: name, parent: parent, queue: queue) }
 
   let(:name) { "bar" }
   let(:queue) { "queue" }
 
   let(:client) { NATS.connect }
   let(:service) { client.add_service(name: "foo", queue: "default") }
+  let(:parent) { service }
 
   before(:all) do
     @server = NatsServerControl.new
@@ -20,21 +21,18 @@ RSpec.describe NATS::Service::Group do
     @server.kill_server
   end
 
-  after { service.stop }
+  after do
+    service.stop
+    client.close
+  end
 
   include_examples "extension"
 
   describe "#initialize" do
-    it "sets name" do
-      expect(subject.name).to eq("bar")
-    end
-
-    it "builds subject" do
-      expect(subject.subject).to eq("foo.bar")
-    end
-
-    it "sets queue" do
-      expect(subject.queue).to eq("queue")
+    context "when name is valid" do
+      it "sets name" do
+        expect(subject.name).to eq("bar")
+      end
     end
 
     context "when name is invalid" do
@@ -42,6 +40,26 @@ RSpec.describe NATS::Service::Group do
 
       it "raises InvalidNameError" do
         expect { subject }.to raise_error(NATS::Service::InvalidNameError)
+      end
+    end
+
+    context "when parent is a service" do
+      it "sets subject to name" do
+        expect(subject.subject).to eq("bar")
+      end
+    end
+
+    context "when parent is a group" do
+      let(:parent) { service.add_group("baz") }
+
+      it "builds subject based on group.subject" do
+        expect(subject.subject).to eq("baz.bar")
+      end
+    end
+
+    context "when queue is valid" do
+      it "sets queue" do
+        expect(subject.queue).to eq("queue")
       end
     end
 

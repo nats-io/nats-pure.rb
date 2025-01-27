@@ -13,7 +13,7 @@ module NATS
         @name = name
 
         @service = parent.service
-        @subject = "#{parent.subject}.#{name}"
+        @subject = parent.subject ? "#{parent.subject}.#{name}" : name
         @queue = queue || parent.queue
       end
     end
