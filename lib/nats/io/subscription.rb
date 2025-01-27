@@ -33,7 +33,7 @@ module NATS
     attr_accessor :pending_msgs_limit, :pending_bytes_limit
     attr_accessor :nc
     attr_accessor :jsi
-    attr_accessor :closed
+    attr_accessor :closed, :drained
 
     def initialize(**opts)
       super() # required to initialize monitor
@@ -48,6 +48,7 @@ module NATS
       @sid = nil
       @nc = nil
       @closed = nil
+      @drained = false
 
       # State from async subscriber messages delivery
       @pending_queue = nil
