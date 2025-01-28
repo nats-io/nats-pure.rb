@@ -174,7 +174,7 @@ RSpec.describe NATS::Service::Endpoint do
         request
 
         expect(subject.stats.num_errors).to eq(1)
-        expect(subject.stats.last_error).to eq("Endpoint Error")
+        expect(subject.stats.last_error).to eq("500:Endpoint Error")
       end
 
       it "records stats" do
@@ -197,7 +197,7 @@ RSpec.describe NATS::Service::Endpoint do
         request
 
         expect(subject.stats.num_errors).to eq(1)
-        expect(subject.stats.last_error).to eq("NATS::IO::ServerError")
+        expect(subject.stats.last_error).to eq("500:NATS::IO::ServerError")
       end
 
       it "records stats" do
@@ -209,18 +209,32 @@ RSpec.describe NATS::Service::Endpoint do
   end
 
   describe "#stop" do
-    it "drains handler subscription" do
-      subject.stop
+    context "when everything goes smoothly" do
+      it "drains handler subscription" do
+        subject.stop
 
-      expect(subs.values).to include(
-        having_attributes(subject: "bar", drained: true)
-      )
+        expect(subs.values).to include(
+          having_attributes(subject: "bar", drained: true)
+        )
+      end
+
+      it "marks endpoint as stopped" do
+        subject.stop
+
+        expect(subject.stopped?).to be(true)
+      end
     end
 
-    it "marks endpoint as stopped" do
-      subject.stop
+    context "when an error occurs" do
+      it "does not raise any errors" do
+        expect { subject.stop }.not_to raise_error
+      end
 
-      expect(subject.stopped?).to be(true)
+      it "marks endpoint as stopped" do
+        subject.stop
+
+        expect(subject.stopped?).to be(true)
+      end
     end
   end
 

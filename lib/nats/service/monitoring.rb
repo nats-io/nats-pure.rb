@@ -34,6 +34,8 @@ module NATS
         @monitors.each do |monitor|
           service.client.send(:drain_sub, monitor)
         end
+      rescue
+        # nothing we can do here
       ensure
         @monitors = nil
       end

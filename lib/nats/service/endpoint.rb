@@ -23,6 +23,8 @@ module NATS
 
       def stop
         service.client.send(:drain_sub, @handler)
+      rescue
+        # nothing we can do here
       ensure
         @stopped = true
       end
@@ -54,7 +56,9 @@ module NATS
       def create_handler(block)
         service.client.subscribe(subject, queue: queue) do |msg|
           started_at = Time.now
+
           block.call(msg)
+          stats.error(msg.error) if msg.error
         rescue NATS::Error => error
           stats.error(error)
           service.stop(error)

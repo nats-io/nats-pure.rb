@@ -114,8 +114,14 @@ RSpec.describe NATS::Service::Monitoring do
 
   describe "#stop" do
     context "when monitorings has not been started yet" do
-      it "does nothing" do
+      it "does not raise any errors" do
         expect { subject.stop }.not_to raise_error
+      end
+
+      it "marks monitoring as stopped" do
+        subject.stop
+
+        expect(subject.stopped?).to be(true)
       end
     end
 
@@ -134,6 +140,30 @@ RSpec.describe NATS::Service::Monitoring do
           having_attributes(subject: "$SRV.STATS.foo", drained: true),
           having_attributes(subject: "$SRV.STATS.foo.bar", drained: true)
         )
+      end
+
+      it "marks monitoring as stopped" do
+        subject.stop
+
+        expect(subject.stopped?).to be(true)
+      end
+    end
+
+    context "when an error occurs" do
+      before do
+        allow(client).to receive(:drain_sub).and_raise("Error during drain")
+      end
+
+      it "does not raise any errors" do
+        subject.stop
+
+        expect { subject.stop }.not_to raise_error
+      end
+
+      it "marks monitoring as stopped" do
+        subject.stop
+
+        expect(subject.stopped?).to be(true)
       end
     end
   end

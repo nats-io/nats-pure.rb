@@ -59,8 +59,10 @@ module NATS
         end
       end
 
+      attr_reader :service
+
       def run
-        service = Service.new(client)
+        @service = Service.new(client)
 
         client.subscribe("tests.service.core.>") do |msg|
           if msg.data.empty?

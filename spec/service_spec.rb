@@ -227,17 +227,13 @@ RSpec.describe NATS::Service do
       end
 
       it "marks service as stopped" do
-        begin
-          service.stop
-        rescue
-          nil
-        end
+        service.stop
 
         expect(subject.stopped?).to be(true)
       end
 
-      it "raises error" do
-        expect { service.stop }.to raise_error("Error during drain")
+      it "does not raise any error" do
+        expect { service.stop }.not_to raise_error
       end
     end
 

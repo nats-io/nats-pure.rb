@@ -34,9 +34,11 @@ module NATS
       end
 
       def error(error)
+        error = ErrorWrapper.new(error)
+
         synchronize do
           @num_errors += 1
-          @last_error = error.message
+          @last_error = error.description
         end
       end
 

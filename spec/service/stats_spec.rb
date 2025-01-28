@@ -100,7 +100,7 @@ RSpec.describe NATS::Service::Stats do
       it "sets last_error to the error message" do
         subject.error(StandardError.new)
 
-        expect(subject.last_error).to eq("StandardError")
+        expect(subject.last_error).to eq("500:StandardError")
       end
     end
 
@@ -116,7 +116,7 @@ RSpec.describe NATS::Service::Stats do
       it "replaces last_error with the new error message" do
         subject.error(StandardError.new("Error"))
 
-        expect(subject.last_error).to eq("Error")
+        expect(subject.last_error).to eq("500:Error")
       end
     end
   end
