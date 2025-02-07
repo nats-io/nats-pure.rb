@@ -2,7 +2,9 @@
 
 module NATS
   class JetStream
-    class Context
+    class Api
+      def request(subject, config, params)
+      end
     end
   end
 end
