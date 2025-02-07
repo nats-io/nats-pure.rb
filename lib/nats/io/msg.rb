@@ -16,13 +16,14 @@
 module NATS
   class Msg
     attr_accessor :subject, :reply, :data, :header
-    attr_accessor :nc, :sub
+    attr_accessor :subject, :reply, :data, :header, :raw_header
 
     def initialize(opts = {})
       @subject = opts[:subject]
       @reply = opts[:reply]
       @data = opts[:data]
       @header = opts[:header]
+      @raw_header = opts[:raw_header]
       @nc = opts[:nc]
       @sub = opts[:sub]
 

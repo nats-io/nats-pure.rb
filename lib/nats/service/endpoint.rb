@@ -99,7 +99,7 @@ module NATS
       private
 
       def validate(name, options)
-        Validator.validate(
+        Utils::Validator.validate(
           name: name,
           subject: options[:subject],
           queue: options[:queue]

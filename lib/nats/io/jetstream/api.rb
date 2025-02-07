@@ -21,7 +21,7 @@ require "time"
 module NATS
   class JetStream
     # JetStream::API are the types used to interact with the JetStream API.
-    module API
+    class API
       # When the server responds with an error from the JetStream API.
       Error = ::NATS::JetStream::Error::APIError
 

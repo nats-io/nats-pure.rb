@@ -19,7 +19,8 @@ require_relative "version"
 require_relative "errors"
 require_relative "msg"
 require_relative "subscription"
-require_relative "jetstream"
+require_relative "client/status_listener"
+ require_relative "jetstream"
 
 require "nats/nuid"
 require "socket"
@@ -101,7 +102,7 @@ module NATS
     include MonitorMixin
     include Status
 
-    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader
+    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader, :status_listeners
 
     DEFAULT_PORT = {nats: 4222, ws: 80, wss: 443}.freeze
     DEFAULT_URI = "nats://localhost:#{DEFAULT_PORT[:nats]}".freeze
@@ -244,6 +245,9 @@ module NATS
 
       # Service API
       @_services = nil
+
+      # Status Listeners
+      @status_listeners = StatusListeners.new
 
       # Prepare for calling connect or automatic delayed connection
       parse_and_validate_options if uri || opts.any?
@@ -853,11 +857,15 @@ module NATS
     # @option params [String] :domain JetStream Domain to use for the requests.
     # @option params [Float] :timeout Default timeout to use for JS requests.
     # @return [NATS::JetStream]
-    def jetstream(opts = {})
-      ::NATS::JetStream.new(self, opts)
+    def jetstream(options = {})
+      ::NATS::JetStream.new(self, options)
     end
     alias_method :JetStream, :jetstream
     alias_method :jsm, :jetstream
+
+    def js(options = {})
+      ::NATS::JetStream::Context.new(self, options)
+    end
 
     def services
       synchronize { @_services ||= Services.new(self) }
@@ -1031,7 +1039,7 @@ module NATS
         if sub.future
           future = sub.future
           hdr = process_hdr(header)
-          sub.response = Msg.new(subject: subject, reply: reply, data: data, header: hdr, nc: self, sub: sub)
+          sub.response = Msg.new(subject: subject, reply: reply, data: data, header: hdr, raw_header: header, nc: self, sub: sub)
           future.signal
 
           return
@@ -1046,7 +1054,7 @@ module NATS
 
             # Only dispatch message when sure that it would not block
             # the main read loop from the parser.
-            msg = Msg.new(subject: subject, reply: reply, data: data, header: hdr, nc: self, sub: sub)
+            msg = Msg.new(subject: subject, reply: reply, data: data, header: hdr, raw_header: header, nc: self, sub: sub)
 
             sub.dispatch(msg)
           end
@@ -1323,6 +1331,8 @@ module NATS
       @io&.close
       @io = nil
 
+      status_listeners.send(RECONNECTING)
+
       # TODO: Reconnecting pending buffer?
 
       # Do reconnect under a different thread than the one
@@ -1554,6 +1564,8 @@ module NATS
       @io.write(cmds.join) unless cmds.empty?
       @status = CONNECTED
       @pending_size = 0
+
+      status_listeners.send(CONNECTED)
 
       # Reset parser state here to avoid unknown protocol errors
       # on reconnect...

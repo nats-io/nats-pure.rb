@@ -28,7 +28,7 @@ module NATS
       def record(started_at)
         synchronize do
           @num_requests += 1
-          @processing_time += to_nsec(Time.now - started_at)
+          @processing_time += (Time.now - started_at).to_nsec
           @average_processing_time = @processing_time / @num_requests
         end
       end
@@ -40,12 +40,6 @@ module NATS
           @num_errors += 1
           @last_error = error.description
         end
-      end
-
-      private
-
-      def to_nsec(seconds)
-        (seconds * 10**9).to_i
       end
     end
   end

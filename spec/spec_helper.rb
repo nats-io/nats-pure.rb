@@ -8,7 +8,6 @@ end
 ENV["RAILS_ENV"] = "test"
 
 require "nats-pure"
-require "nats/io/jetstream"
 require "nkeys"
 
 require "fileutils"

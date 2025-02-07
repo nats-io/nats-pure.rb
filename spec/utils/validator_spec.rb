@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::Service::Validator do
+RSpec.describe NATS::Utils::Validator do
   describe ".validate" do
     subject { described_class.validate(values) }
 
@@ -19,7 +19,7 @@ RSpec.describe NATS::Service::Validator do
         let(:name) { nil }
 
         it "raises InvalidNameError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidNameError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
         end
       end
 
@@ -35,7 +35,7 @@ RSpec.describe NATS::Service::Validator do
         let(:name) { "$name.*" }
 
         it "raises InvalidNameError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidNameError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
         end
       end
     end
@@ -55,7 +55,7 @@ RSpec.describe NATS::Service::Validator do
         let(:version) { nil }
 
         it "raises InvalidVersionError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidVersionError)
         end
       end
 
@@ -71,7 +71,7 @@ RSpec.describe NATS::Service::Validator do
         let(:version) { "version-1.0-alpha" }
 
         it "raises InvalidVersionError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidVersionError)
         end
       end
     end
@@ -107,7 +107,7 @@ RSpec.describe NATS::Service::Validator do
         let(:subject_value) { " > subject" }
 
         it "raises InvalidSubjectError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidSubjectError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidSubjectError)
         end
       end
     end
@@ -143,7 +143,7 @@ RSpec.describe NATS::Service::Validator do
         let(:queue) { " > queue" }
 
         it "raises InvalidQueueError" do
-          expect { subject }.to raise_error(NATS::Service::InvalidQueueError)
+          expect { subject }.to raise_error(NATS::Utils::InvalidQueueError)
         end
       end
     end

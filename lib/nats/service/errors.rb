@@ -4,14 +4,6 @@ module NATS
   class Service
     class Error < StandardError; end
 
-    class InvalidNameError < Error; end
-
-    class InvalidVersionError < Error; end
-
-    class InvalidQueueError < Error; end
-
-    class InvalidSubjectError < Error; end
-
     class ErrorWrapper
       attr_reader :code, :message, :data
 
