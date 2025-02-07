@@ -7,6 +7,27 @@ module NATS
 
       def initialize(config)
         @config = Config.new(config)
+        @consumer = Manager.add_consumer(stream, config)
+      end
+
+      def update(config)
+      end
+
+      def delete
+        Manager.delete_consumer(stream, self)
+      end
+
+      def info
+        Manager.consumer_info(stream, self)
+      end
+
+      def next
+      end
+
+      def fetch(options)
+      end
+
+      def consume(options, &block)
       end
     end
   end
