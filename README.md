@@ -102,6 +102,10 @@ loop do
 end
 ```
 
+## Service API
+
+The service API allows you to easily [build NATS services](docs/service_api.md).
+
 ## Clustered Usage
 
 ```ruby

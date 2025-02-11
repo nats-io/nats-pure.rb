@@ -16,6 +16,7 @@ require "tempfile"
 require "monitor"
 require "openssl"
 require "erb"
+require "timecop"
 
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].sort.each { |f| require f }
 
