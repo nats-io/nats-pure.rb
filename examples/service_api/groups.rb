@@ -4,8 +4,7 @@ client = NATS.connect
 
 service = client.services.add(
   name: "calc",
-  version: "1.0.0",
-  description: "description"
+  version: "1.0.0"
 )
 
 arth = service.groups.add("arth")

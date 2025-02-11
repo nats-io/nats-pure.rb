@@ -4,8 +4,7 @@ client = NATS.connect
 
 service = client.services.add(
   name: "calc",
-  version: "1.0.0",
-  description: "description"
+  version: "1.0.0"
 )
 
 service.on_stats do |endpoint|
@@ -16,15 +15,15 @@ service.on_stats do |endpoint|
 end
 
 service.endpoints.add("divide") do |message|
-  data = JSON.parse(message.data)
-  message.respond((data["dividend"] / data["divisor"]).to_json)
+  dividend, divisor = JSON.parse(message.data)
+  message.respond((dividend / divisor).to_json)
 end
 
-client.request("divide", {dividend: 5, divisor: 2}.to_json)
-client.request("divide", {dividend: 7, divisor: 0}.to_json)
-client.request("divide", {dividend: 3, divisor: 1}.to_json)
-client.request("divide", {dividend: 4, divisor: 2}.to_json)
-client.request("divide", {dividend: 8, divisor: 0}.to_json)
+client.request("divide", [5, 2].to_json)
+client.request("divide", [7, 0].to_json)
+client.request("divide", [3, 1].to_json)
+client.request("divide", [4, 2].to_json)
+client.request("divide", [8, 0].to_json)
 
 puts <<~INFO
 === Info ===
