@@ -243,7 +243,7 @@ module NATS
       @drain_t = nil
 
       # Service API
-      @services = []
+      @services = Services.new(self)
 
       # Prepare for calling connect or automatic delayed connection
       parse_and_validate_options if uri || opts.any?
@@ -738,15 +738,6 @@ module NATS
         MonotonicTime.with_nats_timeout(timeout) do
           pong.wait(timeout)
         end
-      end
-    end
-
-    def add_service(options)
-      synchronize do
-        service = NATS::Service.new(self, options)
-        services << service
-
-        service
       end
     end
 

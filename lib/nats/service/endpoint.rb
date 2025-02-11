@@ -75,5 +75,21 @@ module NATS
         raise error
       end
     end
+
+    class Endpoints < NATS::Utils::List
+      def add(name, options = {}, &block)
+        endpoint = Endpoint.new(
+          name: name,
+          options: options,
+          parent: parent,
+          &block
+        )
+
+        insert(endpoint)
+        parent.service.endpoints.insert(endpoint)
+
+        endpoint
+      end
+    end
   end
 end

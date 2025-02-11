@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "extension_examples"
-
 RSpec.describe NATS::Service::Group do
   subject { described_class.new(name: name, parent: parent, queue: queue) }
 
@@ -9,7 +7,7 @@ RSpec.describe NATS::Service::Group do
   let(:queue) { "queue" }
 
   let(:client) { NATS.connect }
-  let(:service) { client.add_service(name: "foo", queue: "default") }
+  let(:service) { client.services.add(name: "foo", queue: "default") }
   let(:parent) { service }
 
   before(:all) do
@@ -25,8 +23,6 @@ RSpec.describe NATS::Service::Group do
     service.stop
     client.close
   end
-
-  include_examples "extension"
 
   describe "#initialize" do
     context "when name is valid" do
@@ -50,7 +46,7 @@ RSpec.describe NATS::Service::Group do
     end
 
     context "when parent is a group" do
-      let(:parent) { service.add_group("baz") }
+      let(:parent) { service.groups.add("baz") }
 
       it "builds subject based on group.subject" do
         expect(subject.subject).to eq("baz.bar")

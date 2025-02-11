@@ -13,7 +13,7 @@ RSpec.describe NATS::Service::Endpoint do
   let(:client) { NATS.connect }
   let(:subs) { client.instance_variable_get("@subs") }
 
-  let(:service) { client.add_service(name: "foo", queue: "queue") }
+  let(:service) { client.services.add(name: "foo", queue: "queue") }
 
   subject do
     described_class.new(name: name, options: options, parent: parent, &block)
@@ -57,7 +57,7 @@ RSpec.describe NATS::Service::Endpoint do
     end
 
     context "when parent is a group" do
-      let(:parent) { service.add_group("baz") }
+      let(:parent) { service.groups.add("baz") }
 
       it "builds subject based on parent.subject" do
         expect(subject.subject).to eq("baz.bar")

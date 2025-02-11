@@ -2,7 +2,6 @@
 
 require "monitor"
 
-require_relative "service/extension"
 require_relative "service/group"
 require_relative "service/endpoint"
 require_relative "service/errors"
@@ -16,7 +15,6 @@ require_relative "service/stats"
 module NATS
   class Service
     include MonitorMixin
-    include Extension
 
     DEFAULT_QUEUE = "q"
 
@@ -98,8 +96,26 @@ module NATS
       @status = Status.new(self)
       @callbacks = Callbacks.new(self)
 
-      @groups = []
-      @endpoints = []
+      @groups = Groups.new(self)
+      @endpoints = Endpoints.new(self)
+    end
+  end
+
+  class Services < NATS::Utils::List
+    attr_reader :client
+
+    def initialize(client)
+      @client = client
+      super
+    end
+
+    def add(options)
+      client.synchronize do
+        service = NATS::Service.new(client, options)
+        insert(service)
+
+        service
+      end
     end
   end
 end

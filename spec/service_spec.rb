@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "service/extension_examples"
-
 RSpec.describe NATS::Service do
   before(:all) do
     @server = NatsServerControl.new
@@ -14,7 +12,7 @@ RSpec.describe NATS::Service do
 
   let(:client) { NATS.connect }
 
-  subject { client.add_service(options) }
+  subject { client.services.add(options) }
 
   let(:service) { subject }
 
@@ -28,8 +26,6 @@ RSpec.describe NATS::Service do
   end
 
   after { client.close }
-
-  include_examples "extension"
 
   describe "#initialize" do
     context "when :name is valid" do
@@ -280,8 +276,8 @@ RSpec.describe NATS::Service do
 
   describe "#reset" do
     before do
-      subject.add_endpoint("bar") { |msg| msg.respond("bar") }
-      subject.add_endpoint("baz") { |msg| msg.respond("baz") }
+      subject.endpoints.add("bar") { |msg| msg.respond("bar") }
+      subject.endpoints.add("baz") { |msg| msg.respond("baz") }
 
       client.request("bar")
       client.request("baz")
