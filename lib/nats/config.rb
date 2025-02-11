@@ -38,17 +38,10 @@ module NATS
 
       private
 
-      def names
-        [name] + params[:aliases]
-      end
-
       def hash(options)
         names.detect do |name|
           options[name] || options[name.to_s]
         end
-        options[name]
-
-        params[:aliases]
 
         options[name]
       end

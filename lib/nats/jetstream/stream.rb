@@ -5,15 +5,15 @@ module NATS
     class Stream
       def initialize(config)
         @config = Config.new(config)
-        @stream = Manager.add_stream(config)
+        @stream = API.stream.create(config)
       end
 
       def update(config)
-        @stream = Manager.update_stream(config)
+        @stream = API.stream.update(config)
       end
 
       def delete
-        Manager.delete_stream(config)
+        API.stream.delete(config)
       end
 
       def publish(message, options)
@@ -23,10 +23,11 @@ module NATS
       end
 
       def info
-        Manager.stream_info(self)
+        API.stream.info(config)
       end
 
       def purge(options)
+        API.stream.purge(config)
       end
     end
   end
