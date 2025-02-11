@@ -48,7 +48,7 @@ service.id
 
 ## Endpoints
 
-An endpoint encapsulates the service logic and creates a subscription underneath it:
+An endpoint encapsulates the service logic and creates a subscription to handle the requests:
 
 ```ruby
 service.endpoints.add(name, options) do |message|
@@ -147,8 +147,8 @@ client.request("numbers.agg.avg", [3, 4, 5, 7].to_json)
 ## Service Lifecycle
 
 Every time you create a service or add endpoints to an already existing service, 
-subscriptions are created under the hood to handle the service's internal work.
-If your service finishes its job, you can stop it and will drain all its subscriptions with:
+a few subscriptions are created under the hood to handle the service's internal work.
+If your service finishes its job, you can stop it and drain all its subscriptions with:
 
 ```ruby
 service.stop
@@ -292,4 +292,4 @@ client.request("$SRV.STATS.calc")
 
 ## Examples
 
-For more examples, refer to [examples/service_api](examples/service_api) directory.
+For more examples, refer to [examples/service_api](../examples/service_api) directory.
