@@ -56,10 +56,9 @@ service.endpoints.add(name, options) do |message|
 end
 ```
 
-The options are:
+`name` is an alphanumeric human-readable string that describes the endpoint. Multiple endpoints can have the same names. 
 
-`name` is an alphanumeric human-readable string that describes the endpoint. Multiple endpoints can have the same names. Options can contain:
-
+Options can contain:
 - `:subject` (optional) - an optional NATS subject on which the endpoint will be registered. Defaults to `name`.
 - `:metadata` (optional) - a hash containing additional information about an endpoint.
 - `:queue` (optional) - an override for a service and group.
