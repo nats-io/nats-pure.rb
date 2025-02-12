@@ -14,8 +14,6 @@ describe "JetStream" do
     end
 
     it "should create pull subscribers with multiple filter subjects" do
-      skip "requires v2.10" unless ENV["NATS_SERVER_VERSION"] == "main"
-
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
@@ -148,8 +146,6 @@ describe "JetStream" do
     end
 
     it "should create push subscribers with multiple filter subjects" do
-      skip "requires v2.10" unless ENV["NATS_SERVER_VERSION"] == "main"
-
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
@@ -224,8 +220,6 @@ describe "JetStream" do
     end
 
     it "should create streams and customers with metadata" do
-      skip "requires v2.10" unless ENV["NATS_SERVER_VERSION"] == "main"
-
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       stream = js.add_stream({
