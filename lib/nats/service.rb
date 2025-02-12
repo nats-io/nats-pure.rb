@@ -6,7 +6,6 @@ require_relative "service/group"
 require_relative "service/endpoint"
 require_relative "service/errors"
 
-require_relative "service/validator"
 require_relative "service/callbacks"
 require_relative "service/monitoring"
 require_relative "service/status"
@@ -87,6 +86,14 @@ module NATS
       @metadata = options[:metadata].freeze
       @queue = options[:queue] || DEFAULT_QUEUE
     end
+
+    #class Config < NATS::Utils::Config
+      #option :name, type: :name
+      #option :version, type: :version
+      #option :description, type: :string
+      #option :metadata, type: :hash
+      #option :queue, type: :string, default: "q"
+    #end
 
     def setup_internals(client)
       @client = client

@@ -3,7 +3,7 @@
 module NATS
   class JetStream
     class Stream
-      class Config < Config
+      class Config < NATS::Utils::Config
         option :name, type: :string, validate: :name
         option :durable, type: :string, validate: :name
 

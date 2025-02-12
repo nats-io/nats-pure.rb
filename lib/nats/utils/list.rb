@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module NATS
-  class Utils
+  module Utils
     class List
       include Enumerable
 
