@@ -134,8 +134,6 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false
     )
-    expect(config).to eql(si.config)
-
     # v2.11 changes
     if ENV['NATS_SERVER_VERSION'] == "main"
       config.metadata = {
@@ -144,6 +142,7 @@ describe "KeyValue" do
         :"_nats.req.level" => "0"
       }
     end
+    expect(config).to eql(si.config)
 
     # Nothing from start
     expect do

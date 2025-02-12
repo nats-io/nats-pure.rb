@@ -899,6 +899,15 @@ describe "JetStream" do
 
       js = nc.jetstream(domain: "estre")
       info = js.account_info
+
+      # v2.11 starts to include API levels.
+      api_hash = nil
+      if ENV['NATS_SERVER_VERSION'] == "main"
+        api_hash = {total: 5, errors: 0, level: 1}
+      else
+        api_hash = {total: 5, errors: 0}
+      end
+
       expected = a_hash_including({
         type: "io.nats.jetstream.api.v1.account_info_response",
         memory: 0,
@@ -916,15 +925,12 @@ describe "JetStream" do
           max_bytes_required: false
         }),
         domain: "estre",
-        api: {total: 5, errors: 0}
+        api: api_hash,
       })
 
       # Filter these out
       info.delete(:reserved_memory) if info[:reserved_memory]
       info.delete(:reserved_storage) if info[:reserved_storage]
-
-      # v2.11 starts to include API levels.
-      expected[:api][:level] = 1 if ENV['NATS_SERVER_VERSION'] == "main"
 
       expect(info).to match(expected)
     end
