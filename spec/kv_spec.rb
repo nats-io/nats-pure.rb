@@ -136,6 +136,15 @@ describe "KeyValue" do
     )
     expect(config).to eql(si.config)
 
+    # v2.11 changes
+    if ENV['NATS_SERVER_VERSION'] == "main"
+      config.metadata = {
+        :"_nats.level" => "1",
+        :"_nats.ver"   => "2.11.0-dev",
+        :"_nats.req.level" => "0"
+      }
+    end
+
     # Nothing from start
     expect do
       kv.get("name")
