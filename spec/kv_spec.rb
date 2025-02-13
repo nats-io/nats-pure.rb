@@ -392,4 +392,289 @@ describe "KeyValue" do
 
     nc.close
   end
+
+  it 'should support watch' do
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "WATCH",
+    )
+
+    # Same as watch all the updates.
+    w = kv.watchall
+
+    # First update when there are no pending entries will be None
+    # to mark that there are no more pending updates.
+    e = w.updates(timeout: 1)
+    expect(e).to eql(nil)
+
+    kv.create("name", "alice:1")
+    e = w.updates
+    expect(e.delta) == 0
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:1'
+    expect(e.revision) == 1
+
+    kv.put("name", "alice:2")
+    e = w.updates
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:2'
+    expect(e.revision) == 2
+
+    kv.put("name", "alice:3")
+    e = w.updates
+    expect(e.key) == 'name'
+    expect(e.value) == 'alice:3'
+    expect(e.revision) == 3
+
+    kv.put("age", "22")
+    e = w.updates
+    expect(e.key) == 'age'
+    expect(e.value) == '22'
+    expect(e.revision) == 4
+
+    kv.put("age", "33")
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'age'
+    expect(e.value) == '33'
+    expect(e.revision) == 5
+
+    kv.delete('age')
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'age'
+    expect(e.value) == ''
+    expect(e.revision) == 6
+    expect(e.operation) == 'DEL'
+
+    kv.purge('name')
+    e = w.updates
+    expect(e.bucket) == 'WATCH'
+    expect(e.key) == 'name'
+    expect(e.value) == ''
+    expect(e.revision) == 7
+    expect(e.operation) == 'PURGE'
+
+    # No new updates at this point...
+    expect do
+      w.updates(timeout: 0.5)
+    end.to raise_error NATS::Timeout
+
+    # Stop the watcher.
+    w.stop
+
+    # Now try wildcard matching and make sure we only get last value when starting.
+    kv.create("new", "hello world")
+    kv.put("t.name", "a")
+    kv.put("t.name", "b")
+    kv.put("t.age", "c")
+    kv.put("t.age", "d")
+    kv.put("t.a", "a")
+    kv.put("t.b", "b")
+
+    w = kv.watch("t.*")
+
+    # There are values present so nil is _not_ sent to as an update.
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(3)
+    expect(e.key).to eql("t.name")
+    expect(e.value).to eql("b")
+    expect(e.revision).to eql(10)
+    expect(e.operation).to eql(nil)
+
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(2)
+    expect(e.key).to eql("t.age")
+    expect(e.value).to eql("d")
+    expect(e.revision).to eql(12)
+    expect(e.operation).to eql(nil)
+
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(1)
+    expect(e.key).to eql("t.a")
+    expect(e.value).to eql("a")
+    expect(e.revision).to eql(13)
+    expect(e.operation).to eql(nil)
+
+    # Consume next pending update.
+    e = w.updates
+    expect(e.bucket).to eql("WATCH")
+    expect(e.delta).to eql(0)
+    expect(e.key).to eql("t.b")
+    expect(e.value).to eql("b")
+    expect(e.revision).to eql(14)
+    expect(e.operation).to eql(nil)
+
+    # There are no more updates so client will be sent a marker to signal
+    # that there are no more updates.
+    e = w.updates
+    expect(e).to eql(nil)
+
+    # After getting the empty marker, subsequent watch attempts will be a timeout error.
+    expect do
+      w.updates(timeout: 1)
+    end.to raise_error NATS::Timeout
+
+    kv.put("t.hello", "hello world")
+    e = w.updates
+    expect(e.delta).to eql(0)
+    expect(e.key).to eql("t.hello")
+    expect(e.revision).to eql(15)
+
+    # Default watch timeout should 5 minutes
+    ci = js.consumer_info("KV_WATCH", w._sub.jsi.consumer)
+    ci.config.inactive_threshold == 300.0
+
+    # using meta only
+    w = kv.watchall(meta_only: true)
+    entries = w.take(2)
+    expect(entries.first.key).to eql('age')
+    expect(entries.first.value).to be_empty
+    expect(entries.last.key).to eql('name')
+    expect(entries.last.value).to be_empty
+
+    nc.close
+  end
+
+  it 'should support history' do
+    nc = NATS.connect(@s.uri)
+    nc.on_error do |e|
+      puts e
+    end
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "WATCHHISTORY",
+      history: 10
+    )
+    status = kv.status
+    expect(status.stream_info.config.max_msgs_per_subject).to eql(10)
+
+    50.times { |i| kv.put("age", "#{i}") }
+
+    vl = kv.history("age")
+    expect(vl.size).to eql(10)
+
+    i = 0
+    vl.each do |entry|
+      expect(entry.key).to eql('age')
+      expect(entry.revision).to eql(i + 41)
+      expect(entry.value.to_i).to eql(i + 40)
+      i += 1
+    end
+
+    expect do
+      w = kv.history("nothing")
+      w.take(1)
+    end.to raise_error NATS::KeyValue::NoKeysFoundError
+
+    expect do
+      js.create_key_value(
+        bucket: "TOOLARGE",
+        history: 65
+      )
+    end.to raise_error NATS::KeyValue::KeyHistoryTooLargeError
+
+    nc.close
+  end
+
+  it 'should support using watchers as enumerables' do
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "WATCH",
+    )
+
+    w = kv.watch("users.*")
+
+    1.upto(100).each do |n|
+      kv.create("users.#{n}", "A")
+    end
+
+    entries = w.take(10)
+
+    # FIXME: First was a empty marker, should continue taking instead?
+    expect(entries.size).to eql(9)
+    expect(entries.first.key).to eql("users.1")
+    expect(entries.last.key).to eql("users.9")
+
+    entries = w.take(1)
+    expect(entries.first.key).to eql("users.10")
+
+    entries = w.take(10)
+    expect(entries.size).to eql(10)
+    expect(entries.first.key).to eql("users.11")
+    expect(entries.last.key).to eql("users.20")
+
+    w.stop
+
+    # Can still peek after stopped.
+    entries = w.take(1)
+    expect(entries.first.key).to eql('users.21')
+
+    nc.close
+  end
+
+  it 'should support keys' do
+    nc = NATS.connect(@s.uri)
+    nc.on_error do |e|
+      puts e
+    end
+    js = nc.jetstream
+    kv = js.create_key_value(
+      bucket: "KVS",
+      history: 2
+    )
+
+    expect do
+      w = kv.keys
+      w.take(1)
+    end.to raise_error NATS::KeyValue::NoKeysFoundError
+    expect(kv.status.stream_info.config.max_msgs_per_subject).to eql(2)
+
+    kv.put("a", '1')
+    kv.put("b", '2')
+    kv.put("a", '11')
+    kv.put("b", '22')
+    kv.put("a", '111')
+    kv.put("b", '222')
+
+    keys = kv.keys.to_a
+    expect(keys.size).to eql(2) # last_per_subject
+
+    # Using a block
+    keys = []
+    kv.keys do |entry|
+      keys.append(entry)
+    end
+    expect(keys.size).to eql(2)
+
+    # Now delete some.
+    kv.delete("a")
+
+    # Should skip deleted entries
+    keys = kv.keys.select { |key|  key == 'a' }
+    expect(keys.size).to eql(0)
+    keys = kv.keys.reject { |key|  key == 'a' }
+    expect(keys.size).to eql(1)
+    kv.keys do |key|
+      expect(key).to_not eql('a')
+    end
+    expect(kv.keys.to_a).to eql(['b'])
+
+    kv.purge('b')
+
+    expect do
+      kv.keys.take(1)
+    end.to raise_error NATS::KeyValue::NoKeysFoundError
+
+    kv.create("c", '3')
+    expect(kv.keys.to_a.size).to eql(1)
+    expect(kv.keys.to_a).to eql(['c'])
+
+    nc.close
+  end
 end

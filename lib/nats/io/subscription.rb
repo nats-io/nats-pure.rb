@@ -34,6 +34,7 @@ module NATS
     attr_accessor :nc
     attr_accessor :jsi
     attr_accessor :closed, :drained
+    alias :delivered :received
 
     def initialize(**opts)
       super() # required to initialize monitor
