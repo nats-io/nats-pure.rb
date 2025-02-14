@@ -956,7 +956,7 @@ describe "JetStream" do
           ack_policy: "explicit",
           max_ack_pending: 20,
           max_waiting: 3,
-          ack_wait: 5 * 1_000_000_000 # 5 seconds
+          ack_wait: 5 # seconds
         }
       }
       resp = nc.jsm(domain: @domain).add_consumer(stream_name, consumer_req[:config])
