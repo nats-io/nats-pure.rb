@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "stream/config"
+
 module NATS
   class JetStream
     class Stream
