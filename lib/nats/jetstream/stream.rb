@@ -5,16 +5,18 @@ require_relative "stream/config"
 module NATS
   class JetStream
     class Stream
+      attr_reader :config, :api
+
       def initialize(client, config)
-        @client = client
         @config = Config.new(config)
         @api = Api.new(client)
 
-        @stream = api.stream.create(config)
+        api.stream.create(config)
       end
 
-      def update(config)
-        @stream = api.stream.update(config)
+      def update(values)
+        config.update(values)
+        api.stream.update(config)
       end
 
       def delete

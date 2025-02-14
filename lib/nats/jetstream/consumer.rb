@@ -5,22 +5,27 @@ require_relative "consumer/config"
 module NATS
   class JetStream
     class Consumer
-      attr_reader :stream, :config
+      attr_reader :config, :api
 
-      def initialize(config)
+      def initialize(stream, config)
+        @stream = stream
         @config = Config.new(config)
-        @consumer = Manager.add_consumer(stream, config)
+        @api = stream.api
+
+        api.consumer.create(stream, config)
       end
 
-      def update(config)
+      def update(values)
+        config.update(values)
+        api.consumer.update(config)
       end
 
       def delete
-        Manager.delete_consumer(stream, self)
+        api.consumer.delete(stream, config)
       end
 
       def info
-        Manager.consumer_info(stream, self)
+        api.consumer.delete(stream, config)
       end
 
       def next
