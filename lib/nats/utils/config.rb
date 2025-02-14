@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-require_relative "config/dsl"
+require_relative "config/error"
 require_relative "config/type"
+require_relative "config/dsl"
 
 module NATS
   module Utils

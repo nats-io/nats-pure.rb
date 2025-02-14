@@ -4,62 +4,74 @@ module NATS
   module Utils
     class Config
       module DSL
+        attr_accessor :configs
+
+        TYPES = {
+          string: NATS::Utils::Config::StringType,
+          integer: NATS::Utils::Config::IntegerType,
+          bool: NATS::Utils::Config::BoolType,
+          hash: NATS::Utils::Config::HashType,
+          array: NATS::Utils::Config::ArrayType,
+          object: NATS::Utils::Config::ObjectType
+        }.freeze
+
         def schema
           @schema ||= {}
         end
 
-        def types
-          @types ||= {
-            string: StringType,
-            integer: IntegerType,
-            bool: BoolType,
-            array: ArrayType,
-            hash: HashType
-          }
+        def configs
+          @configs ||= {}
         end
 
         def string(name, params = {})
-          register(StringType.new(name, params))
+          register(:string, name, params)
         end
 
         def integer(name, params = {})
-          register(IntegerType.new(name, params))
+          register(:integer, name, params)
         end
 
         def bool(name, params = {})
-          register(BoolType.new(name, params))
-        end
-
-        def array(name, params = {}, &block)
-          params[:of] = types[params[:of]] if params[:of]
-          params[:of] = type(name, &block) if block
-
-          register(ArrayType.new(name, params))
+          register(:bool, name, params)
         end
 
         def hash(name, params = {})
-          register(HashType.new(name, params))
+          register(:hash, name, params)
+        end
+
+        def array(name, params = {}, &block)
+          config(name, &block) if block
+          config = configs[params[:of] || name]
+
+          if config
+            params[:item] = ObjectType.new(name, config: config)
+          else
+            params[:item] = TYPES[params[:of]].new(name, params)
+          end
+
+          register(:array, name, params)
         end
 
         def object(name, params = {}, &block)
-          params[:of] = types[params[:of]] if params[:of]
-          params[:of] = type(name, &block) if block
+          config(name, &block) if block
+          params[:config] = configs[params[:of] || name]
 
-          register(ObjectType.new(name, params))
+          register(:object, name, params)
         end
 
-        def type(name, &block)
-          type = Class.new(Config)
-          type.class_eval(&block)
+        def config(name, &block)
+          config = Class.new(Config)
+          config.configs = configs
+          config.class_eval(&block)
 
-          types[name] = type
+          configs[name] = config
         end
 
         private
 
-        def register(type)
-          schema[type.name] = type
-          attr_reader type.name
+        def register(type, name, params)
+          schema[name] = TYPES[type].new(name, params)
+          attr_reader name
         end
       end
     end

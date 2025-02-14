@@ -26,7 +26,7 @@ module NATS
         end
 
         def validate(value)
-          raise "" if params[:required] && value.nil?
+          raise EmptyError.new(name, value) if params[:required] && value.nil?
         end
 
         def env
@@ -42,7 +42,7 @@ module NATS
         end
 
         def validate(value)
-          raise "" if params[:required] && value.nil?
+          super
           return if value.nil?
 
           if params[:as]
@@ -50,7 +50,7 @@ module NATS
           end
 
           if params[:in]
-            raise "" unless params[:in].include?(value)
+            raise InclusionError.new(self, value) unless params[:in].include?(value)
           end
         end
       end
@@ -63,24 +63,24 @@ module NATS
           if value.respond_to?(:to_i)
             value.to_i
           else
-            raise "invalid value"
+            raise IntegerError.new(name, value)
           end
         end
 
         def validate(value)
-          raise "" if params[:required] && value.nil?
+          super
           return if value.nil?
 
           if params[:in]
-            raise "" unless params[:in].include?(value)
+            raise InclusionError.new(self, value) unless params[:in].include?(value)
           end
 
           if params[:max]
-            raise "" unless value > params[:max]
+            raise MaxError.new(self, value) unless value > params[:max]
           end
 
           if params[:min]
-            raise "" unless value < params[:min]
+            raise MinError.new(self, value) unless value < params[:min]
           end
         end
       end
@@ -96,18 +96,18 @@ module NATS
           if value.respond_to?(:to_h)
             value.to_h
           else
-            raise "invalid value"
+            raise HashError.new(name, value)
           end
         end
       end
 
       # params[:of]
       class ArrayType < Type
-        def typecast(values)
-          raise "" unless values.respond_to?(:map)
+        def typecast(value)
+          raise ArrayError.new(name, value) unless value.respond_to?(:map)
 
-          values.map do |value|
-            params[:of].value(value)
+          value.map do |item|
+            params[:item].value(name => item)
           end
         end
       end
@@ -115,7 +115,7 @@ module NATS
       # params[:of]
       class ObjectType < Type
         def typecast(value)
-          params[:of].new(value)
+          params[:config].new(value)
         end
       end
     end

@@ -13,19 +13,33 @@ require_relative "service/stats"
 
 module NATS
   class Service
+    class Config < NATS::Utils::Config
+      string :name, as: :name
+      string :version, as: :version
+      string :description
+      string :queue, default: "q"
+
+      hash :metadata
+    end
+
     include MonitorMixin
 
-    DEFAULT_QUEUE = "q"
-
-    attr_reader :client, :name, :id, :version, :description, :metadata, :queue
-    attr_reader :monitoring, :status, :callbacks, :groups, :endpoints
+    attr_reader :client, :config, :id, :monitoring, :status, :callbacks, :groups, :endpoints
 
     def initialize(client, options)
       super()
-      validate(options)
 
-      setup_options(options)
-      setup_internals(client)
+      @config = Config.new(options)
+
+      @client = client
+      @id = NATS::NUID.next
+
+      @monitoring = Monitoring.new(self)
+      @status = Status.new(self)
+      @callbacks = Callbacks.new(self)
+
+      @groups = Groups.new(self)
+      @endpoints = Endpoints.new(self)
     end
 
     def on_stats(&block)
@@ -71,40 +85,6 @@ module NATS
 
     def subject
       nil
-    end
-
-    private
-
-    def validate(options)
-      Validator.validate(options.slice(:name, :version, :queue))
-    end
-
-    def setup_options(options)
-      @name = options[:name]
-      @version = options[:version]
-      @description = options[:description]
-      @metadata = options[:metadata].freeze
-      @queue = options[:queue] || DEFAULT_QUEUE
-    end
-
-    #class Config < NATS::Utils::Config
-      #option :name, type: :name
-      #option :version, type: :version
-      #option :description, type: :string
-      #option :metadata, type: :hash
-      #option :queue, type: :string, default: "q"
-    #end
-
-    def setup_internals(client)
-      @client = client
-      @id = NATS::NUID.next
-
-      @monitoring = Monitoring.new(self)
-      @status = Status.new(self)
-      @callbacks = Callbacks.new(self)
-
-      @groups = Groups.new(self)
-      @endpoints = Endpoints.new(self)
     end
   end
 
