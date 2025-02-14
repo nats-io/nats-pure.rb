@@ -233,7 +233,7 @@ module NATS
 
       # Enable auto acking for async callbacks unless disabled.
       # In case ack policy is none then we also do not require to ack.
-      if cb and !manual_ack and config.ack_policy != "none"
+      if cb && !manual_ack && (config.ack_policy != "none")
         ocb = cb
         new_cb = proc do |msg|
           ocb.call(msg)

@@ -213,16 +213,18 @@ describe "JetStream" do
 
       # Create pull subscriber as well in stream with push subscribers
       expect do
-        sub = js.pull_subscribe(["foo.one.1", "foo.two.2"], "psub4", { config: { ack_wait: 1 }})
+        sub = js.pull_subscribe(["foo.one.1", "foo.two.2"], "psub4", {config: {ack_wait: 1}})
         info = sub.consumer_info
-        expect(info.name).to eql('psub4')
+        expect(info.name).to eql("psub4")
         result = info.num_ack_pending + info.num_redelivered + info.num_pending
         expect(result).to eql(3)
         # drop the messages so that they are in ack pending
-        begin
-          sub.fetch(3)
-        rescue
-        end if info.num_pending > 0
+        if info.num_pending > 0
+          begin
+            sub.fetch(3)
+          rescue
+          end
+        end
         info = sub.consumer_info
         expect(info.num_ack_pending).to eql(3)
         msgs = []
@@ -233,9 +235,9 @@ describe "JetStream" do
             msgs << msg
           end
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
         expect(msgs.count).to eql(3)
       end.to_not raise_error
 

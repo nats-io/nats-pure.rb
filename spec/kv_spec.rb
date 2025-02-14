@@ -135,11 +135,11 @@ describe "KeyValue" do
       mirror_direct: false
     )
     # v2.11 changes
-    if ENV['NATS_SERVER_VERSION'] == "main"
+    if ENV["NATS_SERVER_VERSION"] == "main"
       config.metadata = {
-        :"_nats.level" => "1",
-        :"_nats.ver"   => "2.11.0-dev",
-        :"_nats.req.level" => "0"
+        "_nats.level": "1",
+        "_nats.ver": "2.11.0-dev",
+        "_nats.req.level": "0"
       }
     end
     expect(config).to eql(si.config)
@@ -393,14 +393,14 @@ describe "KeyValue" do
     nc.close
   end
 
-  major, minor, patch = RUBY_VERSION.split('.')
-  it 'should support watch' do
-    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+  major, minor, _ = RUBY_VERSION.split(".")
+  it "should support watch" do
+    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
 
     nc = NATS.connect(@s.uri)
     js = nc.jetstream
     kv = js.create_key_value(
-      bucket: "WATCH",
+      bucket: "WATCH"
     )
 
     # Same as watch all the updates.
@@ -413,51 +413,51 @@ describe "KeyValue" do
 
     kv.create("name", "alice:1")
     e = w.updates
-    expect(e.delta) == 0
-    expect(e.key) == 'name'
-    expect(e.value) == 'alice:1'
-    expect(e.revision) == 1
+    expect(e.delta).to eql(0)
+    expect(e.key).to eql("name")
+    expect(e.value).to eql("alice:1")
+    expect(e.revision).to eql(1)
 
     kv.put("name", "alice:2")
     e = w.updates
-    expect(e.key) == 'name'
-    expect(e.value) == 'alice:2'
-    expect(e.revision) == 2
+    expect(e.key).to eql("name")
+    expect(e.value).to eql("alice:2")
+    expect(e.revision).to eql(2)
 
     kv.put("name", "alice:3")
     e = w.updates
-    expect(e.key) == 'name'
-    expect(e.value) == 'alice:3'
-    expect(e.revision) == 3
+    expect(e.key).to eql("name")
+    expect(e.value).to eql("alice:3")
+    expect(e.revision).to eql(3)
 
     kv.put("age", "22")
     e = w.updates
-    expect(e.key) == 'age'
-    expect(e.value) == '22'
-    expect(e.revision) == 4
+    expect(e.key).to eql('age')
+    expect(e.value).to eql('22')
+    expect(e.revision).to eql(4)
 
     kv.put("age", "33")
     e = w.updates
-    expect(e.bucket) == 'WATCH'
-    expect(e.key) == 'age'
-    expect(e.value) == '33'
-    expect(e.revision) == 5
+    expect(e.bucket).to eql("WATCH")
+    expect(e.key).to eql("age")
+    expect(e.value).to eql('33')
+    expect(e.revision).to eql(5)
 
-    kv.delete('age')
+    kv.delete("age")
     e = w.updates
-    expect(e.bucket) == 'WATCH'
-    expect(e.key) == 'age'
-    expect(e.value) == ''
-    expect(e.revision) == 6
-    expect(e.operation) == 'DEL'
+    expect(e.bucket).to eql('WATCH')
+    expect(e.key).to eql('age')
+    expect(e.value).to eql('')
+    expect(e.revision).to eql(6)
+    expect(e.operation).to eql('DEL')
 
-    kv.purge('name')
+    kv.purge("name")
     e = w.updates
-    expect(e.bucket) == 'WATCH'
-    expect(e.key) == 'name'
-    expect(e.value) == ''
-    expect(e.revision) == 7
-    expect(e.operation) == 'PURGE'
+    expect(e.bucket).to eql('WATCH')
+    expect(e.key).to eql('name')
+    expect(e.value).to eql('')
+    expect(e.revision).to eql(7)
+    expect(e.operation).to eql('PURGE')
 
     # No new updates at this point...
     expect do
@@ -530,21 +530,22 @@ describe "KeyValue" do
 
     # Default watch timeout should 5 minutes
     ci = js.consumer_info("KV_WATCH", w._sub.jsi.consumer)
-    ci.config.inactive_threshold == 300.0
+    expect(ci.config.idle_heartbeat).to eql(5)
+    expect(ci.config.inactive_threshold).to eql(300)
 
     # using meta only
     w = kv.watchall(meta_only: true)
     entries = w.take(2)
-    expect(entries.first.key).to eql('age')
+    expect(entries.first.key).to eql("age")
     expect(entries.first.value).to be_empty
-    expect(entries.last.key).to eql('name')
+    expect(entries.last.key).to eql("name")
     expect(entries.last.value).to be_empty
 
     nc.close
   end
 
-  it 'should support history' do
-    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+  it "should support history" do
+    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
 
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|
@@ -558,14 +559,14 @@ describe "KeyValue" do
     status = kv.status
     expect(status.stream_info.config.max_msgs_per_subject).to eql(10)
 
-    50.times { |i| kv.put("age", "#{i}") }
+    50.times { |i| kv.put("age", i.to_s) }
 
     vl = kv.history("age").to_a
     expect(vl.size).to eql(10)
 
     i = 0
     vl.each do |entry|
-      expect(entry.key).to eql('age')
+      expect(entry.key).to eql("age")
       expect(entry.revision).to eql(i + 41)
       expect(entry.value.to_i).to eql(i + 40)
       i += 1
@@ -586,11 +587,11 @@ describe "KeyValue" do
     nc.close
   end
 
-  it 'should support using watchers as enumerables' do
+  it "should support using watchers as enumerables" do
     nc = NATS.connect(@s.uri)
     js = nc.jetstream
     kv = js.create_key_value(
-      bucket: "WATCH",
+      bucket: "WATCH"
     )
 
     w = kv.watch("users.*")
@@ -618,13 +619,13 @@ describe "KeyValue" do
 
     # Can still peek after stopped.
     entries = w.take(1)
-    expect(entries.first.key).to eql('users.21')
+    expect(entries.first.key).to eql("users.21")
 
     nc.close
   end
 
-  it 'should support keys' do
-    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+  it "should support keys" do
+    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
 
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|
@@ -642,12 +643,12 @@ describe "KeyValue" do
     end.to raise_error NATS::KeyValue::NoKeysFoundError
     expect(kv.status.stream_info.config.max_msgs_per_subject).to eql(2)
 
-    kv.put("a", '1')
-    kv.put("b", '2')
-    kv.put("a", '11')
-    kv.put("b", '22')
-    kv.put("a", '111')
-    kv.put("b", '222')
+    kv.put("a", "1")
+    kv.put("b", "2")
+    kv.put("a", "11")
+    kv.put("b", "22")
+    kv.put("a", "111")
+    kv.put("b", "222")
 
     keys = kv.keys.to_a
     expect(keys.size).to eql(2) # last_per_subject
@@ -663,24 +664,24 @@ describe "KeyValue" do
     kv.delete("a")
 
     # Should skip deleted entries
-    keys = kv.keys.select { |key|  key == 'a' }
+    keys = kv.keys.select { |key| key == "a" }
     expect(keys.size).to eql(0)
-    keys = kv.keys.reject { |key|  key == 'a' }
+    keys = kv.keys.reject { |key| key == "a" }
     expect(keys.size).to eql(1)
     kv.keys do |key|
-      expect(key).to_not eql('a')
+      expect(key).to_not eql("a")
     end
-    expect(kv.keys.to_a).to eql(['b'])
+    expect(kv.keys.to_a).to eql(["b"])
 
-    kv.purge('b')
+    kv.purge("b")
 
     expect do
       kv.keys.take(1)
     end.to raise_error NATS::KeyValue::NoKeysFoundError
 
-    kv.create("c", '3')
+    kv.create("c", "3")
     expect(kv.keys.to_a.size).to eql(1)
-    expect(kv.keys.to_a).to eql(['c'])
+    expect(kv.keys.to_a).to eql(["c"])
 
     nc.close
   end

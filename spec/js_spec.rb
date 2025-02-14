@@ -901,11 +901,10 @@ describe "JetStream" do
       info = js.account_info
 
       # v2.11 starts to include API levels.
-      api_hash = nil
-      if ENV['NATS_SERVER_VERSION'] == "main"
-        api_hash = {total: 5, errors: 0, level: 1}
+      api_hash = if ENV["NATS_SERVER_VERSION"] == "main"
+        {total: 5, errors: 0, level: 1}
       else
-        api_hash = {total: 5, errors: 0}
+        {total: 5, errors: 0}
       end
 
       expected = a_hash_including({
@@ -925,7 +924,7 @@ describe "JetStream" do
           max_bytes_required: false
         }),
         domain: "estre",
-        api: api_hash,
+        api: api_hash
       })
 
       # Filter these out
