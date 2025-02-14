@@ -432,32 +432,32 @@ describe "KeyValue" do
 
     kv.put("age", "22")
     e = w.updates
-    expect(e.key).to eql('age')
-    expect(e.value).to eql('22')
+    expect(e.key).to eql("age")
+    expect(e.value).to eql("22")
     expect(e.revision).to eql(4)
 
     kv.put("age", "33")
     e = w.updates
     expect(e.bucket).to eql("WATCH")
     expect(e.key).to eql("age")
-    expect(e.value).to eql('33')
+    expect(e.value).to eql("33")
     expect(e.revision).to eql(5)
 
     kv.delete("age")
     e = w.updates
-    expect(e.bucket).to eql('WATCH')
-    expect(e.key).to eql('age')
-    expect(e.value).to eql('')
+    expect(e.bucket).to eql("WATCH")
+    expect(e.key).to eql("age")
+    expect(e.value).to eql("")
     expect(e.revision).to eql(6)
-    expect(e.operation).to eql('DEL')
+    expect(e.operation).to eql("DEL")
 
     kv.purge("name")
     e = w.updates
-    expect(e.bucket).to eql('WATCH')
-    expect(e.key).to eql('name')
-    expect(e.value).to eql('')
+    expect(e.bucket).to eql("WATCH")
+    expect(e.key).to eql("name")
+    expect(e.value).to eql("")
     expect(e.revision).to eql(7)
-    expect(e.operation).to eql('PURGE')
+    expect(e.operation).to eql("PURGE")
 
     # No new updates at this point...
     expect do
