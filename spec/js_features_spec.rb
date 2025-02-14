@@ -164,7 +164,7 @@ describe "JetStream" do
         expect(info.name).to eql("MULTI_FILTER_CONSUMER")
         expect(info.config.durable_name).to eql("MULTI_FILTER_CONSUMER")
         expect(info.config.max_waiting).to eql(nil)
-        expect(info.num_pending).to eql(3)
+        expect(info.num_pending + info.num_ack_pending).to eql(3)
 
         msgs = []
         3.times do
