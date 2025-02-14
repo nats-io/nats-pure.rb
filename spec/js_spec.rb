@@ -602,10 +602,10 @@ describe "JetStream" do
       cinfo = js.add_consumer("ctests",
         name: consumer_name,
         durable_name: consumer_name,
-        inactive_threshold: 2,
+        inactive_threshold: 2, # seconds
         ack_policy: "explicit",
         mem_storage: true)
-      expect(cinfo.config.inactive_threshold).to eql(2000000000)
+      expect(cinfo.config.inactive_threshold).to eql(2)
       expect(cinfo.config.mem_storage).to eql(true)
     end
   end
