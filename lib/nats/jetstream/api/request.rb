@@ -4,41 +4,27 @@ module NATS
   class JetStream
     class API
       class Request
-        def initialize(client:, group:, subject:, response:)
-          @client = client
-          @name = subject
+        def initialize(name:, group:, response:)
+          @name = name
           @group = group
           @response = response
-          @subject = "#{group.subject}.#{subject}"
+          @subject = "#{group.subject}.#{name}"
         end
 
-        def request(subject, data, params)
+        def request(client:, subject:, data:, params:)
+          subject = [@subject, subject].compact.join(".")
+
           message = begin
             client.request(subject, data.to_json, **params)
           rescue NATS::IO::NoRespondersError
-            #raise JetStream::Error::ServiceUnavailable
-          end
-        end
-
-
-        def api_request(req_subject, req = "", params = {})
-          params[:timeout] ||= @opts[:timeout]
-          msg = begin
-            @nc.request(req_subject, req, **params)
-          rescue NATS::IO::NoRespondersError
-            raise JetStream::Error::ServiceUnavailable
+            raise JetStream::ServiceUnavailableError
           end
 
-          result = if params[:direct]
-            msg
-          else
-            JSON.parse(msg.data, symbolize_names: true)
-          end
-          if result.is_a?(Hash) && result[:error]
-            raise JS.from_error(result[:error])
-          end
+          data = JSON.parse(message.data, symbolize_names: true)
+          raise data[:error] if data[:error]
 
-          result
+          #response.new(data)
+          data
         end
       end
     end

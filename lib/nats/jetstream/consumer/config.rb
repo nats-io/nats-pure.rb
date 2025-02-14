@@ -18,7 +18,7 @@ module NATS
 
         # DeliverPolicy defines from which point to start delivering messages
         # from the stream. Defaults to DeliverAllPolicy.
-        string :deliver_policy in: %w[all last last_per_subject new by_start_sequence by_start_time], default: "all"
+        string :deliver_policy, in: %w[all last last_per_subject new by_start_sequence by_start_time], default: "all"
 
         # OptStartSeq is an optional sequence number from which to start
         # message delivery. Only applicable when DeliverPolicy is set to

@@ -1,53 +1,65 @@
 # frozen_string_literal: true
 
+require_relative "api/dsl"
+require_relative "api/group"
+require_relative "api/request"
+require_relative "api/response"
+
 module NATS
   class JetStream
     class API
-      DEFAULT_PREFIX = "$JS".freeze
+      extend DSL
 
-      request :info, Response
+      class << self
+        def subject
+          "$JS"
+        end
+      end
+
+      request :info, StreamInfo, subject: false
 
       group :stream do
-        request :create, StreamResponse
-        request :update, StreamResponse
-        request :info, StreamInfoResponse
-        request :delete, StreamInfoResponse
-        request :purge, StreamInfoResponse
+        request :create, StreamInfo
+        request :update, StreamInfo
+        request :info, StreamInfo
+        request :delete, StreamInfo
+        request :purge, StreamInfo
 
-        request :names, StreamResponse, subject: false
-        request :list, StreamResponse, subject: false
+        request :names, StreamInfo, subject: false
+        request :list, StreamInfo, subject: false
 
         group :msg do
-          request :get, StreamInfoResponse
-          request :delete, StreamInfoResponse
+          request :get, StreamInfo
+          request :delete, StreamInfo
         end
 
-        request :snapshot, Response
-        request :restore, Response
+        request :snapshot, StreamInfo
+        request :restore, StreamInfo
 
         group :peer do
-          request :remove, Response
+          request :remove, StreamInfo
         end
 
         group :leader do
-          request :stepdown, Response
+          request :stepdown, StreamInfo
         end
       end
 
       group :consumer do
-        request :create, Response
+        request :create, ConsumerInfo
 
         group :durable do
-          request :create, Response
+          request :create, ConsumerInfo
         end
 
-        request :delete, Response
-        request :info, Response
-        request :list, Response
-        request :names, Response
+        request :delete, ConsumerInfo
+        request :info, ConsumerInfo
+        request :list, ConsumerInfo
+        request :names, ConsumerInfo
       end
 
-      def request(subject, options)
+      def initialize(client)
+        @client = client
       end
     end
   end

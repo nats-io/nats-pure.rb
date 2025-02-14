@@ -17,9 +17,9 @@
 module NATS
   class JetStream
     # JetStream::API are the types used to interact with the JetStream API.
-    module API
+    class API
       # When the server responds with an error from the JetStream API.
-      Error = ::NATS::JetStream::Error::APIError
+      #Error = ::NATS::JetStream::Error::APIError
 
       # SequenceInfo is a pair of consumer and stream sequence and last activity.
       # @!attribute consumer_seq

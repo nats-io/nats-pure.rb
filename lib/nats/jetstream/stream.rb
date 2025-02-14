@@ -5,17 +5,20 @@ require_relative "stream/config"
 module NATS
   class JetStream
     class Stream
-      def initialize(config)
+      def initialize(client, config)
+        @client = client
         @config = Config.new(config)
-        @stream = API.stream.create(config)
+        @api = Api.new(client)
+
+        @stream = api.stream.create(config)
       end
 
       def update(config)
-        @stream = API.stream.update(config)
+        @stream = api.stream.update(config)
       end
 
       def delete
-        API.stream.delete(config)
+        api.stream.delete(config)
       end
 
       def publish(message, options)
@@ -25,11 +28,11 @@ module NATS
       end
 
       def info
-        API.stream.info(config)
+        api.stream.info(config)
       end
 
       def purge(options)
-        API.stream.purge(config)
+        api.stream.purge(config)
       end
     end
   end
