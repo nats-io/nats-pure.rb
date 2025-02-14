@@ -393,7 +393,10 @@ describe "KeyValue" do
     nc.close
   end
 
+  major, minor, patch = RUBY_VERSION.split('.')
   it 'should support watch' do
+    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+
     nc = NATS.connect(@s.uri)
     js = nc.jetstream
     kv = js.create_key_value(
@@ -541,6 +544,8 @@ describe "KeyValue" do
   end
 
   it 'should support history' do
+    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|
       puts e
@@ -555,7 +560,7 @@ describe "KeyValue" do
 
     50.times { |i| kv.put("age", "#{i}") }
 
-    vl = kv.history("age")
+    vl = kv.history("age").to_a
     expect(vl.size).to eql(10)
 
     i = 0
@@ -619,6 +624,8 @@ describe "KeyValue" do
   end
 
   it 'should support keys' do
+    skip 'watch requires ruby >= 3.2' if major >= '3' and minor < '2'
+
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|
       puts e
@@ -645,9 +652,9 @@ describe "KeyValue" do
     keys = kv.keys.to_a
     expect(keys.size).to eql(2) # last_per_subject
 
-    # Using a block
+    # Using a block with each
     keys = []
-    kv.keys do |entry|
+    kv.keys.each do |entry|
       keys.append(entry)
     end
     expect(keys.size).to eql(2)
