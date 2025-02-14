@@ -52,11 +52,10 @@ module NATS
           end
           config.ttl = config.ttl * ::NATS::NANOSECONDS
         end
-        
+
         if config.history > 64
           raise NATS::KeyValue::KeyHistoryTooLargeError
         end
-
 
         stream = JetStream::API::StreamConfig.new(
           name: "KV_#{config.bucket}",

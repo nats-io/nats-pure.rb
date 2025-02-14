@@ -180,19 +180,18 @@ module NATS
     end
 
     # watch will be signaled when any key is updated.
-    def watchall(params={})
+    def watchall(params = {})
       watch(">", params)
     end
 
     # keys returns the keys from a KeyValue store.
     # Optionally filters the keys based on the provided filter list.
-    def keys(params={})
+    def keys(params = {})
       params[:ignore_deletes] = true
       params[:meta_only] = true
 
       w = watchall(params)
       got_keys = false
-      keys = []
 
       Enumerator.new do |y|
         w.each do |entry|
@@ -206,7 +205,7 @@ module NATS
     end
 
     # history retrieves the entries so far for a key.
-    def history(key, params={})
+    def history(key, params = {})
       params[:include_history] = true
       w = watch(key, params)
       got_keys = false
@@ -226,33 +225,35 @@ module NATS
     # pattern is updated.
     # The first update after starting the watch is nil in case
     # there are no pending updates.
-    def watch(keys, params={})
+    def watch(keys, params = {})
       params[:meta_only] ||= false
       params[:include_history] ||= false
       params[:ignore_deletes] ||= false
-      params[:idle_heartbeat] ||= 5 * 60 # 5 min
+      params[:idle_heartbeat] ||= 5 # 5 seconds
+      params[:inactive_threshold] ||= 5 * 60 # 5 minutes
       subject = "#{@pre}#{keys}"
       init_setup = new_cond
       init_setup_done = false
       watcher = KeyWatcher.new(@js)
-      
-      deliver_policy = if not params[:include_history]
-                         "last_per_subject"
-                       end
+
+      deliver_policy = if !(params[:include_history])
+        "last_per_subject"
+      end
 
       ordered = {
         # basic ordered consumer.
-        :flow_control => true,
-        :ack_policy => "none",
-        :max_deliver => 1,
-        :ack_wait => 22 * 3600,
-        :idle_heartbeat => params[:idle_heartbeat],
-        :num_replicas => 1,
-        :mem_storage => true,
-        :manual_ack => true,
+        flow_control: true,
+        ack_policy: "none",
+        max_deliver: 1,
+        ack_wait: 22 * 3600,
+        idle_heartbeat: params[:idle_heartbeat],
+        num_replicas: 1,
+        mem_storage: true,
+        manual_ack: true,
         # watch related options.
-        :deliver_policy => deliver_policy,
-        :headers_only => params[:meta_only],
+        deliver_policy: deliver_policy,
+        headers_only: params[:meta_only],
+        inactive_threshold: params[:inactive_threshold]
       }
 
       # watch_updates callback.
@@ -265,13 +266,13 @@ module NATS
 
         meta = msg.metadata
         op = nil
-        if msg.header and msg.header[KV_OP]
+        if msg.header && msg.header[KV_OP]
           op = msg.header[KV_OP]
 
           # keys() uses this
           if params[:ignore_deletes]
-            if op == KV_PURGE or op == KV_DEL
-              if meta.num_pending == 0 and not watcher._init_done
+            if (op == KV_PURGE) || (op == KV_DEL)
+              if (meta.num_pending == 0) && !watcher._init_done
                 # Push this to unblock enumerators.
                 watcher._updates.push(nil)
                 watcher._init_done = true
@@ -284,19 +285,19 @@ module NATS
         # Convert the msg into an Entry.
         key = msg.subject[@pre.size...msg.subject.size]
         entry = Entry.new(
-                          bucket: @name,
-                          key: key,
-                          value: msg.data,
-                          revision: meta.sequence.stream,
-                          delta: meta.num_pending,
-                          created: meta.timestamp,
-                          operation: op,
-                          )
+          bucket: @name,
+          key: key,
+          value: msg.data,
+          revision: meta.sequence.stream,
+          delta: meta.num_pending,
+          created: meta.timestamp,
+          operation: op
+        )
         watcher._updates.push(entry)
 
         # When there are no more updates send an empty marker
         # to signal that it is done, this will unblock iterators.
-        if meta.num_pending == 0 and (!watcher._init_done)
+        if (meta.num_pending == 0) && !watcher._init_done
           watcher._updates.push(nil)
           watcher._init_done = true
         end
@@ -305,10 +306,9 @@ module NATS
 
       # Check from consumer info what is the number of messages
       # awaiting to be consumed to send the initial signal marker.
-      pending = 0
       begin
         cinfo = sub.consumer_info
-        pending = cinfo.num_pending
+        cinfo.num_pending
 
         synchronize do
           init_setup_done = true
@@ -321,12 +321,11 @@ module NATS
 
           # When there are no more updates send an empty marker
           # to signal that it is done, this will unblock iterators.
-          if cinfo.num_pending == 0 and received == 0
+          if (cinfo.num_pending == 0) && (received == 0)
             watcher._updates.push(nil)
             watcher._init_done = true
           end
         end
-
       rescue => err
         # cancel init
         sub.unsubscribe
@@ -350,13 +349,13 @@ module NATS
     end
 
     def stop
-      @_sub.unsubscribe()
+      @_sub.unsubscribe
     end
 
-    def updates(params={})
+    def updates(params = {})
       params[:timeout] ||= 5
       result = nil
-      MonotonicTime::with_nats_timeout(params[:timeout]) do
+      MonotonicTime.with_nats_timeout(params[:timeout]) do
         result = @_updates.pop(timeout: params[:timeout])
       end
 
@@ -367,7 +366,7 @@ module NATS
     def each
       loop do
         result = @_updates.pop
-        yield result 
+        yield result
       end
     end
 
