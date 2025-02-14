@@ -189,49 +189,37 @@ module NATS
     def keys(params={})
       params[:ignore_deletes] = true
       params[:meta_only] = true
+
       w = watchall(params)
       got_keys = false
       keys = []
 
-      if block_given?
+      Enumerator.new do |y|
         w.each do |entry|
           break if entry.nil?
           got_keys = true
-          yield entry
+          y << entry.key
         end
-      else
-        return Enumerator.new do |y|
-          w.each do |entry|
-            break if entry.nil?
-            got_keys = true
-            y << entry.key
-          end
-          w.stop
-          raise NoKeysFoundError unless got_keys
-        end
+        w.stop
+        raise NoKeysFoundError unless got_keys
       end
-      w.stop
-      raise NoKeysFoundError unless got_keys
-
     end
 
-    # history retrieves a list of the entries so far.
+    # history retrieves the entries so far for a key.
     def history(key, params={})
       params[:include_history] = true
-      watcher = self.watch(key, params)
-      entries = []
+      w = watch(key, params)
+      got_keys = false
 
-      watcher.each do |entry|
-        break if entry.nil?
-        entries.append(entry)
+      Enumerator.new do |y|
+        w.each do |entry|
+          break if entry.nil?
+          got_keys = true
+          y << entry
+        end
+        w.stop
+        raise NoKeysFoundError unless got_keys
       end
-      watcher.stop
-
-      if entries.size == 0
-        raise NoKeysFoundError
-      end
-
-      entries
     end
 
     # watch will be signaled when a key that matches the keys
