@@ -685,4 +685,46 @@ describe "KeyValue" do
 
     nc.close
   end
+
+  it "should validate keys optionally" do
+    nc = NATS.connect(@s.uri)
+    nc.on_error do |e|
+      puts e
+    end
+    js = nc.jetstream
+    kv1 = js.create_key_value(
+      bucket: "TEST",
+      history: 5,
+      ttl: 3600,
+      validate_keys: true
+    )
+    kv2 = js.key_value("TEST", validate_keys: true)
+
+    bad_keys = [
+      "foo+bar",
+      "foo!bar",
+      ".foo.bar",
+      "foo.bar.",
+      "foo bar"
+    ]
+
+    [kv1, kv2].each do |kv|
+      bad_keys.each do |key|
+        expect do
+          kv.put(key, "bad key")
+        end.to raise_error NATS::KeyValue::InvalidKeyError
+        expect do
+          kv.get(key)
+        end.to raise_error NATS::KeyValue::InvalidKeyError
+        expect do
+          kv.purge(key)
+        end.to raise_error NATS::KeyValue::InvalidKeyError
+        expect do
+          kv.delete(key)
+        end.to raise_error NATS::KeyValue::InvalidKeyError
+      end
+    end
+
+    nc.close
+  end
 end

@@ -17,7 +17,7 @@
 module NATS
   class KeyValue
     module Manager
-      def key_value(bucket)
+      def key_value(bucket, params = {})
         stream = "KV_#{bucket}"
         begin
           si = stream_info(stream)
@@ -33,7 +33,8 @@ module NATS
           stream: stream,
           pre: "$KV.#{bucket}.",
           js: self,
-          direct: si.config.allow_direct
+          direct: si.config.allow_direct,
+          validate_keys: params[:validate_keys]
         )
       end
 
@@ -83,7 +84,8 @@ module NATS
           stream: stream.name,
           pre: "$KV.#{config.bucket}.",
           js: self,
-          direct: si.config.allow_direct
+          direct: si.config.allow_direct,
+          validate_keys: config.validate_keys
         )
       end
 

@@ -29,6 +29,7 @@ module NATS
         :placement,
         :republish,
         :direct,
+        :validate_keys,
         keyword_init: true
       ) do
         def initialize(opts = {})

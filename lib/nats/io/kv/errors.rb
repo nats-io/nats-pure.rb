@@ -73,5 +73,11 @@ module NATS
         "nats: history limited to a max of 64"
       end
     end
+
+    class InvalidKeyError < Error
+      def to_s
+        "nats: invalid key"
+      end
+    end
   end
 end

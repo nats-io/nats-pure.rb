@@ -30,16 +30,35 @@ module NATS
     MSG_ROLLUP_ALL = "all"
     ROLLUP = "Nats-Rollup"
 
+    VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+$/
+    VALID_KEY_RE = /\A[-\/_=\.a-zA-Z0-9]+$/
+
+    class << self
+      def is_valid_key(key)
+        if key.nil?
+          false
+        elsif key.start_with?(".") || key.end_with?(".")
+          false
+        elsif key !~ VALID_KEY_RE
+          false
+        else
+          true
+        end
+      end
+    end
+
     def initialize(opts = {})
       @name = opts[:name]
       @stream = opts[:stream]
       @pre = opts[:pre]
       @js = opts[:js]
       @direct = opts[:direct]
+      @validate_keys = opts[:validate_keys]
     end
 
     # get returns the latest value for the key.
     def get(key, params = {})
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
       entry = nil
       begin
         entry = _get(key, params)
@@ -90,12 +109,16 @@ module NATS
     # put will place the new value for the key into the store
     # and return the revision number.
     def put(key, value)
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+
       ack = @js.publish("#{@pre}#{key}", value)
       ack.seq
     end
 
     # create will add the key/value pair iff it does not exist.
     def create(key, value)
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+
       pa = nil
       begin
         pa = update(key, value, last: 0)
@@ -127,6 +150,8 @@ module NATS
 
     # update will update the value iff the latest revision matches.
     def update(key, value, params = {})
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+
       hdrs = {}
       last = (params[:last] ||= 0)
       hdrs[EXPECTED_LAST_SUBJECT_SEQUENCE] = last.to_s
@@ -146,6 +171,8 @@ module NATS
 
     # delete will place a delete marker and remove all previous revisions.
     def delete(key, params = {})
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+
       hdrs = {}
       hdrs[KV_OP] = KV_DEL
       last = (params[:last] ||= 0)
@@ -159,6 +186,8 @@ module NATS
 
     # purge will remove the key and all revisions.
     def purge(key)
+      raise InvalidKeyError if @validate_keys && !KeyValue.is_valid_key(key)
+
       hdrs = {}
       hdrs[KV_OP] = KV_PURGE
       hdrs[ROLLUP] = MSG_ROLLUP_SUBJECT
