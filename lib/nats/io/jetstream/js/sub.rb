@@ -18,7 +18,7 @@ module NATS
   class JetStream
     module JS
       class Sub
-        attr_reader :js, :stream, :consumer, :nms
+        attr_accessor :js, :stream, :consumer, :nms
 
         def initialize(opts = {})
           @js = opts[:js]

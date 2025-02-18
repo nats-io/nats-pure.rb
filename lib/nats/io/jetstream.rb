@@ -32,7 +32,7 @@ module NATS
   #   js = nc.jetstream()
   #
   class JetStream
-    attr_reader :opts, :prefix
+    attr_reader :opts, :prefix, :nc
 
     # Create a new JetStream context for a NATS connection.
     #

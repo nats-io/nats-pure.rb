@@ -40,6 +40,7 @@ module NATS
 
       def create_key_value(config)
         config = if !config.is_a?(KeyValue::API::KeyValueConfig)
+          config = {bucket: config} if config.is_a?(String)
           KeyValue::API::KeyValueConfig.new(config)
         else
           config

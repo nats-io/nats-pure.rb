@@ -250,6 +250,13 @@ module NATS
       end
     end
 
+    STATUS_HDR = "Status"
+    DESC_HDR = "Description"
+    CTRL_STATUS = "100"
+    LAST_CONSUMER_SEQ_HDR = "Nats-Last-Consumer"
+    LAST_STREAM_SEQ_HDR = "Nats-Last-Stream"
+    CONSUMER_STALLED_HDR = "Nats-Consumer-Stalled"
+
     # watch will be signaled when a key that matches the keys
     # pattern is updated.
     # The first update after starting the watch is nil in case
@@ -293,12 +300,42 @@ module NATS
           end
         end
 
+        # Control Message like Heartbeats and Flow Control
         meta = msg.metadata
+        status = msg.header[STATUS_HDR] unless msg.header.nil?
+        if meta.nil? && !status.nil? && status == CTRL_STATUS
+          desc = msg.header[DESC_HDR]
+          if desc.start_with?("Idle")
+            # A watcher is active if it continues to receive Idle Heartbeat messages.
+            #
+            # Status: 100
+            # Description: Idle Heartbeat
+            # Nats-Last-Consumer: 185
+            # Nats-Last-Stream: 185
+            #
+            watcher.synchronize { watcher._active = true }
+          end
+          # Skip processing the heartbeat.
+          next
+        else
+          watcher.synchronize { watcher._active = true }
+          # Track the sequences
+          #
+          # $JS.ACK.KV_TEST.CKRGrWpf.1.10.10.1739859923871837000.0
+          #
+          tokens = msg.reply.split(".")
+          sseq = tokens[5]
+          dseq = tokens[5]
+          watcher.synchronize do
+            watcher._dseq = dseq.to_i + 1
+            watcher._sseq = sseq.to_i
+          end
+        end
+
+        # Keys() handling
         op = nil
         if msg.header && msg.header[KV_OP]
           op = msg.header[KV_OP]
-
-          # keys() uses this
           if params[:ignore_deletes]
             if (op == KV_PURGE) || (op == KV_DEL)
               if (meta.num_pending == 0) && !watcher._init_done
@@ -333,11 +370,15 @@ module NATS
       end # end of callback
       watcher._sub = sub
 
+      # Snapshot the deliver subject for the consumer.
+      deliver_subject = sub.subject
+
       # Check from consumer info what is the number of messages
       # awaiting to be consumed to send the initial signal marker.
+      stream_name = nil
       begin
         cinfo = sub.consumer_info
-        cinfo.num_pending
+        stream_name = sub.consumer_info.stream_name
 
         synchronize do
           init_setup_done = true
@@ -360,6 +401,49 @@ module NATS
         sub.unsubscribe
         raise err
       end
+
+      # Need to handle reconnect if missing too many heartbeats.
+      hb_interval = params[:idle_heartbeat] * 2
+      watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do
+        # Wait for all idle heartbeats to be received, one of them would have
+        # toggled the state of the consumer back to being active.
+        active = watcher.synchronize {
+          current = watcher._active
+          # A heartbeat or another incoming message needs to toggle back.
+          watcher._active = false
+          current
+        }
+        if !active
+          ccreq = ordered.dup
+          ccreq[:deliver_policy] = "by_start_sequence"
+          ccreq[:opt_start_seq] = watcher._sseq
+          ccreq[:deliver_subject] = deliver_subject
+          ccreq[:idle_heartbeat] = ordered[:idle_heartbeat] * ::NATS::NANOSECONDS
+          ccreq[:inactive_threshold] = ordered[:idle_heartbeat] * ::NATS::NANOSECONDS
+
+          should_recreate = false
+          begin
+            # Check if the original is still present, if it is then do not recreate.
+            begin
+              sub.consumer_info
+            rescue => e
+              @js.nc.send(:err_cb_call, @js.nc, e, sub)
+              should_recreate = true
+            end
+            next unless should_recreate
+
+            # Recreate consumer that went away after a restart.
+            cinfo = @js.add_consumer(stream_name, ccreq)
+            sub.jsi.consumer = cinfo.name
+            watcher.synchronize { watcher._dseq = 1 }
+          rescue => e
+            # Dispatch to the error NATS client error callback.
+            @js.nc.send(:err_cb_call, @js.nc, e, sub)
+          end
+        end
+      end
+      watcher._hb_task.execute
+
       watcher
     end
   end
@@ -368,17 +452,28 @@ module NATS
     include MonitorMixin
     include Enumerable
     attr_accessor :received, :pending, :_sub, :_updates, :_init_done, :_watcher_cond
+    attr_accessor :_sseq, :_dseq, :_active, :_hb_task
 
     def initialize(js)
+      super() # required to initialize monitor
       @js = js
       @_sub = nil
       @_updates = SizedQueue.new(256)
       @_init_done = false
       @pending = nil
+      # Ordered consumer related
+      @_dseq = 1
+      @_sseq = 0
+      @_cmeta = nil
+      @_fcr = 0
+      @_fciseq = 0
+      @_active = true
+      @_hb_task = nil
     end
 
     def stop
       @_sub.unsubscribe
+      @_hb_task.shutdown
     end
 
     def updates(params = {})

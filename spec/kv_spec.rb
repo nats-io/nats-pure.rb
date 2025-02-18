@@ -5,10 +5,12 @@ describe "KeyValue" do
     @tmpdir = Dir.mktmpdir("ruby-jetstream")
     @s = NatsServerControl.new("nats://127.0.0.1:4621", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
     @s.start_server(true)
+    @s2 = nil
   end
 
   after do
     @s.kill_server
+    @s2&.kill_server
     FileUtils.remove_entry(@tmpdir)
   end
 
@@ -726,5 +728,58 @@ describe "KeyValue" do
     end
 
     nc.close
+  end
+
+  it "should reconnect watches on server restart" do
+    tmpdir = Dir.mktmpdir("ruby-jetstream")
+    @s2 = NatsServerControl.new("nats://127.0.0.1:4631", "/tmp/test-nats.pid", "-js -sd=#{tmpdir}")
+    @s2.start_server(true)
+    s = @s2
+
+    nc = NATS.connect(s.uri)
+    nc.on_error do |e|
+      puts e
+      puts e.backtrace
+    end
+    js = nc.jetstream
+    kv = js.create_key_value("TEST")
+
+    nc2 = NATS.connect(s.uri)
+    Thread.new do
+      nc2.on_error do |e|
+        puts e
+        puts e.backtrace
+      end
+      js2 = nc2.jetstream
+      kv2 = js2.key_value("TEST")
+
+      i = 0
+      1.upto(50).each do
+        kv2.put("foo.#{i}", "A")
+        i += 1
+        sleep 0.2
+        if i == 10
+          sleep 6
+        end
+      rescue
+      end
+    end
+
+    Thread.new do
+      sleep 5
+      s.kill_server
+      sleep 10
+      @s2.start_server(true)
+    end
+
+    entries = []
+    w = kv.watch("foo.*")
+    w.each do |entry|
+      entries.push(entry)
+      break if entries.size > 20
+    end
+
+    nc.close
+    nc2.close
   end
 end
