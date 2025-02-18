@@ -10,12 +10,6 @@ module NATS
     class API
       extend DSL
 
-      class << self
-        def subject
-          "$JS"
-        end
-      end
-
       request :info, StreamInfo, subject: false
 
       group :stream do
@@ -58,8 +52,14 @@ module NATS
         request :names, ConsumerInfo
       end
 
+      attr_reader :client
+
       def initialize(client)
         @client = client
+      end
+
+      def subject
+        "$JS.API"
       end
     end
   end

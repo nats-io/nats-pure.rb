@@ -4,20 +4,22 @@ module NATS
   class JetStream
     class API
       class Request
-        def initialize(name:, group:, response:)
+        attr_reader :name, :response, :client
+
+        def initialize(name:, parent:, response:, client:)
           @name = name
-          @group = group
           @response = response
-          @subject = "#{group.subject}.#{name}"
+          @client = client
+          @subject = "#{parent.subject}.#{name.upcase}"
         end
 
-        def request(client:, subject:, data:, params:)
+        def request(subject, data = nil, params = {})
           subject = [@subject, subject].compact.join(".")
 
           message = begin
             client.request(subject, data.to_json, **params)
           rescue NATS::IO::NoRespondersError
-            raise JetStream::ServiceUnavailableError
+            #raise JetStream::ServiceUnavailableError
           end
 
           data = JSON.parse(message.data, symbolize_names: true)

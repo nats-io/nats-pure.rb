@@ -4,66 +4,58 @@ module NATS
   class JetStream
     class API
       module DSL
-        def requests
-          @requests ||= {}
-        end
+        def group(name, &block)
+          klass = Class.new(Group)
+          klass.class_eval(&block)
 
-        def groups
-          @groups ||= {}
-        end
-
-        def request(name, response, params = {})
-          requests[name] = Request.new(
-            group: self,
-            name: name,
-            response: response
-          )
-
-          if params[:subject] == false
-            define_request_without_subject(name)
-          else
-            define_request_with_subject(name)
+          define_reader name do
+            klass.new(
+              name: name,
+              client: client,
+              parent: self
+            )
           end
         end
 
-        def group(name, &block)
-          group = Class.new(Group)
-          group.class_eval(&block)
+        def request(name, response, subject: true)
+          define_request(name, response)
 
-          groups[name] = group.new(
-            parent: self,
-            name: name,
-            &block
-          )
-
-          groups[name].class
-
-          define_method name do
-            groups[name]
+          if subject
+            define_request_with_subject(name)
+          else
+            define_request_without_subject(name)
           end
         end
 
         private
 
+        def define_reader(name, &block)
+          define_method name do
+            instance_variable_get("@#{name}") if instance_variable_defined?("@#{name}")
+            instance_variable_set("@#{name}", instance_eval(&block))
+          end
+        end
+
+        def define_request(name, response)
+          define_reader "#{name}_request" do
+            Request.new(
+              name: name, 
+              response: response,
+              client: client,
+              parent: self
+            )
+          end
+        end
+
         def define_request_with_subject(name)
           define_method name do |subject, data, params = {}|
-            request[name].request(
-              client: client,
-              subject: subject,
-              data: data,
-              params: params
-            )
+            send("#{name}_request").request(subject, data, params)
           end
         end
 
         def define_request_without_subject(name)
           define_method name do |data = nil, params = {}|
-            request[name].request(
-              client: client,
-              subject: nil,
-              data: data,
-              params: params
-            )
+            send("#{name}_request").request(nil, data, params)
           end
         end
       end

@@ -17,7 +17,7 @@ module NATS
 
       def update(values)
         config.update(values)
-        api.consumer.update(config)
+        api.consumer.update(stream, config)
       end
 
       def delete

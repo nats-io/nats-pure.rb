@@ -6,12 +6,10 @@ module NATS
       class Group
         extend DSL
 
-        attr_reader :subject
-
-        def initialize(name:, parent:)
+        def initialize(name:, parent:, client:)
           @name = name
-          @parent = parent
-          @subject = "#{parent.subject}.#{name}"
+          @client = client
+          @subject = "#{parent.subject}.#{name.upcase}"
         end
       end
     end

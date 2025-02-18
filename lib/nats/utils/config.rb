@@ -17,6 +17,9 @@ module NATS
         set(values)
       end
 
+      def to_json
+      end
+
       private
 
       def set(values)
