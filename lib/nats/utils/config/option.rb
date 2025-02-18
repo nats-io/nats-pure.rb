@@ -3,7 +3,7 @@
 module NATS
   module Utils
     class Config
-      class Type
+      class Option
         attr_reader :name, :params
 
         def initialize(name, params)
@@ -19,24 +19,28 @@ module NATS
           value 
         end
 
+        def to_h(value)
+          value
+        end
+
         private
 
         def fetch(options)
           options[name] || env || params[:default]
         end
 
-        def validate(value)
-          raise EmptyError.new(name, value) if params[:required] && value.nil?
-        end
-
         def env
           ENV[params[:env]] if params[:env]
+        end
+
+        def validate(value)
+          raise EmptyError.new(name, value) if params[:required] && value.nil?
         end
       end
 
       # params[:as]
       # params[:in]
-      class StringType < Type
+      class StringOption < Option
         def typecast(value)
           value.to_s
         end
@@ -58,7 +62,7 @@ module NATS
       # params[:in]
       # params[:max]
       # params[:min]
-      class IntegerType < Type
+      class IntegerOption < Option
         def typecast(value)
           if value.respond_to?(:to_i)
             value.to_i
@@ -76,22 +80,22 @@ module NATS
           end
 
           if params[:max]
-            raise MaxError.new(self, value) unless value > params[:max]
+            raise MaxError.new(self, value) if value > params[:max]
           end
 
           if params[:min]
-            raise MinError.new(self, value) unless value < params[:min]
+            raise MinError.new(self, value) if value < params[:min]
           end
         end
       end
 
-      class BoolType < Type
+      class BoolOption < Option
         def typecast(value)
           %w[1 true t].include?(value.to_s.downcase)
         end
       end
 
-      class HashType < Type
+      class HashOption < Option
         def typecast(value)
           if value.respond_to?(:to_h)
             value.to_h
@@ -102,7 +106,7 @@ module NATS
       end
 
       # params[:of]
-      class ArrayType < Type
+      class ArrayOption < Option
         def typecast(value)
           raise ArrayError.new(name, value) unless value.respond_to?(:map)
 
@@ -110,12 +114,24 @@ module NATS
             params[:item].value(name => item)
           end
         end
+
+        def to_h(value)
+          return if value.nil?
+
+          value.map do |item|
+            params[:item].to_h(item)
+          end
+        end
       end
 
       # params[:of]
-      class ObjectType < Type
+      class ObjectOption < Option
         def typecast(value)
           params[:config].new(value)
+        end
+
+        def to_h(value)
+          value&.to_h
         end
       end
     end

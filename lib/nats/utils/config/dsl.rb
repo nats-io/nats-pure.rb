@@ -7,16 +7,16 @@ module NATS
         attr_accessor :configs
 
         TYPES = {
-          string: NATS::Utils::Config::StringType,
-          integer: NATS::Utils::Config::IntegerType,
-          bool: NATS::Utils::Config::BoolType,
-          hash: NATS::Utils::Config::HashType,
-          array: NATS::Utils::Config::ArrayType,
-          object: NATS::Utils::Config::ObjectType
+          string: NATS::Utils::Config::StringOption,
+          integer: NATS::Utils::Config::IntegerOption,
+          bool: NATS::Utils::Config::BoolOption,
+          hash: NATS::Utils::Config::HashOption,
+          array: NATS::Utils::Config::ArrayOption,
+          object: NATS::Utils::Config::ObjectOption
         }.freeze
 
         def schema
-          @schema ||= {}
+          @schema ||= []
         end
 
         def configs
@@ -44,7 +44,7 @@ module NATS
           config = configs[params[:of] || name]
 
           if config
-            params[:item] = ObjectType.new(name, config: config)
+            params[:item] = ObjectOption.new(name, config: config)
           else
             params[:item] = TYPES[params[:of]].new(name, params)
           end
@@ -70,7 +70,7 @@ module NATS
         private
 
         def register(type, name, params)
-          schema[name] = TYPES[type].new(name, params)
+          schema << TYPES[type].new(name, params)
           attr_reader name
         end
       end

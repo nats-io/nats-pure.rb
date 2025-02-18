@@ -36,7 +36,7 @@ module NATS
         integer :max_bytes, default: -1
         integer :max_msgs, default: -1
         integer :max_msg_size, default: -1
-        integer :max_consumers, required: true
+        integer :max_consumers
         integer :max_msgs_per_subject, default: -1
 
         # If set to true, publish methods from the JetStream client will not
