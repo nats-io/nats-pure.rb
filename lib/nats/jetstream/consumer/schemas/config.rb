@@ -4,59 +4,35 @@ module NATS
   class JetStream
     class Stream
       class Config < NATS::Utils::Config
-        # Name is an optional name for the consumer. If not set, one is
-        # generated automatically.
+        # A unique name for a consumer
         string :name, as: :name
 
-        # Durable is an optional durable name for the consumer. If both Durable
-        # and Name are set, they have to be equal. Unless InactiveThreshold is set, a
-        # durable consumer will not be cleaned up automatically.
+        # A unique name for a durable consumer
         string :durable_name, as: :name
 
-        # Description provides an optional description of the consumer.
+        # A short description of the purpose of this consumer
         string :description
 
         # DeliverPolicy defines from which point to start delivering messages
         # from the stream. Defaults to DeliverAllPolicy.
-        string :deliver_policy, in: %w[all last last_per_subject new by_start_sequence by_start_time], default: "all"
-
-        # OptStartSeq is an optional sequence number from which to start
-        # message delivery. Only applicable when DeliverPolicy is set to
-        # DeliverByStartSequencePolicy.
-        string :opt_start_seq
-        # OptStartTime is an optional time from which to start message
-        # delivery. Only applicable when DeliverPolicy is set to
-        # DeliverByStartTimePolicy.
-        integer :opt_start_time
+        string :deliver_policy, in: %w[all last new by_start_sequence by_start_time last_per_subject], default: "all"
 
         # AckPolicy defines the acknowledgement policy for the consumer.
         # Defaults to AckExplicitPolicy.
-        string :ack_policy, in: %w[explicit none all], default: "explicit"
+        string :ack_policy, in: %w[none all explicit], default: "explicit"
 
-        # AckWait defines how long the server will wait for an acknowledgement
-        # before resending a message. If not set, server default is 30 seconds.
+        # How long (in nanoseconds) to allow messages to remain un-acknowledged
+        # before attempting redelivery
         integer :ack_wait
 
-        # MaxDeliver defines the maximum number of delivery attempts for a
-        # message. Applies to any message that is re-sent due to ack policy.
-        # If not set, server default is -1 (unlimited).
+        # The number of times a message will be redelivered to consumers if not acknowledged in time
         integer :max_deliver, default: -1
 
-        # BackOff specifies the optional back-off intervals for retrying
-        # message delivery after a failed acknowledgement. It overrides
-        # AckWait.
-        #
-        # BackOff only applies to messages not acknowledged in specified time,
-        # not messages that were nack'ed.
-        #
-        # The number of intervals specified must be lower or equal to
-        # MaxDeliver. If the number of intervals is lower, the last interval is
-        # used for all remaining attempts.
-        integer :backoff
-
-        # FilterSubject can be used to filter messages delivered from the
-        # stream. FilterSubject is exclusive with FilterSubjects.
+        # Filter the stream by a single subjects
         string :filter_subject
+
+        # Filter the stream by multiple subjects
+        array :filter_subjects, of: :string
 
         # ReplayPolicy defines the rate at which messages are sent to the
         # consumer. If ReplayOriginalPolicy is set, messages are sent in the
@@ -66,75 +42,77 @@ module NATS
         # Defaults to ReplayInstantPolicy.
         string :replay_policy, in: %w[original instant], default: "instant"
 
-        # RateLimit specifies an optional maximum rate of message delivery in
-        # bits per second.
-        integer :ate_limit_bps
-
         # SampleFrequency is an optional frequency for sampling how often
         # acknowledgements are sampled for observability. See
         # https://docs.nats.io/running-a-nats-service/nats_admin/monitoring/monitoring_jetstream
         string :sample_frequency
 
-        # MaxWaiting is a maximum number of pull requests waiting to be
-        # fulfilled. If not set, this will inherit settings from stream's
-        # ConsumerLimits or (if those are not set) from account settings.  If
-        # neither are set, server default is 512.
-        integer :max_waiting
+        # The rate at which messages will be delivered to clients, expressed in 
+        # bit per second
+        integer :rate_limit_bps, min: 0
 
-        # MaxAckPending is a maximum number of outstanding unacknowledged
-        # messages. Once this limit is reached, the server will suspend sending
-        # messages to the consumer. If not set, server default is 1000.
-        # Set to -1 for unlimited.
+        # The maximum number of messages without acknowledgement that can be
+        # outstanding, once this limit is reached message delivery will be suspended
         integer :max_ack_pending, default: -1
 
-        # HeadersOnly indicates whether only headers of messages should be sent
-        # (and no payload). Defaults to false.
-        bool :headers_only
+        # If the Consumer is idle for more than this many nano seconds a empty 
+        # message with Status header 100 will be sent indicating the consumer 
+        # is still alive
+        integer :idle_heartbeat, min: 0
 
-        # MaxRequestBatch is the optional maximum batch size a single pull
-        # request can make. When set with MaxRequestMaxBytes, the batch size
-        # will be constrained by whichever limit is hit first.
-        integer :max_batch
+        # For push consumers this will regularly send an empty mess with Status 
+        # header 100 and a reply subject, consumers must reply to these messages 
+        # to control the rate of message deliver
+        bool :flow_control
 
-        # MaxRequestExpires is the maximum duration a single pull request will
-        # wait for messages to be available to pull.
-        integer :max_expires
+        # The number of pulls that can be outstanding on a pull consumer,
+        # pulls received after this is reached are ignored
+        integer :max_waiting, min: 0, default: 512
 
-        # MaxRequestMaxBytes is the optional maximum total bytes that can be
-        # requested in a given batch. When set with MaxRequestBatch, the batch
-        # size will be constrained by whichever limit is hit first.
-        integer :max_bytes
+        # Creates a special consumer that does not touch the Raft layers, 
+        # not for general use by clients, internal use only
+        bool :direct
 
-        # InactiveThreshold is a duration which instructs the server to clean
-        # up the consumer if it has been inactive for the specified duration.
-        # Durable consumers will not be cleaned up by default, but if
-        # InactiveThreshold is set, they will be. If not set, this will inherit
-        # settings from stream's ConsumerLimits. If neither are set, server
-        # default is 5 seconds.
-        #
-        # A consumer is considered inactive there are not pull requests
-        # received by the server (for pull consumers), or no interest detected
-        # on deliver subject (for push consumers), not if there are no
-        # messages to be delivered.
-        integer :inactive_threashold
+        # Delivers only the headers of messages in the stream and not the bodies.
+        # Additionally adds Nats-Msg-Size header to indicate the size of the 
+        # removed payloa
+        bool :headers_only, default: false
 
-        # Replicas the number of replicas for the consumer's state. By default,
-        # consumers inherit the number of replicas from the stream.
-        integer :num_replicas
+        # The largest batch property that may be specified when doing a pull on a Pull Consumer
+        integer :max_batch, default: 0
 
-        # MemoryStorage is a flag to force the consumer to use memory storage
-        # rather than inherit the storage type from the stream.
-        bool :memory_storage
+        # The maximum expires value that may be set when doing a pull on a Pull Consumer
+        integer :max_expires, default: 0
 
-        # FilterSubjects allows filtering messages from a stream by subject.
-        # This field is exclusive with FilterSubject. Requires nats-server
-        # v2.10.0 or later.
-        array :filter_subjects, of: :string
+        # The maximum bytes value that maybe set when dong a pull on a Pull Consumer
+        integer :max_bytes, min: 0, deafult: 0
 
-        # Metadata is a set of application-defined key-value pairs for
-        # associating metadata on the consumer. This feature requires
-        # nats-server v2.10.0 or later.
+        # Duration that instructs the server to cleanup ephemeral consumers that are inactive for that long
+        integer :inactive_threshold, default: 0
+
+        # List of durations in Go format that represents a retry time scale for NaK'd messages
+        array :backoff, of: :integer
+
+        # When set do not inherit the replica count from the stream but specifically 
+        # set it to this amount
+        integer :num_replicas, min: 0, max: 5
+
+        # Force the consumer state to be kept in memory rather than inherit the 
+        # setting from the stream
+        bool :mem_storage, default: false
+
+        # Additional metadata for the Consumer
         hash :metadata
+
+        # OptStartSeq is an optional sequence number from which to start
+        # message delivery. Only applicable when DeliverPolicy is set to
+        # DeliverByStartSequencePolicy.
+        integer :opt_start_seq, min: 0
+
+        # OptStartTime is an optional time from which to start message
+        # delivery. Only applicable when DeliverPolicy is set to
+        # DeliverByStartTimePolicy.
+        string :opt_start_time # date
       end
     end
   end
