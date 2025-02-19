@@ -28,19 +28,20 @@ module NATS
     class InvalidConsumerNameError < Error; end
 
     # When the server responds with an error from the JetStream API.
-    class APIErrorError < Error
-      attr_reader :code, :err_code, :description, :stream, :seq
+    class APIError < JetStream::Error
+      attr_reader :data, :code, :err_code, :description
 
-      def initialize(params = {})
-        @code = params[:code]
-        @err_code = params[:err_code]
-        @description = params[:description]
-        @stream = params[:stream]
-        @seq = params[:seq]
+      def initialize(data)
+        @code = data.code
+        @err_code = data.err_code
+        @description = data.description
+
+        #@stream = params[:stream]
+        #@seq = params[:seq]
       end
 
       def to_s
-        "#{@description} (status_code=#{@code}, err_code=#{@err_code})"
+        "#{description} (status_code=#{code}, err_code=#{err_code})"
       end
     end
 
@@ -48,44 +49,24 @@ module NATS
     # not being enabled or temporarily unavailable due to a leader election when
     # running in cluster mode.
     # This condition is represented with a message that has 503 status code header.
-    class ServiceUnavailableError < APIError
-      def initialize(params = {})
-        super
-        @code ||= 503
-      end
-    end
+    class ServiceUnavailableError < APIError; end
 
     # When there is a hard failure in the JetStream.
     # This condition is represented with a message that has 500 status code header.
-    class ServerErrorError < APIError
-      def initialize(params = {})
-        super
-        @code ||= 500
-      end
-    end
+    class ServerErrorError < APIError; end
 
     # When a JetStream object was not found.
     # This condition is represented with a message that has 404 status code header.
-    class NotFoundError < APIError
-      def initialize(params = {})
-        super
-        @code ||= 404
-      end
-    end
+    class NotFoundError < APIError; end
 
     # When the stream is not found.
-    class StreamNotFoundError < NotFound; end
+    class StreamNotFoundError < NotFoundError; end
 
     # When the consumer or durable is not found by name.
-    class ConsumerNotFoundError < NotFound; end
+    class ConsumerNotFoundError < NotFoundError; end
 
     # When the JetStream client makes an invalid request.
     # This condition is represented with a message that has 400 status code header.
-    class BadRequestError < APIError
-      def initialize(params = {})
-        super
-        @code ||= 400
-      end
-    end
+    class BadRequestError < APIError; end
   end
 end

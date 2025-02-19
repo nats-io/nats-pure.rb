@@ -14,7 +14,7 @@ stream = js.streams.find(name)
 stream = js.streams.add(**config)
 
 stream.update(**config)
-stream.purge(**options)
+stream.purge
 stream.delete
 stream.info
 

@@ -48,7 +48,7 @@ module NATS
         end
 
         def define_request_with_subject(name)
-          define_method name do |subject, data, params = {}|
+          define_method name do |subject, data = nil, params = {}|
             send("#{name}_request").request(subject, data, params)
           end
         end

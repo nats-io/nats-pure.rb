@@ -17,7 +17,7 @@ module NATS
 
       class StreamDeleteResponse < Response
         schema do
-          bool :succes
+          bool :success
         end
       end
 
@@ -28,7 +28,7 @@ module NATS
         end
       end
 
-      class StreamListResponse < Response
+      class StreamListResponse < ListResponse
         schema do
           integer :total
           integer :offset
@@ -38,7 +38,7 @@ module NATS
         end
       end
 
-      class StreamNamesResponse < Response
+      class StreamNamesResponse < ListResponse
         schema do
           integer :total
           integer :offset

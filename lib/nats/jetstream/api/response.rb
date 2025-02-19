@@ -20,10 +20,10 @@ module NATS
             data = JSON.parse(message.data, symbolize_names: true)
 
             if data[:error]
-              ErrorResponse.new(data[:error])
-            else
-              new(data)
+              raise ErrorResponse.new(data[:error]).to_error
             end
+
+            new(data)
           end
         end
 
@@ -31,6 +31,16 @@ module NATS
 
         def initialize(data)
           @data = self.class.data_schema.new(data)
+        end
+      end
+
+      class ListResponse < Response
+        def last?
+          data.offset + data.limit >= data.total
+        end
+
+        def next_page
+          data.offset + data.limit
         end
       end
 
@@ -44,6 +54,36 @@ module NATS
 
           # The NATS error code unique to each kind of error
           integer :err_code, min: 0, max: 65535
+        end
+
+        def to_error
+          error = case data.code
+          when 503
+            ::NATS::JetStream::ServiceUnavailableError
+          when 500
+            ::NATS::JetStream::ServerError
+          when 404
+            error_404(data)
+          when 400
+            ::NATS::JetStream::BadRequestError
+          else
+            ::NATS::JetStream::APIError
+          end
+
+          error.new(data)
+        end
+
+        private
+
+        def error_404(data)
+          case data.err_code
+          when 10059
+            ::NATS::JetStream::StreamNotFoundError
+          when 10014
+            ::NATS::JetStream::ConsumerNotFoundError
+          else
+            ::NATS::JetStream::NotFoundError
+          end
         end
       end
     end

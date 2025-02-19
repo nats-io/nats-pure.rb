@@ -6,6 +6,8 @@ module NATS
       class Group
         extend DSL
 
+        attr_reader :client, :subject
+
         def initialize(name:, parent:, client:)
           @name = name
           @client = client

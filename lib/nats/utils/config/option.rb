@@ -11,8 +11,8 @@ module NATS
           @params = params
         end
 
-        def value(options)
-          value = fetch(options)
+        def value(value)
+          value ||= env || params[:default]
           value = typecast(value) unless value.nil?
 
           validate(value)
@@ -24,10 +24,6 @@ module NATS
         end
 
         private
-
-        def fetch(options)
-          options[name] || env || params[:default]
-        end
 
         def env
           ENV[params[:env]] if params[:env]
@@ -111,7 +107,7 @@ module NATS
           raise ArrayError.new(name, value) unless value.respond_to?(:map)
 
           value.map do |item|
-            params[:item].value(name => item)
+            params[:item].value(item)
           end
         end
 

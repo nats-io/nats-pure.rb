@@ -34,7 +34,7 @@ module NATS
         integer :duplicate_window, default: 0
 
         object :placement do
-          string :cluster, required: true
+          string :cluster
           array :tags, of: :string
         end
 
@@ -57,7 +57,7 @@ module NATS
         bool :allow_direct, default: false
         bool :mirror_direct, default: false
 
-        string :compression, in: %w[none s2]
+        string :compression, in: %w[none s2], default: "none"
 
         string :first_seq
 

@@ -15,11 +15,12 @@ module NATS
 
         def request(subject, data = nil, params = {})
           subject = [@subject, subject].compact.join(".")
+          data = data.nil? ? "" : data.to_json
 
           message = begin
-            client.request(subject, data.to_json, **params)
+            client.request(subject, data, **params)
           rescue NATS::IO::NoRespondersError
-            #raise JetStream::ServiceUnavailableError
+            raise JetStream::ServiceUnavailableError
           end
 
           response.build(message)

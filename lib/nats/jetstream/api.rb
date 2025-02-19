@@ -20,7 +20,7 @@ module NATS
         request :purge, StreamPurgeResponse
 
         request :names, StreamNamesResponse, subject: false
-        request :list, StreamInfoResponse, subject: false
+        request :list, StreamListResponse, subject: false
 
         group :msg do
           request :get, StreamMsgGetResponse

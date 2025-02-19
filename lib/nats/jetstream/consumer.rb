@@ -8,14 +8,15 @@ require_relative "consumer/list"
 module NATS
   class JetStream
     class Consumer
-      attr_reader :config, :api
+      attr_reader :jetstream, :config
 
-      def initialize(stream, config)
-        @stream = stream
+      alias js jetstream
+
+      def initialize(jetstream, config)
+        @jetstream = jetstream
         @config = Config.new(config)
-        @api = stream.api
 
-        api.consumer.create(stream, config)
+        js.api.consumer.create(stream, config)
       end
 
       def update(values)

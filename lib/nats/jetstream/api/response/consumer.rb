@@ -17,7 +17,7 @@ module NATS
         end
       end
 
-      class ConsumerListResponse < Response
+      class ConsumerListResponse < ListResponse
         schema do
           integer :total
           integer :offset
@@ -27,7 +27,7 @@ module NATS
         end
       end
 
-      class ConsumerNamesResponse < Response
+      class ConsumerNamesResponse < ListResponse
         schema do
           integer :total
           integer :offset

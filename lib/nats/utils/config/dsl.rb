@@ -6,7 +6,7 @@ module NATS
       module DSL
         attr_accessor :configs
 
-        TYPES = {
+        OPTIONS = {
           string: NATS::Utils::Config::StringOption,
           integer: NATS::Utils::Config::IntegerOption,
           bool: NATS::Utils::Config::BoolOption,
@@ -16,7 +16,7 @@ module NATS
         }.freeze
 
         def schema
-          @schema ||= []
+          @schema ||= {}
         end
 
         def configs
@@ -46,7 +46,7 @@ module NATS
           if config
             params[:item] = ObjectOption.new(name, config: config)
           else
-            params[:item] = TYPES[params[:of]].new(name, params)
+            params[:item] = OPTIONS[params[:of]].new(name, params)
           end
 
           register(:array, name, params)
@@ -70,7 +70,7 @@ module NATS
         private
 
         def register(type, name, params)
-          schema << TYPES[type].new(name, params)
+          schema[name] = OPTIONS[type].new(name, params)
           attr_reader name
         end
 

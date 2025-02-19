@@ -4,6 +4,7 @@ require_relative "jetstream/stream"
 require_relative "jetstream/consumer"
 
 require_relative "jetstream/api"
+require_relative "jetstream/error"
 
 module NATS
   class JetStream
