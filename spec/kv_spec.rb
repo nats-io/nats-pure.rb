@@ -618,6 +618,7 @@ describe "KeyValue" do
     expect(entries.last.key).to eql("users.20")
 
     w.stop
+    expect(w._hb_task.running?).to eql(false)
 
     # Can still peek after stopped.
     entries = w.take(1)
@@ -778,8 +779,12 @@ describe "KeyValue" do
       entries.push(entry)
       break if entries.size > 20
     end
+    w.stop
 
     nc.close
     nc2.close
+
+    # Make sure watcher timers not running anymore after closing connection.
+    expect(w._hb_task.running?).to eql(false)
   end
 end
