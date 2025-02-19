@@ -76,7 +76,7 @@ module NATS
         end
 
         def metadata
-          @meta ||= parse_metadata(reply)
+          @meta ||= parse_metadata(@reply)
         end
 
         private
@@ -90,6 +90,7 @@ module NATS
         end
 
         def parse_metadata(reply)
+          return unless reply && !reply.empty?
           tokens = reply.split(Ack::DotSep)
           n = tokens.count
 

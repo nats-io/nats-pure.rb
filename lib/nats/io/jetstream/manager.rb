@@ -151,6 +151,10 @@ module NATS
           raise ArgumentError.new("nats: invalid inactive threshold") unless config[:inactive_threshold].is_a?(Integer)
           config[:inactive_threshold] = config[:inactive_threshold] * ::NATS::NANOSECONDS
         end
+        if config[:idle_heartbeat]
+          raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
+          config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
+        end
 
         cfg = config.to_h.compact
         req = {

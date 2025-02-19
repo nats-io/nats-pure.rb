@@ -42,18 +42,25 @@ module NATS
 
       # When the server responds with an error from the JetStream API.
       class APIError < Error
-        attr_reader :code, :err_code, :description, :stream, :seq
+        attr_accessor :code, :err_code, :description, :stream, :consumer, :seq
 
         def initialize(params = {})
           @code = params[:code]
           @err_code = params[:err_code]
           @description = params[:description]
           @stream = params[:stream]
+          @consumer = params[:consumer]
           @seq = params[:seq]
         end
 
         def to_s
-          "#{@description} (status_code=#{@code}, err_code=#{@err_code})"
+          if @stream && @consumer
+            "#{@description} (status_code=#{@code}, err_code=#{@err_code}, stream=#{@stream}, consumer=#{@consumer})"
+          elsif @stream
+            "#{@description} (status_code=#{@code}, err_code=#{@err_code}, stream=#{@stream})"
+          else
+            "#{@description} (status_code=#{@code}, err_code=#{@err_code})"
+          end
         end
       end
 
@@ -87,10 +94,18 @@ module NATS
       end
 
       # When the stream is not found.
-      class StreamNotFound < NotFound; end
+      class StreamNotFound < NotFound
+        def initialize(params = {})
+          super
+        end
+      end
 
       # When the consumer or durable is not found by name.
-      class ConsumerNotFound < NotFound; end
+      class ConsumerNotFound < NotFound
+        def initialize(params = {})
+          super
+        end
+      end
 
       # When the JetStream client makes an invalid request.
       # This condition is represented with a message that has 400 status code header.

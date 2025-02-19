@@ -32,6 +32,8 @@ module NATS
   #   js = nc.jetstream()
   #
   class JetStream
+    attr_reader :opts, :prefix, :nc
+
     # Create a new JetStream context for a NATS connection.
     #
     # @param conn [NATS::Client]
@@ -220,7 +222,6 @@ module NATS
         config.flow_control = flow_control
         if idle_heartbeat || config.idle_heartbeat
           idle_heartbeat = config.idle_heartbeat if config.idle_heartbeat
-          idle_heartbeat *= ::NATS::NANOSECONDS
           config.idle_heartbeat = idle_heartbeat
         end
 
@@ -230,7 +231,8 @@ module NATS
       end
 
       # Enable auto acking for async callbacks unless disabled.
-      if cb && !manual_ack
+      # In case ack policy is none then we also do not require to ack.
+      if cb && !manual_ack && (config.ack_policy != "none")
         ocb = cb
         new_cb = proc do |msg|
           ocb.call(msg)

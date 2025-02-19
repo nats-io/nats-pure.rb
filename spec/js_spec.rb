@@ -602,10 +602,10 @@ describe "JetStream" do
       cinfo = js.add_consumer("ctests",
         name: consumer_name,
         durable_name: consumer_name,
-        inactive_threshold: 2,
+        inactive_threshold: 2, # seconds
         ack_policy: "explicit",
         mem_storage: true)
-      expect(cinfo.config.inactive_threshold).to eql(2000000000)
+      expect(cinfo.config.inactive_threshold).to eql(2)
       expect(cinfo.config.mem_storage).to eql(true)
     end
   end
@@ -899,6 +899,14 @@ describe "JetStream" do
 
       js = nc.jetstream(domain: "estre")
       info = js.account_info
+
+      # v2.11 starts to include API levels.
+      api_hash = if ENV["NATS_SERVER_VERSION"] == "main"
+        {total: 5, errors: 0, level: 1}
+      else
+        {total: 5, errors: 0}
+      end
+
       expected = a_hash_including({
         type: "io.nats.jetstream.api.v1.account_info_response",
         memory: 0,
@@ -916,8 +924,13 @@ describe "JetStream" do
           max_bytes_required: false
         }),
         domain: "estre",
-        api: {total: 5, errors: 0}
+        api: api_hash
       })
+
+      # Filter these out
+      info.delete(:reserved_memory) if info[:reserved_memory]
+      info.delete(:reserved_storage) if info[:reserved_storage]
+
       expect(info).to match(expected)
     end
 
@@ -943,7 +956,7 @@ describe "JetStream" do
           ack_policy: "explicit",
           max_ack_pending: 20,
           max_waiting: 3,
-          ack_wait: 5 * 1_000_000_000 # 5 seconds
+          ack_wait: 5 # seconds
         }
       }
       resp = nc.jsm(domain: @domain).add_consumer(stream_name, consumer_req[:config])

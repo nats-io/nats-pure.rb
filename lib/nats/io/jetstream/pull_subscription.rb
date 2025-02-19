@@ -250,6 +250,11 @@ module NATS
           end
         end
 
+        # Check if timed out waiting for messages.
+        if msgs.empty? && (MonotonicTime.since(start_time) > timeout)
+          raise NATS::Timeout.new("nats: fetch timeout")
+        end
+
         msgs
       end
 

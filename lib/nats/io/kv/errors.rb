@@ -59,5 +59,25 @@ module NATS
         "nats: #{@msg}"
       end
     end
+
+    # When there are no keys.
+    class NoKeysFoundError < Error
+      def to_s
+        "nats: no keys found"
+      end
+    end
+
+    # When history is too large.
+    class KeyHistoryTooLargeError < Error
+      def to_s
+        "nats: history limited to a max of 64"
+      end
+    end
+
+    class InvalidKeyError < Error
+      def to_s
+        "nats: invalid key"
+      end
+    end
   end
 end
