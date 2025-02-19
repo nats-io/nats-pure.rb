@@ -92,7 +92,7 @@ module NATS
         end
       end
 
-      class StreamLeaderStepdonwResponse < Response
+      class StreamLeaderStepdownResponse < Response
         schema do
           bool :success
         end

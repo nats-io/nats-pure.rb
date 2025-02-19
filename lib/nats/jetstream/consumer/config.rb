@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Stream
+    class Consumer
       class Config < NATS::Utils::Config
         # A unique name for a consumer
         string :name, as: :name

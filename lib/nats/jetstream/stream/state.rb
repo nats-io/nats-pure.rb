@@ -3,19 +3,19 @@ module NATS
     class Stream 
       class State < NATS::Utils::Config
         # Number of messages stored in the Stream
-        integer :messages, min: 0, max: 18446744073709551615
+        integer :messages, min: 0
 
         # Combined size of all messages in the Stream
-        integer :bytes, min: 0, max: 18446744073709551615
+        integer :bytes, min: 0
 
         # Sequence number of the first message in the Stream
-        integer :first_seq, min: 0, max: 18446744073709551615
+        integer :first_seq, min: 0
 
         # The timestamp of the first message in the Strea
         string :first_ts
 
         # Sequence number of the last message in the Stream
-        integer :last_seq, min: 0, max: 18446744073709551615
+        integer :last_seq, min: 0
 
         # The timestamp of the last message in the Strea
         string :last_ts
@@ -28,10 +28,10 @@ module NATS
         hash :subjects
 
         # The number of unique subjects held in the stream
-        integer :num_subjects, min: 0, max: 9223372036854775807
+        integer :num_subjects, min: 0
 
         # The number of deleted messages
-        integer :num_deleted, min: 0, max: 9223372036854775807
+        integer :num_deleted, min: 0
 
         # Records messages that were damaged and unrecoverable
         object :last do
@@ -43,7 +43,7 @@ module NATS
         end
 
         # Number of Consumers attached to the Stream
-        integer :consumer_count, min: 0, max: 9223372036854775807
+        integer :consumer_count, min: 0
       end
     end
   end

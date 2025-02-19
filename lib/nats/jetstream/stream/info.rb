@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module NATS
   class JetStream
     class Stream 
@@ -46,7 +48,7 @@ module NATS
         # Streams being sourced into this Stream
         # Information about an upstream stream source in a mirror
         # the same as mirror
-        array :sources, as: StreamSourceInfo
+        array :sources, of: StreamSourceInfo
 
         # List of mirrors sorted by priority
         # An alternate location to read mirrored data

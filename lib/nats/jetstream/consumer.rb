@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "consumer/schemas"
 require_relative "consumer/config"
+require_relative "consumer/info"
+require_relative "consumer/list"
 
 module NATS
   class JetStream

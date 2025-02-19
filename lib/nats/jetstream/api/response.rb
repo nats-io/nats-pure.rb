@@ -5,12 +5,32 @@ module NATS
     class API
       class Response
         class << self
-          def build(json)
+          attr_reader :data_schema
+
+          def schema(schema = nil, &block)
+            if block
+              schema = Class.new(NATS::Utils::Config)
+              schema.class_eval(&block)
+            end
+
+            @data_schema = schema
           end
 
-          def schema(schema, &block)
-            @schema = schema
+          def build(message)
+            data = JSON.parse(message.data, symbolize_names: true)
+
+            if data[:error]
+              ErrorResponse.new(data[:error])
+            else
+              new(data)
+            end
           end
+        end
+
+        attr_reader :data
+
+        def initialize(data)
+          @data = self.class.data_schema.new(data)
         end
       end
 
@@ -29,3 +49,7 @@ module NATS
     end
   end
 end
+
+require_relative "response/account"
+require_relative "response/consumer"
+require_relative "response/stream"

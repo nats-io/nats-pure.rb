@@ -28,6 +28,17 @@ module NATS
         # The maximum size any single storage based stream may be
         integer :storage_max_stream_bytes, default: -1
       end
+
+      class SequenceInfo < NATS::Utils::Config
+        # The sequence number of the Consumer
+        integer :consumer_seq
+
+        # The sequence number of the Stream
+        integer :stream_seq
+
+        # The last time a message was delivered or acknowledged (for ack_floor)
+        string :last_active
+      end
     end
   end
 end

@@ -3,7 +3,7 @@
 require_relative "api/dsl"
 require_relative "api/group"
 require_relative "api/request"
-require_relative "api/response-old"
+require_relative "api/response"
 
 module NATS
   class JetStream
@@ -28,7 +28,7 @@ module NATS
         end
 
         request :snapshot, StreamSnapshotResponse
-        request :restore, StreamResptoreResponse
+        request :restore, StreamRestoreResponse
 
         group :peer do
           request :remove, StreamRemovePeerResponse

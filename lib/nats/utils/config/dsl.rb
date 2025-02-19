@@ -41,7 +41,7 @@ module NATS
 
         def array(name, params = {}, &block)
           config(name, &block) if block
-          config = configs[params[:of] || name]
+          config = of_config(name, params)
 
           if config
             params[:item] = ObjectOption.new(name, config: config)
@@ -54,7 +54,7 @@ module NATS
 
         def object(name, params = {}, &block)
           config(name, &block) if block
-          params[:config] = configs[params[:of] || name]
+          params[:config] = of_config(name, params)
 
           register(:object, name, params)
         end
@@ -72,6 +72,14 @@ module NATS
         def register(type, name, params)
           schema << TYPES[type].new(name, params)
           attr_reader name
+        end
+
+        def of_config(name, params)
+          if params[:of].is_a?(Class)
+            params[:of]
+          else
+            configs[params[:of] || name]
+          end
         end
       end
     end

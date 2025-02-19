@@ -43,12 +43,3 @@ messages = consumer.fetch(max_bytes: 1000)
 
 consumer.consume(options) do |message|
 end
-
-
-# Service API
-
-service = client.services.add(**options)
-group = service.groups.add(name)
-
-service.endpoints.add(name, options) { }
-group.endpoints.add(name, options) { }

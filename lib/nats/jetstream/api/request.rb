@@ -22,11 +22,7 @@ module NATS
             #raise JetStream::ServiceUnavailableError
           end
 
-          data = JSON.parse(message.data, symbolize_names: true)
-          raise data[:error] if data[:error]
-
-          #response.new(data)
-          data
+          response.build(message)
         end
       end
     end

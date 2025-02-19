@@ -3,66 +3,10 @@
 module NATS
   class JetStream
     class Stream
-      # Subject transform to apply to matching messages going into the stream
-      class SubjectTransform < NATS::Utils::Config
-        # The subject transform sourc
-        string :src, required: true
-
-        # The subject transform destinatio
-        string :dst, required: true
-      end
-
-      class StreamSource < NATS::Utils::Config
-        string :name, required: true
-        integer :opt_start_seq
-        integer :opt_start_time
-        string :filter_subject
-
-        object :external, of: ExternalStream
-        array :subject_transforms, of: SubjectTransform
-
-        string :domain
-      end
-
-      class StreamSourceInfo < NATS::Utils::Config
-        # The name of the Stream being replicate
-        string :name
-
-        # The subject filter to apply to the message
-        string :filter_subject
-
-        # The subject filtering sources and associated destination transforms
-        # Subject transform to apply to matching messages going into the stream
-        array :subject_transforms, of: SubjectTransform
-
-        # How many messages behind the mirror operation is
-        integer :lag, min: 0, max: 18446744073709551615
-
-        # When last the mirror had activity, in nanoseconds. Value will be -1 when there has been no activity.
-        integer :active, min: -1, max: 9223372036854775807
-
-        # Configuration referencing a stream source in another account or JetStream domain
-        object :external, of: ExternalStream
-
-        object :error, as: ErrorResponse
-      end
-
-      # Configuration referencing a stream source in another 
-      # account or JetStream domain
-      class ExternalStream < NATS::Utils::Config
-        # The subject prefix that imports the other account/domain 
-        # $JS.API.CONSUMER.> subject
-        string :api
-
-        # The delivery subject to use for the push consume
-        string :deliver
-      end
-
       class Config < NATS::Utils::Config
         string :name, as: :name, required: true
         string :description
         array :subjects, of: :string
-        #array :subjects, of: { type: :string, as: :subject }
 
         string :storage, in: %w[file memory], default: "file"
         integer :num_replicas, max: 5, default: 1
@@ -94,8 +38,8 @@ module NATS
           array :tags, of: :string
         end
 
-        object :mirror, of: :stream_source
-        array :sources, of: :stream_source
+        object :mirror, of: StreamSource
+        array :sources, of: StreamSource
 
         bool :sealed, default: false
         bool :deny_delete, default: false
@@ -108,7 +52,7 @@ module NATS
           bool :headers_only
         end
 
-        object :subject_transform, of: :subject_transform
+        object :subject_transform, of: SubjectTransform
 
         bool :allow_direct, default: false
         bool :mirror_direct, default: false
