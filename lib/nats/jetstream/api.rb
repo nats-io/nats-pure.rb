@@ -3,63 +3,64 @@
 require_relative "api/dsl"
 require_relative "api/group"
 require_relative "api/request"
-require_relative "api/response"
+require_relative "api/response-old"
 
 module NATS
   class JetStream
     class API
       extend DSL
 
-      request :info, StreamInfo, subject: false
+      request :info, AccountInfoResponse, subject: false
 
       group :stream do
-        request :create, StreamInfo
-        request :update, StreamInfo
-        request :info, StreamInfo
-        request :delete, StreamInfo
-        request :purge, StreamInfo
+        request :create, StreamCreateResponse
+        request :update, StreamUpdateResponse
+        request :info, StreamInfoResponse
+        request :delete, StreamDeleteResponse
+        request :purge, StreamPurgeResponse
 
-        request :names, StreamInfo, subject: false
-        request :list, StreamInfo, subject: false
+        request :names, StreamNamesResponse, subject: false
+        request :list, StreamInfoResponse, subject: false
 
         group :msg do
-          request :get, StreamInfo
-          request :delete, StreamInfo
+          request :get, StreamMsgGetResponse
+          request :delete, StreamMsgDeleteResponse
         end
 
-        request :snapshot, StreamInfo
-        request :restore, StreamInfo
+        request :snapshot, StreamSnapshotResponse
+        request :restore, StreamResptoreResponse
 
         group :peer do
-          request :remove, StreamInfo
+          request :remove, StreamRemovePeerResponse
         end
 
         group :leader do
-          request :stepdown, StreamInfo
+          request :stepdown, StreamLeaderStepdownResponse
         end
       end
 
       group :consumer do
-        request :create, ConsumerInfo
+        request :create, ConsumerCreateResponse
 
         group :durable do
-          request :create, ConsumerInfo
+          request :create, ConsumerCreateResponse
         end
 
-        request :delete, ConsumerInfo
-        request :info, ConsumerInfo
-        request :list, ConsumerInfo
-        request :names, ConsumerInfo
+        request :delete, ConsumerDeleteResponse
+        request :info, ConsumerInfoResponse
+        request :list, ConsumerListResponse, subject: false
+        request :names, ConsumerNamesResponse, subject: false
       end
 
       attr_reader :client
 
-      def initialize(client)
+      def initialize(client, prefix = nil)
         @client = client
+        @prefix = prefix || "$JS.API"
       end
 
       def subject
-        "$JS.API"
+        @prefix
       end
     end
   end
