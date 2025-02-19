@@ -265,7 +265,7 @@ module NATS
       params[:meta_only] ||= false
       params[:include_history] ||= false
       params[:ignore_deletes] ||= false
-      params[:idle_heartbeat] ||= 5 # 5 seconds
+      params[:idle_heartbeat] ||= 5 # seconds
       params[:inactive_threshold] ||= 5 * 60 # 5 minutes
       subject = "#{@pre}#{keys}"
       init_setup = new_cond
@@ -472,8 +472,8 @@ module NATS
     end
 
     def stop
-      @_sub.unsubscribe
       @_hb_task.shutdown
+      @_sub.unsubscribe
     end
 
     def updates(params = {})
