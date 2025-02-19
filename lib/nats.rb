@@ -14,6 +14,8 @@
 # limitations under the License.
 #
 
+require "nats/utils/list"
+require "nats/service"
 require "nats/io/client"
 require "nats/nuid"
 
