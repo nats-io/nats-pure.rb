@@ -70,7 +70,7 @@ module NATS
       # This condition is represented with a message that has 503 status code header.
       class ServiceUnavailable < APIError
         def initialize(params = {})
-          super(params)
+          super
           @code ||= 503
         end
       end
@@ -79,7 +79,7 @@ module NATS
       # This condition is represented with a message that has 500 status code header.
       class ServerError < APIError
         def initialize(params = {})
-          super(params)
+          super
           @code ||= 500
         end
       end
@@ -88,7 +88,7 @@ module NATS
       # This condition is represented with a message that has 404 status code header.
       class NotFound < APIError
         def initialize(params = {})
-          super(params)
+          super
           @code ||= 404
         end
       end
@@ -96,14 +96,14 @@ module NATS
       # When the stream is not found.
       class StreamNotFound < NotFound
         def initialize(params = {})
-          super(params)
+          super
         end
       end
 
       # When the consumer or durable is not found by name.
       class ConsumerNotFound < NotFound
         def initialize(params = {})
-          super(params)
+          super
         end
       end
 

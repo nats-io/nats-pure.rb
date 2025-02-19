@@ -406,52 +406,50 @@ module NATS
       hb_interval = params[:idle_heartbeat] * 2
       nc = @js.nc
       watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do |task|
-        begin
-          task.shutdown if nc.closed?
-          next unless nc.connected?
+        task.shutdown if nc.closed?
+        next unless nc.connected?
 
-          # Wait for all idle heartbeats to be received, one of them would have
-          # toggled the state of the consumer back to being active.
-          active = watcher.synchronize {
-            current = watcher._active
-            # A heartbeat or another incoming message needs to toggle back.
-            watcher._active = false
-            current
-          }
-          if !active
-            ccreq = ordered.dup
-            ccreq[:deliver_policy] = "by_start_sequence"
-            ccreq[:opt_start_seq] = watcher._sseq
-            ccreq[:deliver_subject] = deliver_subject
-            ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
-            ccreq[:inactive_threshold] = ordered[:inactive_threshold]
+        # Wait for all idle heartbeats to be received, one of them would have
+        # toggled the state of the consumer back to being active.
+        active = watcher.synchronize {
+          current = watcher._active
+          # A heartbeat or another incoming message needs to toggle back.
+          watcher._active = false
+          current
+        }
+        if !active
+          ccreq = ordered.dup
+          ccreq[:deliver_policy] = "by_start_sequence"
+          ccreq[:opt_start_seq] = watcher._sseq
+          ccreq[:deliver_subject] = deliver_subject
+          ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
+          ccreq[:inactive_threshold] = ordered[:inactive_threshold]
 
-            should_recreate = false
+          should_recreate = false
+          begin
+            # Check if the original is still present, if it is then do not recreate.
             begin
-              # Check if the original is still present, if it is then do not recreate.
-              begin
-                sub.consumer_info
-              rescue ::NATS::JetStream::Error::ConsumerNotFound => e
-                e.stream ||= sub.jsi.stream
-                e.consumer ||= sub.jsi.consumer
-                @js.nc.send(:err_cb_call, @js.nc, e, sub)
-                should_recreate = true
-              end
-              next unless should_recreate
-
-              # Recreate consumer that went away after a restart.
-              cinfo = @js.add_consumer(stream_name, ccreq)
-              sub.jsi.consumer = cinfo.name
-              watcher.synchronize { watcher._dseq = 1 }
-            rescue => e
-              # Dispatch to the error NATS client error callback.
+              sub.consumer_info
+            rescue ::NATS::JetStream::Error::ConsumerNotFound => e
+              e.stream ||= sub.jsi.stream
+              e.consumer ||= sub.jsi.consumer
               @js.nc.send(:err_cb_call, @js.nc, e, sub)
+              should_recreate = true
             end
+            next unless should_recreate
+
+            # Recreate consumer that went away after a restart.
+            cinfo = @js.add_consumer(stream_name, ccreq)
+            sub.jsi.consumer = cinfo.name
+            watcher.synchronize { watcher._dseq = 1 }
+          rescue => e
+            # Dispatch to the error NATS client error callback.
+            @js.nc.send(:err_cb_call, @js.nc, e, sub)
           end
-        rescue => e
-          # WRN: Unexpected error
-          @js.nc.send(:err_cb_call, @js.nc, e, sub)
         end
+      rescue => e
+        # WRN: Unexpected error
+        @js.nc.send(:err_cb_call, @js.nc, e, sub)
       end
       watcher._hb_task.execute
 
