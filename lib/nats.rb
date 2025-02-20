@@ -14,7 +14,9 @@
 # limitations under the License.
 #
 
+require "nats/utils/list"
 require "nats/io/client"
+require "nats/service"
 require "nats/nuid"
 
 # A thread safe Ruby client for the NATS messaging system (https://nats.io).

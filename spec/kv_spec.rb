@@ -59,6 +59,8 @@ describe "KeyValue" do
     expect do
       js.key_value("TEST")
     end.to raise_error(NATS::KeyValue::BucketNotFoundError)
+
+    nc.close
   end
 
   it "should report when bucket is not found or invalid" do
@@ -82,6 +84,8 @@ describe "KeyValue" do
     expect do
       js.key_value("foo")
     end.to raise_error(NATS::KeyValue::BadBucketError)
+
+    nc.close
   end
 
   it "should support access to KeyValue stores from multiple instances" do
@@ -732,7 +736,7 @@ describe "KeyValue" do
   end
 
   it "should reconnect watches on server restart" do
-    tmpdir = Dir.mktmpdir("ruby-jetstream")
+    tmpdir = Dir.mktmpdir("ruby-jetstream2")
     @s2 = NatsServerControl.new("nats://127.0.0.1:4631", "/tmp/test-nats.pid", "-js -sd=#{tmpdir}")
     @s2.start_server(true)
     s = @s2
@@ -786,5 +790,11 @@ describe "KeyValue" do
 
     # Make sure watcher timers not running anymore after closing connection.
     expect(w._hb_task.running?).to eql(false)
+
+    begin
+      @s2.kill_server
+    ensure
+      FileUtils.remove_entry(tmpdir)
+    end
   end
 end

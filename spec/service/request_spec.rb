@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::Msg do
+RSpec.describe NATS::Service::Request do
   subject { described_class.new(options) }
 
   let(:options) do

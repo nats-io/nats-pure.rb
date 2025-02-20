@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+require "nats/utils/list"
 require "nats/io/client"
+require "nats/service"
 require "nats/io/rails" if defined?(Rails::Engine)
 require "nats/nuid"

@@ -101,7 +101,7 @@ module NATS
     include MonitorMixin
     include Status
 
-    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader, :services
+    attr_reader :status, :server_info, :server_pool, :options, :stats, :uri, :subscription_executor, :reloader
 
     DEFAULT_PORT = {nats: 4222, ws: 80, wss: 443}.freeze
     DEFAULT_URI = "nats://localhost:#{DEFAULT_PORT[:nats]}".freeze
@@ -243,7 +243,7 @@ module NATS
       @drain_t = nil
 
       # Service API
-      @services = Services.new(self)
+      @_services = nil
 
       # Prepare for calling connect or automatic delayed connection
       parse_and_validate_options if uri || opts.any?
@@ -858,6 +858,10 @@ module NATS
     end
     alias_method :JetStream, :jetstream
     alias_method :jsm, :jetstream
+
+    def services
+      synchronize { @_services ||= Services.new(self) }
+    end
 
     private
 

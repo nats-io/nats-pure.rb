@@ -86,7 +86,7 @@ class NatsServerControl
       system("#{BIN_PATH} #{args} 2> /dev/null &")
     end
     exitstatus = $?.exitstatus
-    wait_for_server(@uri, 10) if wait_for_server
+    wait_for_server(@uri, 60) if wait_for_server
     exitstatus
   end
 

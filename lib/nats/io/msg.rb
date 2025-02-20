@@ -16,7 +16,7 @@
 module NATS
   class Msg
     attr_accessor :subject, :reply, :data, :header
-    attr_reader :error
+    attr_accessor :nc, :sub
 
     def initialize(opts = {})
       @subject = opts[:subject]
@@ -25,9 +25,10 @@ module NATS
       @header = opts[:header]
       @nc = opts[:nc]
       @sub = opts[:sub]
+
+      # JS related
       @ackd = false
       @meta = nil
-      @error = nil
     end
 
     def respond(data = "")
@@ -40,22 +41,6 @@ module NATS
       else
         @nc.publish(reply, data)
       end
-    end
-
-    def respond_with_error(error)
-      @error = NATS::Service::ErrorWrapper.new(error)
-
-      message = dup
-      message.subject = reply
-      message.reply = ""
-      message.data = @error.data
-
-      message.header = {
-        "Nats-Service-Error" => @error.message,
-        "Nats-Service-Error-Code" => @error.code
-      }
-
-      respond_msg(message)
     end
 
     def respond_msg(msg)
