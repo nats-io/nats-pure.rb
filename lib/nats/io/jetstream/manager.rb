@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,15 +33,15 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::StreamCreateResponse] The result of creating a Stream.
-      def add_stream(config, params={})
-        config = if not config.is_a?(JetStream::API::StreamConfig)
-                   JetStream::API::StreamConfig.new(config)
-                 else
-                   config
-                 end
+      def add_stream(config, params = {})
+        config = if !config.is_a?(JetStream::API::StreamConfig)
+          JetStream::API::StreamConfig.new(config)
+        else
+          config
+        end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|\>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
         req_subject = "#{@prefix}.STREAM.CREATE.#{stream}"
 
         cfg = config.to_h.compact
@@ -52,11 +54,11 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::StreamInfo] The latest StreamInfo of the stream.
-      def stream_info(stream, params={})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? or stream.empty?
+      def stream_info(stream, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
 
         req_subject = "#{@prefix}.STREAM.INFO.#{stream}"
-        result = api_request(req_subject, '', params)
+        result = api_request(req_subject, "", params)
         JetStream::API::StreamInfo.new(result)
       end
 
@@ -65,15 +67,15 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::StreamCreateResponse] The result of creating a Stream.
-      def update_stream(config, params={})
-        config = if not config.is_a?(JetStream::API::StreamConfig)
-                   JetStream::API::StreamConfig.new(config)
-                 else
-                   config
-                 end
+      def update_stream(config, params = {})
+        config = if !config.is_a?(JetStream::API::StreamConfig)
+          JetStream::API::StreamConfig.new(config)
+        else
+          config
+        end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|\>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
         cfg = config.to_h.compact
         result = api_request(req_subject, cfg.to_json, params)
@@ -85,11 +87,11 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [Boolean]
-      def delete_stream(stream, params={})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? or stream.empty?
+      def delete_stream(stream, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
 
         req_subject = "#{@prefix}.STREAM.DELETE.#{stream}"
-        result = api_request(req_subject, '', params)
+        result = api_request(req_subject, "", params)
         result[:success]
       end
 
@@ -99,46 +101,45 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The result of creating a Consumer.
-      def add_consumer(stream, config, params={})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? or stream.empty?
-        config = if not config.is_a?(JetStream::API::ConsumerConfig)
-                   JetStream::API::ConsumerConfig.new(config)
-                 else
-                   config
-                 end
+      def add_consumer(stream, config, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        config = if !config.is_a?(JetStream::API::ConsumerConfig)
+          JetStream::API::ConsumerConfig.new(config)
+        else
+          config
+        end
         config[:name] ||= config[:durable_name]
-        req_subject = case
-                      when config[:name]
-                        ###############################################################################
-                        #                                                                             #
-                        #  Using names is the supported way of creating consumers (NATS +v2.9.0.      #
-                        #                                                                             #
-                        ###############################################################################
-                        if config[:filter_subject] && config[:filter_subject] != ">"
-                          "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}.#{config[:filter_subject]}"
-                        else
-                         ##############################################################################
-                         #                                                                            #
-                         # Endpoint to support creating ANY consumer with multi-filters (NATS +v2.10) #
-                         #                                                                            #
-                         ##############################################################################
-                          "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}"
-                        end
-                      when config[:durable_name]
-                        ###############################################################################
-                        #                                                                             #
-                        # Endpoint to support creating DURABLES before NATS v2.9.0.                   #
-                        #                                                                             #
-                        ###############################################################################
-                        "#{@prefix}.CONSUMER.DURABLE.CREATE.#{stream}.#{config[:durable_name]}"
-                      else
-                        ###############################################################################
-                        #                                                                             #
-                        # Endpoint to support creating EPHEMERALS before NATS v2.9.0.                 #
-                        #                                                                             #
-                        ###############################################################################
-                        "#{@prefix}.CONSUMER.CREATE.#{stream}"
-                      end
+        req_subject = if config[:name]
+          ###############################################################################
+          #                                                                             #
+          #  Using names is the supported way of creating consumers (NATS +v2.9.0.      #
+          #                                                                             #
+          ###############################################################################
+          if config[:filter_subject] && config[:filter_subject] != ">"
+            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}.#{config[:filter_subject]}"
+          else
+            ##############################################################################
+            #                                                                            #
+            # Endpoint to support creating ANY consumer with multi-filters (NATS +v2.10) #
+            #                                                                            #
+            ##############################################################################
+            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}"
+          end
+        elsif config[:durable_name]
+          ###############################################################################
+          #                                                                             #
+          # Endpoint to support creating DURABLES before NATS v2.9.0.                   #
+          #                                                                             #
+          ###############################################################################
+          "#{@prefix}.CONSUMER.DURABLE.CREATE.#{stream}.#{config[:durable_name]}"
+        else
+          ###############################################################################
+          #                                                                             #
+          # Endpoint to support creating EPHEMERALS before NATS v2.9.0.                 #
+          #                                                                             #
+          ###############################################################################
+          "#{@prefix}.CONSUMER.CREATE.#{stream}"
+        end
 
         config[:ack_policy] ||= JS::Config::AckExplicit
         # Check if have to normalize ack wait so that it is in nanoseconds for Go compat.
@@ -149,6 +150,10 @@ module NATS
         if config[:inactive_threshold]
           raise ArgumentError.new("nats: invalid inactive threshold") unless config[:inactive_threshold].is_a?(Integer)
           config[:inactive_threshold] = config[:inactive_threshold] * ::NATS::NANOSECONDS
+        end
+        if config[:idle_heartbeat]
+          raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
+          config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
         end
 
         cfg = config.to_h.compact
@@ -167,12 +172,12 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The latest ConsumerInfo of the consumer.
-      def consumer_info(stream, consumer, params={})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? or stream.empty?
-        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? or consumer.empty?
+      def consumer_info(stream, consumer, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
 
         req_subject = "#{@prefix}.CONSUMER.INFO.#{stream}.#{consumer}"
-        result = api_request(req_subject, '', params)
+        result = api_request(req_subject, "", params)
         JetStream::API::ConsumerInfo.new(result)
       end
 
@@ -182,12 +187,12 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [Boolean]
-      def delete_consumer(stream, consumer, params={})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? or stream.empty?
-        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? or consumer.empty?
+      def delete_consumer(stream, consumer, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
 
         req_subject = "#{@prefix}.CONSUMER.DELETE.#{stream}.#{consumer}"
-        result = api_request(req_subject, '', params)
+        result = api_request(req_subject, "", params)
         result[:success]
       end
 
@@ -197,9 +202,9 @@ module NATS
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [String] The name of the JetStream stream for the subject.
-      def find_stream_name_by_subject(subject, params={})
+      def find_stream_name_by_subject(subject, params = {})
         req_subject = "#{@prefix}.STREAM.NAMES"
-        req = { subject: subject }
+        req = {subject: subject}
         result = api_request(req_subject, req.to_json, params)
         raise JetStream::Error::NotFound unless result[:streams]
 
@@ -213,23 +218,22 @@ module NATS
       # @option seq [Integer] Sequence number of a message.
       # @option subject [String] Subject of the message.
       # @option direct [Boolean] Use direct mode to for faster access (requires NATS v2.9.0)
-      def get_msg(stream_name, params={})
+      def get_msg(stream_name, params = {})
         req = {}
-        case
-        when params[:next]
+        if params[:next]
           req[:seq] = params[:seq]
           req[:next_by_subj] = params[:subject]
-        when params[:seq]
+        elsif params[:seq]
           req[:seq] = params[:seq]
-        when params[:subject]
+        elsif params[:subject]
           req[:last_by_subj] = params[:subject]
         end
 
         data = req.to_json
         if params[:direct]
-          if params[:subject] and not params[:seq]
+          if params[:subject] && !(params[:seq])
             # last_by_subject type request requires no payload.
-            data = ''
+            data = ""
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}.#{params[:subject]}"
           else
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}"
@@ -238,16 +242,14 @@ module NATS
           req_subject = "#{@prefix}.STREAM.MSG.GET.#{stream_name}"
         end
         resp = api_request(req_subject, data, direct: params[:direct])
-        msg = if params[:direct]
-                _lift_msg_to_raw_msg(resp)
-              else
-                JetStream::API::RawStreamMsg.new(resp[:message])
-              end
-
-        msg
+        if params[:direct]
+          _lift_msg_to_raw_msg(resp)
+        else
+          JetStream::API::RawStreamMsg.new(resp[:message])
+        end
       end
 
-      def get_last_msg(stream_name, subject, params={})
+      def get_last_msg(stream_name, subject, params = {})
         params[:subject] = subject
         get_msg(stream_name, params)
       end
@@ -258,20 +260,20 @@ module NATS
 
       private
 
-      def api_request(req_subject, req="", params={})
+      def api_request(req_subject, req = "", params = {})
         params[:timeout] ||= @opts[:timeout]
         msg = begin
-                @nc.request(req_subject, req, **params)
-              rescue NATS::IO::NoRespondersError
-                raise JetStream::Error::ServiceUnavailable
-              end
+          @nc.request(req_subject, req, **params)
+        rescue NATS::IO::NoRespondersError
+          raise JetStream::Error::ServiceUnavailable
+        end
 
         result = if params[:direct]
-                   msg
-                 else
-                   JSON.parse(msg.data, symbolize_names: true)
-                 end
-        if result.is_a?(Hash) and result[:error]
+          msg
+        else
+          JSON.parse(msg.data, symbolize_names: true)
+        end
+        if result.is_a?(Hash) && result[:error]
           raise JS.from_error(result[:error])
         end
 
@@ -279,21 +281,21 @@ module NATS
       end
 
       def _lift_msg_to_raw_msg(msg)
-        if msg.header and msg.header['Status']
-          status = msg.header['Status']
-          if status == '404'
+        if msg.header && msg.header["Status"]
+          status = msg.header["Status"]
+          if status == "404"
             raise ::NATS::JetStream::Error::NotFound.new
           else
             raise JS.from_msg(msg)
           end
         end
-        subject = msg.header['Nats-Subject']
-        seq = msg.header['Nats-Sequence']
+        subject = msg.header["Nats-Subject"]
+        seq = msg.header["Nats-Sequence"]
         raw_msg = JetStream::API::RawStreamMsg.new(
           subject: subject,
           seq: seq,
-          headers: msg.header,
-          )
+          headers: msg.header
+        )
         raw_msg.data = msg.data
 
         raw_msg

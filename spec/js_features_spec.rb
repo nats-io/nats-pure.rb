@@ -1,37 +1,19 @@
-# Copyright 2016-2023 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-require 'monitor'
-require 'tmpdir'
-
-describe 'JetStream' do
-  describe 'NATS v2.10 Features' do
-    before(:each) do
+describe "JetStream" do
+  describe "NATS v2.10 Features" do
+    before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")
       @s = NatsServerControl.new("nats://127.0.0.1:4852", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
-    after(:each) do
+    after do
       @s.kill_server
       FileUtils.remove_entry(@tmpdir)
     end
 
-    it 'should create pull subscribers with multiple filter subjects' do
-      skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
-
+    it "should create pull subscribers with multiple filter subjects" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
@@ -45,7 +27,7 @@ describe 'JetStream' do
 
       # Manually using add_consumer JS API to create an ephemeral.
       expect do
-        consumer = js.add_consumer("MULTI_FILTER", {
+        js.add_consumer("MULTI_FILTER", {
           name: "my-ephemeral",
           filter_subjects: ["foo.one.*", "foo.two.*"]
         })
@@ -56,15 +38,15 @@ describe 'JetStream' do
           msg.ack
         end
         expect(msgs.count).to eql(4)
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
-        expect(msgs[3].subject).to eql('foo.one.3')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
+        expect(msgs[3].subject).to eql("foo.one.3")
       end.to_not raise_error
 
       # Manually using add_consumer JS API to create a durable.
       expect do
-        consumer = js.add_consumer("MULTI_FILTER", {
+        js.add_consumer("MULTI_FILTER", {
           durable_name: "my-durable",
           filter_subjects: ["foo.three.*"]
         })
@@ -75,15 +57,15 @@ describe 'JetStream' do
           msg.ack
         end
         expect(msgs.count).to eql(1)
-        expect(msgs[0].subject).to eql('foo.three.3')
+        expect(msgs[0].subject).to eql("foo.three.3")
       end.to_not raise_error
 
       # Binding to stream explicitly.
       expect do
         sub = js.pull_subscribe(["foo.one.1", "foo.two.2"], "MULTI_FILTER_CONSUMER", stream: "MULTI_FILTER")
         info = sub.consumer_info
-        expect(info.name).to eql('MULTI_FILTER_CONSUMER')
-        expect(info.config.durable_name).to eql('MULTI_FILTER_CONSUMER')
+        expect(info.name).to eql("MULTI_FILTER_CONSUMER")
+        expect(info.config.durable_name).to eql("MULTI_FILTER_CONSUMER")
         expect(info.config.max_waiting).to eql(512)
         expect(info.num_pending).to eql(3)
 
@@ -92,10 +74,10 @@ describe 'JetStream' do
           msg.ack
         end
         expect(msgs.count).to eql(3)
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
-        expect(msgs[2].data).to eql('22')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
+        expect(msgs[2].data).to eql("22")
       end.to_not raise_error
 
       # Creating a single filter consumer using an Array.
@@ -110,7 +92,7 @@ describe 'JetStream' do
         msgs.each do |msg|
           msg.ack
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
+        expect(msgs[0].subject).to eql("foo.one.1")
         expect(msgs.count).to eql(1)
       end.to_not raise_error
 
@@ -124,9 +106,9 @@ describe 'JetStream' do
         msgs.each do |msg|
           msg.ack
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
         expect(msgs.count).to eql(3)
       end.to_not raise_error
 
@@ -140,9 +122,9 @@ describe 'JetStream' do
         msgs.each do |msg|
           msg.ack
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
         expect(msgs.count).to eql(3)
       end.to raise_error(NATS::JetStream::Error)
 
@@ -156,16 +138,14 @@ describe 'JetStream' do
         msgs.each do |msg|
           msg.ack
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
         expect(msgs.count).to eql(3)
       end.to raise_error(NATS::JetStream::Error)
     end
 
-    it 'should create push subscribers with multiple filter subjects' do
-      skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
-
+    it "should create push subscribers with multiple filter subjects" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       js.add_stream(name: "MULTI_FILTER", subjects: ["foo.one.*", "foo.two.*", "foo.three.*"])
@@ -181,40 +161,10 @@ describe 'JetStream' do
       expect do
         sub = js.subscribe(["foo.one.1", "foo.two.2"], durable: "MULTI_FILTER_CONSUMER", stream: "MULTI_FILTER")
         info = sub.consumer_info
-        expect(info.name).to eql('MULTI_FILTER_CONSUMER')
-        expect(info.config.durable_name).to eql('MULTI_FILTER_CONSUMER')
+        expect(info.name).to eql("MULTI_FILTER_CONSUMER")
+        expect(info.config.durable_name).to eql("MULTI_FILTER_CONSUMER")
         expect(info.config.max_waiting).to eql(nil)
-        expect(info.num_pending).to eql(3)
-
-        msgs = []
-        3.times do
-          msg = sub.next_msg()
-          msg.ack
-          msgs << msg
-        end
-        expect(msgs.count).to eql(3)
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
-        expect(msgs[2].data).to eql('22')
-      end.to_not raise_error
-
-      # Creating a single filter consumer using an Array.
-      expect do
-        sub = js.subscribe(["foo.one.1"], config: {name: "foo"})
-        info = sub.consumer_info
-        expect(info.name).to eql('foo')
-        expect(info.num_pending).to eql(1)
-        msg = sub.next_msg()
-        expect(msg.subject).to eql('foo.one.1')
-      end.to_not raise_error
-
-      # Auto creating a consumer via a loookup.
-      expect do
-        sub = js.subscribe(["foo.one.1", "foo.two.2"], config: {name: "psub3"})
-        info = sub.consumer_info
-        expect(info.name).to eql('psub3')
-        expect(info.num_pending).to eql(3)
+        expect(info.num_pending + info.num_ack_pending).to eql(3)
 
         msgs = []
         3.times do
@@ -222,9 +172,72 @@ describe 'JetStream' do
           msg.ack
           msgs << msg
         end
-        expect(msgs[0].subject).to eql('foo.one.1')
-        expect(msgs[1].subject).to eql('foo.two.2')
-        expect(msgs[2].subject).to eql('foo.two.2')
+        expect(msgs.count).to eql(3)
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
+        expect(msgs[2].data).to eql("22")
+      end.to_not raise_error
+
+      # Creating a single filter consumer using an Array.
+      expect do
+        sub = js.subscribe(["foo.one.1"], config: {name: "foo"})
+        info = sub.consumer_info
+        expect(info.name).to eql("foo")
+        expect(info.num_pending).to eql(1)
+        msg = sub.next_msg
+        expect(msg.subject).to eql("foo.one.1")
+      end.to_not raise_error
+
+      # Auto creating a consumer via a loookup.
+      expect do
+        sub = js.subscribe(["foo.one.1", "foo.two.2"], config: {name: "psub3"})
+        info = sub.consumer_info
+        expect(info.name).to eql("psub3")
+
+        # Messages could have been delivered already.
+        result = info.num_ack_pending + info.num_redelivered + info.num_pending
+        expect(result).to eql(3)
+
+        msgs = []
+        3.times do
+          msg = sub.next_msg
+          msg.ack
+          msgs << msg
+        end
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
+        expect(msgs.count).to eql(3)
+      end.to_not raise_error
+
+      # Create pull subscriber as well in stream with push subscribers
+      expect do
+        sub = js.pull_subscribe(["foo.one.1", "foo.two.2"], "psub4", {config: {ack_wait: 1}})
+        info = sub.consumer_info
+        expect(info.name).to eql("psub4")
+        result = info.num_ack_pending + info.num_redelivered + info.num_pending
+        expect(result).to eql(3)
+        # drop the messages so that they are in ack pending
+        if info.num_pending > 0
+          begin
+            sub.fetch(3)
+          rescue
+          end
+        end
+        info = sub.consumer_info
+        expect(info.num_ack_pending).to eql(3)
+        msgs = []
+        3.times do
+          fetched = sub.fetch(1)
+          fetched.each do |msg|
+            msg.ack
+            msgs << msg
+          end
+        end
+        expect(msgs[0].subject).to eql("foo.one.1")
+        expect(msgs[1].subject).to eql("foo.two.2")
+        expect(msgs[2].subject).to eql("foo.two.2")
         expect(msgs.count).to eql(3)
       end.to_not raise_error
 
@@ -239,38 +252,36 @@ describe 'JetStream' do
       end.to raise_error(NATS::JetStream::Error)
     end
 
-    it 'should create streams and customers with metadata' do
-      skip 'requires v2.10' unless ENV['NATS_SERVER_VERSION'] == "main"
-
+    it "should create streams and customers with metadata" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream
       stream = js.add_stream({
-        :name     => "WITH_METADATA",
-        :metadata => {
-          'foo': 'bar',
-          'hello': 'world'
+        name: "WITH_METADATA",
+        metadata: {
+          foo: "bar",
+          hello: "world"
         }
       })
-      expect(stream[:config][:metadata][:foo]).to eql('bar')
-      expect(stream[:config][:metadata][:hello]).to eql('world')
+      expect(stream[:config][:metadata][:foo]).to eql("bar")
+      expect(stream[:config][:metadata][:hello]).to eql("world")
 
       stream = js.stream_info("WITH_METADATA")
-      expect(stream[:config][:metadata][:foo]).to eql('bar')
-      expect(stream[:config][:metadata][:hello]).to eql('world')
+      expect(stream[:config][:metadata][:foo]).to eql("bar")
+      expect(stream[:config][:metadata][:hello]).to eql("world")
 
       consumer = js.add_consumer("WITH_METADATA", {
-         :name     => "wm",
-         :metadata => {
-           'hoge': 'fuga',
-           'quux': 'uqbar'
-         }
+        name: "wm",
+        metadata: {
+          hoge: "fuga",
+          quux: "uqbar"
+        }
       })
-      expect(consumer[:config][:metadata][:hoge]).to eql('fuga')
-      expect(consumer[:config][:metadata][:quux]).to eql('uqbar')
+      expect(consumer[:config][:metadata][:hoge]).to eql("fuga")
+      expect(consumer[:config][:metadata][:quux]).to eql("uqbar")
 
       consumer = js.consumer_info("WITH_METADATA", "wm")
-      expect(consumer[:config][:metadata][:hoge]).to eql('fuga')
-      expect(consumer[:config][:metadata][:quux]).to eql('uqbar')
+      expect(consumer[:config][:metadata][:hoge]).to eql("fuga")
+      expect(consumer[:config][:metadata][:quux]).to eql("uqbar")
     end
   end
 end

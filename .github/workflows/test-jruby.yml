@@ -1,0 +1,31 @@
+name: JRuby Build
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+jobs:
+  rspec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUNDLE_JOBS: 4
+      BUNDLE_RETRY: 3
+      BUNDLE_GEMFILE: gemfiles/jruby.gemfile
+      CI: true
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: jruby
+        bundler-cache: true
+    - name: Run RSpec
+      # Mark failures as warnings for now due to high level of flakiness
+      # and occasional OOM-s on CI
+      continue-on-error: true
+      env:
+        DEBUG_NATS_TEST: ${{ runner.debug }}
+      run: |
+        bundle exec rspec --force-color || bundle exec rspec --only-failures --force-color

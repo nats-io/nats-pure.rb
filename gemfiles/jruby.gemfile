@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+# See https://github.com/jruby/jruby/issues/7262
+gem "jar-dependencies", "0.4.1"
+
+gemspec path: ".."

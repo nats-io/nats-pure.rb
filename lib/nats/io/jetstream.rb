@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,17 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-require_relative 'msg'
-require_relative 'client'
-require_relative 'errors'
-require_relative 'kv'
-require_relative 'jetstream/api'
-require_relative 'jetstream/errors'
-require_relative 'jetstream/js'
-require_relative 'jetstream/manager'
-require_relative 'jetstream/msg'
-require_relative 'jetstream/pull_subscription'
-require_relative 'jetstream/push_subscription'
+require_relative "kv"
+require_relative "jetstream/api"
+require_relative "jetstream/errors"
+require_relative "jetstream/js"
+require_relative "jetstream/manager"
+require_relative "jetstream/msg"
+require_relative "jetstream/pull_subscription"
+require_relative "jetstream/push_subscription"
 
 module NATS
   # JetStream returns a context with a similar API as the NATS::Client
@@ -33,6 +32,8 @@ module NATS
   #   js = nc.jetstream()
   #
   class JetStream
+    attr_reader :opts, :prefix, :nc
+
     # Create a new JetStream context for a NATS connection.
     #
     # @param conn [NATS::Client]
@@ -40,15 +41,15 @@ module NATS
     # @option params [String] :prefix JetStream API prefix to use for the requests.
     # @option params [String] :domain JetStream Domain to use for the requests.
     # @option params [Float] :timeout Default timeout to use for JS requests.
-    def initialize(conn, params={})
+    def initialize(conn, params = {})
       @nc = conn
       @prefix = if params[:prefix]
-                  params[:prefix]
-                elsif params[:domain]
-                  "$JS.#{params[:domain]}.API"
-                else
-                  JS::DefaultAPIPrefix
-                end
+        params[:prefix]
+      elsif params[:domain]
+        "$JS.#{params[:domain]}.API"
+      else
+        JS::DefaultAPIPrefix
+      end
       @opts = params
       @opts[:timeout] ||= 5 # seconds
       params[:prefix] = @prefix
@@ -80,7 +81,7 @@ module NATS
     # @option params [String] :stream Expected Stream to which the message is being published.
     # @raise [NATS::Timeout] When it takes too long to receive an ack response.
     # @return [PubAck] The pub ack response.
-    def publish(subject, payload="", **params)
+    def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
       if params[:stream]
         params[:header] ||= {}
@@ -89,8 +90,8 @@ module NATS
 
       # Send message with headers.
       msg = NATS::Msg.new(subject: subject,
-                          data: payload,
-                          header: params[:header])
+        data: payload,
+        header: params[:header])
 
       begin
         resp = @nc.request_msg(msg, **params)
@@ -113,53 +114,49 @@ module NATS
     # @option params [String] :durable Consumer durable name from where the messages will be fetched.
     # @option params [Hash] :config Configuration for the consumer.
     # @return [NATS::JetStream::PushSubscription]
-    def subscribe(subject, params={}, &cb)
+    def subscribe(subject, params = {}, &cb)
       params[:consumer] ||= params[:durable]
       params[:consumer] ||= params[:name]
-      multi_filter = case 
-                     when (subject.is_a?(Array) and subject.size == 1)
-                       subject = subject.first
-                       false
-                     when (subject.is_a?(Array) and subject.size > 1)
-                       true
-                     end
+      multi_filter = if subject.is_a?(Array) && (subject.size == 1)
+        subject = subject.first
+        false
+      elsif subject.is_a?(Array) && (subject.size > 1)
+        true
+      end
 
-      # 
       stream = if params[:stream].nil?
-                 if multi_filter
-                   # Use the first subject to try to find the stream.
-                   streams = subject.map do |s|
-                    begin
-                      find_stream_name_by_subject(s)
-                    rescue NATS::JetStream::Error::NotFound
-                      raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
-                    end
-                   end
+        if multi_filter
+          # Use the first subject to try to find the stream.
+          streams = subject.map do |s|
+            find_stream_name_by_subject(s)
+          rescue NATS::JetStream::Error::NotFound
+            raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
+          end
 
-                   # Ensure that the filter subjects are not ambiguous.
-                   streams.uniq!
-                   if streams.count > 1
-                     raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
-                   end
+          # Ensure that the filter subjects are not ambiguous.
+          streams.uniq!
+          if streams.count > 1
+            raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
+          end
 
-                   streams.first
-                 else
-                   find_stream_name_by_subject(subject)
-                 end
-               else
-                 params[:stream]
-               end
+          streams.first
+        else
+          find_stream_name_by_subject(subject)
+        end
+      else
+        params[:stream]
+      end
 
       queue = params[:queue]
       durable = params[:durable]
-      flow_control = params[:flow_control]
+      params[:flow_control]
       manual_ack = params[:manual_ack]
       idle_heartbeat = params[:idle_heartbeat]
       flow_control = params[:flow_control]
       config = params[:config]
 
       if queue
-        if durable and durable != queue
+        if durable && (durable != queue)
           raise NATS::JetStream::Error.new("nats: cannot create queue subscription '#{queue}' to consumer '#{durable}'")
         else
           durable = queue
@@ -170,7 +167,7 @@ module NATS
       consumer_found = false
       should_create = false
 
-      if not durable
+      if !durable
         should_create = true
       else
         begin
@@ -185,18 +182,16 @@ module NATS
       end
 
       if consumer_found
-        if not config.deliver_group
+        if !config.deliver_group
           if queue
             raise NATS::JetStream::Error.new("nats: cannot create a queue subscription for a consumer without a deliver group")
           elsif cinfo.push_bound
             raise NATS::JetStream::Error.new("nats: consumer is already bound to a subscription")
           end
-        else
-          if not queue
-            raise NATS::JetStream::Error.new("nats: cannot create a subscription for a consumer with a deliver group #{config.deliver_group}")
-          elsif queue != config.deliver_group
-            raise NATS::JetStream::Error.new("nats: cannot create a queue subscription #{queue} for a consumer with a deliver group #{config.deliver_group}")
-          end
+        elsif !queue
+          raise NATS::JetStream::Error.new("nats: cannot create a subscription for a consumer with a deliver group #{config.deliver_group}")
+        elsif queue != config.deliver_group
+          raise NATS::JetStream::Error.new("nats: cannot create a queue subscription #{queue} for a consumer with a deliver group #{config.deliver_group}")
         end
       elsif should_create
         # Auto-create consumer if none found.
@@ -209,8 +204,8 @@ module NATS
           raise NATS::JetStream::Error.new("nats: invalid ConsumerConfig")
         end
 
-        config.durable_name = durable if not config.durable_name
-        config.deliver_group = queue if not config.deliver_group
+        config.durable_name = durable if !config.durable_name
+        config.deliver_group = queue if !config.deliver_group
 
         # Create inbox for push consumer.
         deliver = @nc.new_inbox
@@ -225,9 +220,8 @@ module NATS
 
         # Heartbeats / FlowControl
         config.flow_control = flow_control
-        if idle_heartbeat or config.idle_heartbeat
+        if idle_heartbeat || config.idle_heartbeat
           idle_heartbeat = config.idle_heartbeat if config.idle_heartbeat
-          idle_heartbeat = idle_heartbeat * ::NATS::NANOSECONDS
           config.idle_heartbeat = idle_heartbeat
         end
 
@@ -237,11 +231,16 @@ module NATS
       end
 
       # Enable auto acking for async callbacks unless disabled.
-      if cb and not manual_ack
+      # In case ack policy is none then we also do not require to ack.
+      if cb && !manual_ack && (config.ack_policy != "none")
         ocb = cb
         new_cb = proc do |msg|
           ocb.call(msg)
-          msg.ack rescue JetStream::Error::MsgAlreadyAckd
+          begin
+            msg.ack
+          rescue
+            JetStream::Error::MsgAlreadyAckd
+          end
         end
         cb = new_cb
       end
@@ -250,7 +249,7 @@ module NATS
       sub.jsi = JS::Sub.new(
         js: self,
         stream: stream,
-        consumer: consumer,
+        consumer: consumer
       )
       sub
     end
@@ -265,57 +264,54 @@ module NATS
     # @option params [String] :name Name of the Consumer to which the PullSubscription will be bound.
     # @option params [Hash] :config Configuration for the consumer.
     # @return [NATS::JetStream::PullSubscription]
-    def pull_subscribe(subject, durable, params={})
-      if (!durable or durable.empty?) && !(params[:consumer] or params[:name])
+    def pull_subscribe(subject, durable, params = {})
+      if (!durable || durable.empty?) && !(params[:consumer] || params[:name])
         raise JetStream::Error::InvalidDurableName.new("nats: invalid durable name")
       end
-      multi_filter = case 
-                     when (subject.is_a?(Array) and subject.size == 1)
-                       subject = subject.first
-                       false
-                     when (subject.is_a?(Array) and subject.size > 1)
-                       true
-                     end
+      multi_filter = if subject.is_a?(Array) && (subject.size == 1)
+        subject = subject.first
+        false
+      elsif subject.is_a?(Array) && (subject.size > 1)
+        true
+      end
 
       params[:consumer] ||= durable
       params[:consumer] ||= params[:name]
       stream = if params[:stream].nil?
-                 if multi_filter
-                   # Use the first subject to try to find the stream.
-                   streams = subject.map do |s|
-                    begin
-                      find_stream_name_by_subject(s)
-                    rescue NATS::JetStream::Error::NotFound
-                      raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
-                    end
-                   end
+        if multi_filter
+          # Use the first subject to try to find the stream.
+          streams = subject.map do |s|
+            find_stream_name_by_subject(s)
+          rescue NATS::JetStream::Error::NotFound
+            raise NATS::JetStream::Error.new("nats: could not find stream matching filter subject '#{s}'")
+          end
 
-                   # Ensure that the filter subjects are not ambiguous.
-                   streams.uniq!
-                   if streams.count > 1
-                     raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
-                   end
+          # Ensure that the filter subjects are not ambiguous.
+          streams.uniq!
+          if streams.count > 1
+            raise NATS::JetStream::Error.new("nats: multiple streams matched filter subjects: #{streams}")
+          end
 
-                   streams.first
-                 else
-                   find_stream_name_by_subject(subject)
-                 end
-               else
-                 params[:stream]
-               end
+          streams.first
+        else
+          find_stream_name_by_subject(subject)
+        end
+      else
+        params[:stream]
+      end
       begin
         consumer_info(stream, params[:consumer])
       rescue NATS::JetStream::Error::NotFound => e
         # If attempting to bind, then this is a hard error.
-        raise e if params[:stream] and !multi_filter
+        raise e if params[:stream] && !multi_filter
 
-        config = if not params[:config]
-                   JetStream::API::ConsumerConfig.new
-                 elsif params[:config].is_a?(JetStream::API::ConsumerConfig)
-                   params[:config]
-                 else
-                   JetStream::API::ConsumerConfig.new(params[:config])
-                 end
+        config = if !(params[:config])
+          JetStream::API::ConsumerConfig.new
+        elsif params[:config].is_a?(JetStream::API::ConsumerConfig)
+          params[:config]
+        else
+          JetStream::API::ConsumerConfig.new(params[:config])
+        end
         config[:durable_name] = durable
         config[:ack_policy] ||= JS::Config::AckExplicit
         if multi_filter

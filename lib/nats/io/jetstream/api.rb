@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +14,9 @@
 # limitations under the License.
 #
 
-require_relative 'errors'
-require 'base64'
-require 'time'
+require_relative "errors"
+require "base64"
+require "time"
 
 module NATS
   class JetStream
@@ -29,12 +31,12 @@ module NATS
       # @!attribute stream_seq
       #   @return [Integer] The stream sequence.
       SequenceInfo = Struct.new(:consumer_seq, :stream_seq, :last_active,
-                                keyword_init: true) do
-        def initialize(opts={})
+        keyword_init: true) do
+        def initialize(opts = {})
           # Filter unrecognized fields and freeze.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
           freeze
         end
       end
@@ -64,21 +66,23 @@ module NATS
       # @!attribute cluster
       #   @return [Hash]
       ConsumerInfo = Struct.new(:type, :stream_name, :name, :created,
-                                :config, :delivered, :ack_floor,
-                                :num_ack_pending, :num_redelivered, :num_waiting,
-                                :num_pending, :cluster, :push_bound,
-                                keyword_init: true) do
-        def initialize(opts={})
+        :config, :delivered, :ack_floor,
+        :num_ack_pending, :num_redelivered, :num_waiting,
+        :num_pending, :cluster, :push_bound,
+        keyword_init: true) do
+        def initialize(opts = {})
           opts[:created] = Time.parse(opts[:created])
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
           opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS
+          opts[:config][:inactive_threshold] = opts[:config][:inactive_threshold] / ::NATS::NANOSECONDS if opts[:config][:inactive_threshold]
+          opts[:config][:idle_heartbeat] = opts[:config][:idle_heartbeat] / ::NATS::NANOSECONDS if opts[:config][:idle_heartbeat]
           opts[:config] = ConsumerConfig.new(opts[:config])
           opts.delete(:cluster)
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
           freeze
         end
       end
@@ -102,32 +106,30 @@ module NATS
       # @!attribute max_ack_pending
       #   @return [Integer]
       ConsumerConfig = Struct.new(:name, :durable_name, :description,
-                                  :deliver_policy, :opt_start_seq, :opt_start_time,
-                                  :ack_policy, :ack_wait, :max_deliver, :backoff,
-                                  :filter_subject, :replay_policy, :rate_limit_bps,
-                                  :sample_freq, :max_waiting, :max_ack_pending,
-                                  :flow_control, :idle_heartbeat, :headers_only,
-
-                                  # Pull based options
-                                  :max_batch, :max_expires,
-                                  # Push based consumers
-                                  :deliver_subject, :deliver_group,
-                                  # Ephemeral inactivity threshold
-                                  :inactive_threshold,
-                                  # Generally inherited by parent stream and other markers,
-                                  # now can be configured directly.
-                                  :num_replicas,
-                                  # Force memory storage
-                                  :mem_storage,
-
-                                  # NATS v2.10 features
-                                  :metadata, :filter_subjects, :max_bytes,
-                                  keyword_init: true) do
-        def initialize(opts={})
+        :deliver_policy, :opt_start_seq, :opt_start_time,
+        :ack_policy, :ack_wait, :max_deliver, :backoff,
+        :filter_subject, :replay_policy, :rate_limit_bps,
+        :sample_freq, :max_waiting, :max_ack_pending,
+        :flow_control, :idle_heartbeat, :headers_only,
+        # Pull based options
+        :max_batch, :max_expires,
+        # Push based consumers
+        :deliver_subject, :deliver_group,
+        # Ephemeral inactivity threshold
+        :inactive_threshold,
+        # Generally inherited by parent stream and other markers,
+        # now can be configured directly.
+        :num_replicas,
+        # Force memory storage
+        :mem_storage,
+        # NATS v2.10 features
+        :metadata, :filter_subjects, :max_bytes,
+        keyword_init: true) do
+        def initialize(opts = {})
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
         end
       end
 
@@ -196,12 +198,13 @@ module NATS
         :allow_direct,
         :mirror_direct,
         :metadata,
-        keyword_init: true) do
-        def initialize(opts={})
+        keyword_init: true
+      ) do
+        def initialize(opts = {})
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
         end
       end
 
@@ -218,8 +221,8 @@ module NATS
       # @!attribute domain
       #   @return [String]
       StreamInfo = Struct.new(:type, :config, :created, :state, :domain,
-                              keyword_init: true) do
-        def initialize(opts={})
+        keyword_init: true) do
+        def initialize(opts = {})
           opts[:config] = StreamConfig.new(opts[:config])
           opts[:state] = StreamState.new(opts[:state])
           opts[:created] = ::Time.parse(opts[:created])
@@ -227,7 +230,7 @@ module NATS
           # Filter fields and freeze.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
           freeze
         end
       end
@@ -245,12 +248,12 @@ module NATS
       # @!attribute consumer_count
       #   @return [Integer]
       StreamState = Struct.new(:messages, :bytes, :first_seq, :first_ts,
-                               :last_seq, :last_ts, :consumer_count,
-                               keyword_init: true) do
-        def initialize(opts={})
+        :last_seq, :last_ts, :consumer_count,
+        keyword_init: true) do
+        def initialize(opts = {})
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
         end
       end
 
@@ -267,13 +270,13 @@ module NATS
       # @!attribute did_create
       #   @return [Boolean]
       StreamCreateResponse = Struct.new(:type, :config, :created, :state, :did_create,
-                                        keyword_init: true) do
-        def initialize(opts={})
+        keyword_init: true) do
+        def initialize(opts = {})
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           opts[:config] = StreamConfig.new(opts[:config])
           opts[:state] = StreamState.new(opts[:state])
-          super(opts)
+          super
           freeze
         end
       end
@@ -297,11 +300,11 @@ module NATS
           # Filter out members not present.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
-          super(opts)
+          super
         end
 
         def sequence
-          self.seq
+          seq
         end
       end
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-require 'nats/io/client'
-require 'nats/io/rails' if defined?(Rails::Engine)
-require 'nats/nuid'
+require "nats/utils/list"
+require "nats/io/client"
+require "nats/service"
+require "nats/io/rails" if defined?(Rails::Engine)
+require "nats/nuid"

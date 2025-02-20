@@ -1,19 +1,16 @@
-require 'spec_helper'
-require 'monitor'
+# frozen_string_literal: true
 
-describe 'Client - Reconnect' do
-
-  before(:each) do
+describe "Client - Reconnect" do
+  before do
     @s = NatsServerControl.new
     @s.start_server(true)
   end
 
-  after(:each) do
+  after do
     @s.kill_server
-    sleep 1
   end
 
-  it 'should process errors from a server and reconnect' do
+  it "should process errors from a server and reconnect" do
     nats = NATS::IO::Client.new
     nats.connect({
       reconnect: true,
@@ -46,7 +43,11 @@ describe 'Client - Reconnect' do
 
     # FIXME: This can fail due to timeout because
     # disconnection may have already occurred.
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     # Should have a connection closed at this without reconnecting.
     mon.synchronize { done.wait(3) }
@@ -60,7 +61,7 @@ describe 'Client - Reconnect' do
     expect(nats.closed?).to eql(true)
   end
 
-  it 'should reconnect to server and replay all subscriptions' do
+  it "should reconnect to server and replay all subscriptions" do
     msgs = []
     errors = []
     closes = 0
@@ -127,7 +128,7 @@ describe 'Client - Reconnect' do
     nats.close
   end
 
-  it 'should abort reconnecting if disabled' do
+  it "should abort reconnecting if disabled" do
     msgs = []
     errors = []
     closes = 0
@@ -155,7 +156,7 @@ describe 'Client - Reconnect' do
       mon.synchronize { done.signal }
     end
 
-    nats.connect(:reconnect => false)
+    nats.connect(reconnect: false)
 
     nats.subscribe("foo") do |msg|
       msgs << msg
@@ -182,8 +183,7 @@ describe 'Client - Reconnect' do
     nats.close
   end
 
-  it 'should give up connecting if no servers available' do
-    msgs = []
+  it "should give up connecting if no servers available" do
     errors = []
     closes = 0
     reconnects = 0
@@ -212,9 +212,9 @@ describe 'Client - Reconnect' do
 
     expect do
       nats.connect({
-       :servers => ["nats://127.0.0.1:4229"],
-       :max_reconnect_attempts => 2,
-       :reconnect_time_wait => 1
+        servers: ["nats://127.0.0.1:4229"],
+        max_reconnect_attempts: 2,
+        reconnect_time_wait: 1
       })
     end.to raise_error(Errno::ECONNREFUSED)
 
@@ -227,7 +227,7 @@ describe 'Client - Reconnect' do
     expect(nats.status).to eql(NATS::IO::DISCONNECTED)
   end
 
-  it 'should give up reconnecting if no servers available' do
+  it "should give up reconnecting if no servers available" do
     msgs = []
     errors = []
     closes = 0
@@ -256,9 +256,9 @@ describe 'Client - Reconnect' do
     end
 
     nats.connect({
-     :servers => ["nats://127.0.0.1:4222"],
-     :max_reconnect_attempts => 1,
-     :reconnect_time_wait => 1
+      servers: ["nats://127.0.0.1:4222"],
+      max_reconnect_attempts: 1,
+      reconnect_time_wait: 1
     })
 
     nats.subscribe("foo") do |msg|
@@ -293,7 +293,7 @@ describe 'Client - Reconnect' do
     expect(nats.status).to eql(NATS::IO::CLOSED)
   end
 
-  context 'against a server which is idle during connect' do
+  context "against a server which is idle during connect" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4444
@@ -301,6 +301,7 @@ describe 'Client - Reconnect' do
         loop do
           # Wait for a client to connect
           @fake_nats_server.accept
+        rescue IOError
         end
       end
     end
@@ -310,8 +311,7 @@ describe 'Client - Reconnect' do
       @fake_nats_server.close
     end
 
-    it 'should give up reconnecting if no servers available due to timeout errors during connect' do
-      msgs = []
+    it "should give up reconnecting if no servers available due to timeout errors during connect" do
       errors = []
       closes = 0
       reconnects = 0
@@ -339,11 +339,11 @@ describe 'Client - Reconnect' do
       end
 
       nats.connect({
-        :servers => ["nats://127.0.0.1:4222", "nats://127.0.0.1:4444"],
-        :max_reconnect_attempts => 1,
-        :reconnect_time_wait => 1,
-        :dont_randomize_servers => true,
-        :connect_timeout => 1
+        servers: ["nats://127.0.0.1:4222", "nats://127.0.0.1:4444"],
+        max_reconnect_attempts: 1,
+        reconnect_time_wait: 1,
+        dont_randomize_servers: true,
+        connect_timeout: 1
       })
 
       # Trigger reconnect logic
@@ -363,7 +363,7 @@ describe 'Client - Reconnect' do
     end
   end
 
-  context 'against a server which becomes idle after being connected' do
+  context "against a server which becomes idle after being connected" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4445
@@ -375,7 +375,7 @@ describe 'Client - Reconnect' do
             client.puts "INFO {}\r\n"
 
             # Read and ignore CONNECT command send by the client
-            connect_op = client.gets
+            client.gets
 
             # Reply to any pending pings client may have sent
             sleep 0.1
@@ -395,8 +395,7 @@ describe 'Client - Reconnect' do
       @fake_nats_server.close
     end
 
-    it 'should reconnect to a healthy server if connection becomes stale' do
-      msgs = []
+    it "should reconnect to a healthy server if connection becomes stale" do
       errors = []
       closes = 0
       reconnects = 0
@@ -424,12 +423,12 @@ describe 'Client - Reconnect' do
       end
 
       nats.connect({
-        :servers => ["nats://127.0.0.1:4445","nats://127.0.0.1:4222"],
-        :max_reconnect_attempts => -1,
-        :reconnect_time_wait => 2,
-        :dont_randomize_servers => true,
-        :connect_timeout => 1,
-        :ping_interval => 2
+        servers: ["nats://127.0.0.1:4445", "nats://127.0.0.1:4222"],
+        max_reconnect_attempts: -1,
+        reconnect_time_wait: 2,
+        dont_randomize_servers: true,
+        connect_timeout: 1,
+        ping_interval: 2
       })
       mon.synchronize { done.wait(7) }
 
@@ -446,7 +445,7 @@ describe 'Client - Reconnect' do
     end
   end
 
-  context 'against a server which stops following protocol after being connected' do
+  context "against a server which stops following protocol after being connected" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4446
@@ -458,7 +457,7 @@ describe 'Client - Reconnect' do
             client.puts "INFO {}\r\n"
 
             # Read and ignore CONNECT command send by the client
-            connect_op = client.gets
+            client.gets
 
             # Reply to any pending pings client may have sent
             sleep 0.1
@@ -479,8 +478,7 @@ describe 'Client - Reconnect' do
       @fake_nats_server.close
     end
 
-    it 'should reconnect to a healthy server after unknown protocol error' do
-      msgs = []
+    it "should reconnect to a healthy server after unknown protocol error" do
       errors = []
       closes = 0
       reconnects = 0
@@ -508,11 +506,11 @@ describe 'Client - Reconnect' do
       end
 
       nats.connect({
-        :servers => ["nats://127.0.0.1:4446","nats://127.0.0.1:4222"],
-        :max_reconnect_attempts => -1,
-        :reconnect_time_wait => 2,
-        :dont_randomize_servers => true,
-        :connect_timeout => 1
+        servers: ["nats://127.0.0.1:4446", "nats://127.0.0.1:4222"],
+        max_reconnect_attempts: -1,
+        reconnect_time_wait: 2,
+        dont_randomize_servers: true,
+        connect_timeout: 1
       })
       # Wait for disconnect due to the unknown protocol error
       mon.synchronize { done.wait(7) }
@@ -533,7 +531,7 @@ describe 'Client - Reconnect' do
     end
   end
 
-  context 'against a server to which we have a stale connection after being connected' do
+  context "against a server to which we have a stale connection after being connected" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4447
@@ -545,7 +543,7 @@ describe 'Client - Reconnect' do
             client.puts "INFO {}\r\n"
 
             # Read and ignore CONNECT command send by the client
-            connect_op = client.gets
+            client.gets
 
             # Reply to any pending pings client may have sent
             sleep 0.5
@@ -566,8 +564,7 @@ describe 'Client - Reconnect' do
       @fake_nats_server.close
     end
 
-    it 'should try to reconnect after receiving stale connection error' do
-      msgs = []
+    it "should try to reconnect after receiving stale connection error" do
       errors = []
       closes = 0
       reconnects = 0
@@ -595,11 +592,11 @@ describe 'Client - Reconnect' do
       end
 
       nats.connect({
-        :servers => ["nats://127.0.0.1:4447"],
-        :max_reconnect_attempts => 1,
-        :reconnect_time_wait => 2,
-        :dont_randomize_servers => true,
-        :connect_timeout => 2
+        servers: ["nats://127.0.0.1:4447"],
+        max_reconnect_attempts: 1,
+        reconnect_time_wait: 2,
+        dont_randomize_servers: true,
+        connect_timeout: 2
       })
 
       # Wait for disconnect due to the unknown protocol error
@@ -620,6 +617,140 @@ describe 'Client - Reconnect' do
       # Wrap up connection with server and confirm
       nats.close
       expect(nats.status).to eql(NATS::IO::CLOSED)
+    end
+  end
+
+  describe "#process_op_error" do
+    # Close all dangling nats threads from previous tests
+    before do
+      Thread.list.each do |thread|
+        thread.exit if thread.name&.start_with?("nats:")
+      end
+    end
+
+    let(:responder) { NATS.connect }
+
+    let(:requester) do
+      NATS.connect(
+        reconnect: true,
+        reconnect_time_wait: 2,
+        max_reconnect_attempts: 1
+      )
+    end
+
+    it "closes all its threads before reconnection" do
+      responder.subscribe("foo") { |msg| msg.respond("bar") }
+      requester.request("foo")
+
+      nats_threads = Thread.list.select do |thread|
+        thread.name&.start_with?("nats:")
+      end
+
+      @s.restart
+      sleep 2
+
+      expect(Thread.list & nats_threads).to be_empty
+
+      responder.close
+      requester.close
+    end
+  end
+
+  describe "#reconnect" do
+    let(:nats) { NATS.connect }
+
+    context "when client is connected" do
+      it "succesfully reconnects" do
+        reconnected = false
+        nats.on_reconnect { reconnected = true }
+
+        expect(nats.force_reconnect).to be(true)
+        sleep 0.1 until reconnected
+
+        expect(nats.stats[:reconnects]).to eq(1)
+
+        nats.close
+      end
+
+      it "resumes subscriptions work" do
+        messages = []
+
+        nats.subscribe("foo") do |msg|
+          sleep 0.5
+          messages << msg
+        end
+        nats.flush
+
+        nats.publish("foo", "bar")
+        nats.flush
+
+        nats.force_reconnect
+
+        nats.publish("foo", "qux")
+        nats.flush
+
+        sleep 2
+        expect(messages).to match_array([
+          have_attributes(class: NATS::Msg, subject: "foo", data: "bar"),
+          have_attributes(class: NATS::Msg, subject: "foo", data: "qux")
+        ])
+
+        nats.close
+      end
+    end
+
+    context "when client is reconnecting" do
+      it "does not reconnect twice" do
+        disconnections = 0
+        reconnected = false
+
+        nats.on_disconnect do
+          disconnections += 1
+          sleep 0.5
+        end
+
+        nats.on_reconnect { reconnected = true }
+
+        # Initiate the first reconnect
+        nats.force_reconnect
+
+        # Initiate the second reconnect
+        expect(nats.force_reconnect).to be(true)
+        sleep 0.1 until reconnected
+
+        expect(disconnections).to eq(1)
+        expect(nats.stats[:reconnects]).to eq(1)
+
+        nats.close
+      end
+    end
+
+    context "when client is disconnected" do
+      it "raises error" do
+        nats.send(:close_connection, NATS::Status::DISCONNECTED, false)
+
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
+    end
+
+    context "when client is closed" do
+      it "raises error" do
+        nats.close
+
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
+    end
+
+    context "when client is draining" do
+      it "raises error" do
+        nats.subscribe("reconnect") { sleep 1 }
+        nats.flush
+
+        nats.publish("reconnect", "draining")
+        nats.drain
+
+        expect { nats.force_reconnect }.to raise_error(NATS::IO::ConnectionClosedError)
+      end
     end
   end
 end

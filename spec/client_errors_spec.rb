@@ -1,31 +1,16 @@
-# Copyright 2016-2021 The NATS Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# frozen_string_literal: true
 
-require 'spec_helper'
-
-describe 'Client - Errors' do
-
-  before(:each) do
+describe "Client - Errors" do
+  before(:all) do
     @s = NatsServerControl.new
     @s.start_server(true)
   end
 
-  after(:each) do
+  after(:all) do
     @s.kill_server
   end
 
-  it 'should process errors from server' do
+  it "should process errors from server" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
@@ -54,7 +39,11 @@ describe 'Client - Errors' do
 
     # FIXME: This can fail due to timeout because
     # disconnection may have already occurred.
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     nats.close
     mon.synchronize { done.wait(3) }
@@ -66,7 +55,7 @@ describe 'Client - Errors' do
     expect(nats.closed?).to eql(true)
   end
 
-  it 'should handle unknown errors in the protocol' do
+  it "should handle unknown errors in the protocol" do
     mon = Monitor.new
     done = mon.new_cond
 
@@ -106,7 +95,7 @@ describe 'Client - Errors' do
     expect(nats.closed?).to eql(true)
   end
 
-  it 'should handle as async errors uncaught exceptions from callbacks' do
+  it "should handle as async errors uncaught exceptions from callbacks" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
@@ -131,7 +120,7 @@ describe 'Client - Errors' do
 
     # Trigger invalid subject server error which the client
     # detects so that it will disconnect
-    class CustomError < StandardError; end
+    custom_error = Class.new(StandardError)
 
     n = 0
     msgs = []
@@ -139,7 +128,7 @@ describe 'Client - Errors' do
       n += 1
 
       if n == 2
-        raise CustomError.new("NG!")
+        raise custom_error.new("NG!")
       end
 
       msgs << payload
@@ -148,7 +137,11 @@ describe 'Client - Errors' do
     5.times do
       nats.publish("hello")
     end
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     # Wait for messages to be received
     sleep 2
@@ -158,14 +151,14 @@ describe 'Client - Errors' do
 
     expect(msgs.count).to eql(4)
     expect(errors.count).to eql(1)
-    expect(errors.first).to be_a(CustomError)
+    expect(errors.first).to be_a(custom_error)
     expect(disconnects.count).to eql(1)
     expect(disconnects.first).to be_nil
     expect(closes).to eql(1)
     expect(nats.closed?).to eql(true)
   end
 
-  it 'should handle subscriptions with slow consumers as async errors when over pending msgs limit' do
+  it "should handle subscriptions with slow consumers as async errors when over pending msgs limit" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
@@ -197,14 +190,22 @@ describe 'Client - Errors' do
     20.times do |n|
       nats.publish("hello", "ng-#{n}")
     end
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     # Wait a bit for subscriber to recover
     sleep 2
     3.times do |n|
       nats.publish("hello", "ok-#{n}")
     end
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     # Wait a bit to receive final messages
     sleep 0.5
@@ -223,7 +224,7 @@ describe 'Client - Errors' do
     expect(nats.closed?).to eql(true)
   end
 
-  it 'should handle subscriptions with slow consumers as async errors when over pending bytes limit' do
+  it "should handle subscriptions with slow consumers as async errors when over pending bytes limit" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
@@ -246,22 +247,30 @@ describe 'Client - Errors' do
       mon.synchronize { done.signal }
     end
 
-    data = ''
-    nats.subscribe("hello", pending_bytes_limit: 10) do |payload|
-      data += payload
+    data = ""
+    nats.subscribe("hello", pending_bytes_limit: 10) do |msg|
+      data += msg.data
       sleep 2 if data.size == 10
     end
 
     20.times do
-      nats.publish("hello", 'A')
+      nats.publish("hello", "A")
     end
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
     sleep 2
 
     3.times do |n|
-      nats.publish("hello", 'B')
+      nats.publish("hello", "B")
     end
-    nats.flush(1) rescue nil
+    begin
+      nats.flush(1)
+    rescue
+      nil
+    end
 
     # Wait a bit to receive final messages
     sleep 0.5
@@ -277,7 +286,7 @@ describe 'Client - Errors' do
     expect(nats.closed?).to eql(true)
   end
 
-  context 'against a server which is idle' do
+  context "against a server which is idle" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4555
@@ -285,6 +294,7 @@ describe 'Client - Errors' do
         loop do
           # Wait for a client to connect and linger
           @fake_nats_server.accept
+        rescue IOError # ignore client disconnects
         end
       end
     end
@@ -294,8 +304,7 @@ describe 'Client - Errors' do
       @fake_nats_server.close
     end
 
-    it 'should fail due to timeout errors during connect' do
-      msgs = []
+    it "should fail due to timeout errors during connect" do
       errors = []
       closes = 0
       reconnects = 0
@@ -323,12 +332,12 @@ describe 'Client - Errors' do
       end
 
       expect do
-      nats.connect({
-        :servers => ["nats://127.0.0.1:4555"],
-        :max_reconnect_attempts => 1,
-        :reconnect_time_wait => 1,
-        :connect_timeout => 1
-      })
+        nats.connect({
+          servers: ["nats://127.0.0.1:4555"],
+          max_reconnect_attempts: 1,
+          reconnect_time_wait: 1,
+          connect_timeout: 1
+        })
       end.to raise_error(NATS::IO::SocketTimeoutError)
 
       expect(disconnects.count).to eql(1)
@@ -347,17 +356,17 @@ describe 'Client - Errors' do
     end
   end
 
-  context 'against a server with a custom INFO line' do
+  context "against a server with a custom INFO line" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4556
       @fake_nats_server_th = Thread.new do
-
         loop do
           # Wait for a client to connect and linger
           client = @fake_nats_server.accept
-          client.puts %Q(INFO {"version":"1.3.0 foo bar","max_payload": 1048576}\r\n)
+          client.puts %(INFO {"version":"1.3.0 foo bar","max_payload": 1048576}\r\n)
           client.puts "PONG\r\n"
+        rescue IOError # ignore client disconnects
         end
       end
     end
@@ -367,12 +376,8 @@ describe 'Client - Errors' do
       @fake_nats_server.close
     end
 
-    it 'should be able to connect' do
-      msgs = []
+    it "should be able to connect" do
       errors = []
-      closes = 0
-      reconnects = 0
-      disconnects = []
 
       nc = NATS::IO::Client.new
       mon = Monitor.new
@@ -387,11 +392,11 @@ describe 'Client - Errors' do
       end
 
       expect do
-      nc.connect({
-        :servers => ["nats://127.0.0.1:4556"],
-        :reconnect => false,
-        :connect_timeout => 1
-      })
+        nc.connect({
+          servers: ["nats://127.0.0.1:4556"],
+          reconnect: false,
+          connect_timeout: 1
+        })
       end.to_not raise_error
 
       nc.close
@@ -400,20 +405,20 @@ describe 'Client - Errors' do
     end
   end
 
-  context 'against a server with a custom malformed INFO line' do
+  context "against a server with a custom malformed INFO line" do
     before(:all) do
       # Start a fake tcp server
       @fake_nats_server = TCPServer.new 4556
       @fake_nats_server_th = Thread.new do
-
         loop do
           # Wait for a client to connect and linger
           client = @fake_nats_server.accept
           begin
-            client.puts %Q(INFO {foo)
+            client.puts %(INFO {foo)
           ensure
             client.close
           end
+        rescue IOError # ignore client disconnects
         end
       end
     end
@@ -423,12 +428,8 @@ describe 'Client - Errors' do
       @fake_nats_server.close
     end
 
-    it 'should fail to connect' do
-      msgs = []
+    it "should fail to connect" do
       errors = []
-      closes = 0
-      reconnects = 0
-      disconnects = []
 
       nc = NATS::IO::Client.new
       mon = Monitor.new
@@ -443,12 +444,12 @@ describe 'Client - Errors' do
       end
 
       expect do
-      nc.connect({
-        :servers => ["nats://127.0.0.1:4556"],
-        :reconnect => false,
-        :connect_timeout => 1
-      })
-      end.to raise_error (NATS::IO::ConnectError)
+        nc.connect({
+          servers: ["nats://127.0.0.1:4556"],
+          reconnect: false,
+          connect_timeout: 1
+        })
+      end.to raise_error(NATS::IO::ConnectError)
 
       nc.close
       mon.synchronize { done.wait(3) }

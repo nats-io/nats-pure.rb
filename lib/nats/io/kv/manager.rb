@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +17,7 @@
 module NATS
   class KeyValue
     module Manager
-      def key_value(bucket)
+      def key_value(bucket, params = {})
         stream = "KV_#{bucket}"
         begin
           si = stream_info(stream)
@@ -31,16 +33,18 @@ module NATS
           stream: stream,
           pre: "$KV.#{bucket}.",
           js: self,
-          direct: si.config.allow_direct
+          direct: si.config.allow_direct,
+          validate_keys: params[:validate_keys]
         )
       end
 
       def create_key_value(config)
-        config = if not config.is_a?(KeyValue::API::KeyValueConfig)
-                   KeyValue::API::KeyValueConfig.new(config)
-                 else
-                   config
-                 end
+        config = if !config.is_a?(KeyValue::API::KeyValueConfig)
+          config = {bucket: config} if config.is_a?(String)
+          KeyValue::API::KeyValueConfig.new(config)
+        else
+          config
+        end
         config.history ||= 1
         config.replicas ||= 1
         duplicate_window = 2 * 60 # 2 minutes
@@ -49,6 +53,10 @@ module NATS
             duplicate_window = config.ttl
           end
           config.ttl = config.ttl * ::NATS::NANOSECONDS
+        end
+
+        if config.history > 64
+          raise NATS::KeyValue::KeyHistoryTooLargeError
         end
 
         stream = JetStream::API::StreamConfig.new(
@@ -68,8 +76,8 @@ module NATS
           max_msgs_per_subject: config.history,
           num_replicas: config.replicas,
           storage: config.storage,
-          republish: config.republish,
-          )
+          republish: config.republish
+        )
 
         si = add_stream(stream)
         KeyValue.new(
@@ -77,7 +85,8 @@ module NATS
           stream: stream.name,
           pre: "$KV.#{config.bucket}.",
           js: self,
-          direct: si.config.allow_direct
+          direct: si.config.allow_direct,
+          validate_keys: config.validate_keys
         )
       end
 

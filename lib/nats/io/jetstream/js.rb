@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright 2021 The NATS Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +14,17 @@
 # limitations under the License.
 #
 
-require_relative 'js/config'
-require_relative 'js/header'
-require_relative 'js/status'
-require_relative 'js/sub'
+require_relative "js/config"
+require_relative "js/header"
+require_relative "js/status"
+require_relative "js/sub"
 
 module NATS
   class JetStream
     # Misc internal functions to support JS API.
     # @private
     module JS
-      DefaultAPIPrefix = ("$JS.API".freeze)
+      DefaultAPIPrefix = "$JS.API" # rubocop:disable Naming/ConstantName
 
       class << self
         def next_req_to_json(next_req)
@@ -34,14 +36,14 @@ module NATS
         end
 
         def is_status_msg(msg)
-          return (!msg.nil? and (!msg.header.nil? and msg.header[Header::Status]))
+          (!msg.nil? and (!msg.header.nil? and msg.header[Header::Status]))
         end
 
         # check_503_error raises exception when a NATS::Msg has a 503 status header.
         # @param msg [NATS::Msg] The message with status headers.
         # @raise [NATS::JetStream::Error::ServiceUnavailable]
         def check_503_error(msg)
-          return if msg.nil? or msg.header.nil?
+          return if msg.nil? || msg.header.nil?
           if msg.header[Header::Status] == Status::ServiceUnavailable
             raise ::NATS::JetStream::Error::ServiceUnavailable
           end
@@ -59,7 +61,7 @@ module NATS
           check_503_error(msg)
           code = msg.header[JS::Header::Status]
           desc = msg.header[JS::Header::Desc]
-          return ::NATS::JetStream::API::Error.new({code: code, description: desc})
+          ::NATS::JetStream::API::Error.new({code: code, description: desc})
         end
 
         # from_error takes an API response that errored and maps the error

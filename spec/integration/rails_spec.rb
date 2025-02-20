@@ -1,26 +1,27 @@
+# frozen_string_literal: true
 
 begin
-  require 'rails'
-  require 'nats/io/rails'
-  require 'rails/application'
-  require 'active_record'
-  require 'active_record/railtie'
+  require "rails"
+  require "nats/io/rails"
+  require "rails/application"
+  require "active_record"
+  require "active_record/railtie"
 rescue LoadError
 end
 
-require 'spec_helper'
+require "spec_helper"
 
-describe 'Rails integration' do
+describe "Rails integration", :rails do
   before(:all) do
-    skip 'rails not installed' if not defined?(Rails)
+    skip "rails not installed" if !defined?(Rails)
     @serverctl = NatsServerControl.new.tap { |s| s.start_server(true) }
   end
 
   after(:all) do
-    @serverctl.kill_server if @serverctl
+    @serverctl&.kill_server
   end
 
-  around(:each) do |example|
+  around do |example|
     old_database_url = ENV["DATABASE_URL"]
     ENV["DATABASE_URL"] ||= "sqlite3::memory:?db_pool_size=#{db_pool_size}&checkout_timeout=#{checkout_timeout}"
     example.run
@@ -33,12 +34,13 @@ describe 'Rails integration' do
 
   let!(:application) do
     stub_const("TestApp", Class.new(Rails::Application) do
+      config.load_defaults Rails::VERSION::STRING.split(".").take(2).join(".")
       config.eager_load = true
-      config.active_record.legacy_connection_handling = false if config.active_record.respond_to?(:legacy_connection_handling)
-    end).tap { Rails.application.initialize!}
+      config.active_record.legacy_connection_handling = false if ActiveRecord::VERSION::STRING < "7.0.0"
+    end).tap { Rails.application.initialize! }
   end
 
-  it 'should give back implicitly checked out database connections' do
+  it "should give back implicitly checked out database connections" do
     nats = NATS.connect
 
     queue = Queue.new

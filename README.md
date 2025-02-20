@@ -1,8 +1,11 @@
-# NATS - Pure Ruby Client
+[![Gem Version](https://badge.fury.io/rb/nats-pure.svg)](https://rubygems.org/gems/nats-pure)
+[![License Apache 2.0](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Build](https://github.com/nats-io/nats-pure.rb/workflows/Build/badge.svg)](https://github.com/nats-io/nats-pure.rb/actions)
+[![Documentation](https://img.shields.io/badge/docs-link-brightgreen.svg)](https://docs.nats.io/)
+
+# NATS: Pure Ruby Client
 
 A thread safe [Ruby](http://ruby-lang.org) client for the [NATS messaging system](https://nats.io) written in pure Ruby.
-
-[![License Apache 2.0](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)[![Build Status](https://travis-ci.org/nats-io/nats-pure.rb.svg)](http://travis-ci.org/nats-io/nats-pure.rb)[![Gem Version](https://d25lcipzij17d.cloudfront.net/badge.svg?id=rb&type=5&v=2.4.0)](https://rubygems.org/gems/nats-pure/versions/2.4.0)
 
 ## Getting Started
 
@@ -98,6 +101,10 @@ loop do
   end
 end
 ```
+
+## Service API
+
+The service API allows you to easily [build NATS services](docs/service_api.md).
 
 ## Clustered Usage
 
