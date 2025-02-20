@@ -116,8 +116,9 @@ module NATS
         service.client.subscribe(subject, queue: queue) do |msg|
           started_at = Time.now
 
-          block.call(Request.from_msg(self, msg))
-          stats.error(msg.error) if msg.error
+          req = Request.from_msg(self, msg)
+          block.call(req)
+          stats.error(req.error) if req.error
         rescue NATS::Error => error
           stats.error(error)
           service.stop(error)
