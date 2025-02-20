@@ -45,7 +45,6 @@ describe "Client - Specification" do
       nc.connect("127.0.0.1:4522")
       nc.close
     end.to_not raise_error
-
   end
 
   it "should connect using multiple URIs" do
