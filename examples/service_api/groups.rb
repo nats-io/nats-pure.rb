@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "nats"
+
 client = NATS.connect
 
 service = client.services.add(
