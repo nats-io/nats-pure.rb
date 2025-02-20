@@ -1845,7 +1845,7 @@ module NATS
     end
 
     def process_uri(uris)
-      uris.split(",").map do |uri|
+      uris.gsub(/\s+/, "").split(',').map do |uri|
         # Scheme
         uri = "nats://#{uri}" if !uri.include?("://")
 

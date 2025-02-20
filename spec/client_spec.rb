@@ -45,6 +45,26 @@ describe "Client - Specification" do
       nc.connect("127.0.0.1:4522")
       nc.close
     end.to_not raise_error
+
+  end
+
+  it "should connect using multiple URIs" do
+    s = NatsServerControl.new("nats://127.0.0.1:5223", "/tmp/test-nats-2.pid", "--cluster nats://127.0.0.1:5248 --cluster_name test-cluster --routes nats://127.0.0.1:4248")
+    s.start_server(true)
+
+    expect do
+      nc = NATS::IO::Client.new
+      nc.connect("127.0.0.1:4522,127.0.0.1:5223")
+      nc.close
+    end.to_not raise_error
+
+    expect do
+      nc = NATS::IO::Client.new
+      nc.connect("127.0.0.1:4522, 127.0.0.1:5223")
+      nc.close
+    end.to_not raise_error
+
+    s.kill_server
   end
 
   it "supports new server announcement discovery" do
