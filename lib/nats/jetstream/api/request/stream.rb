@@ -7,6 +7,10 @@ module NATS
         schema Stream::Config
       end
 
+      class StreamUpdateRequest < Request
+        schema Stream::Config
+      end
+
       class StreamInfoRequest < Request
         schema do
           # When true will result in a full list of deleted message 

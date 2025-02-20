@@ -18,7 +18,7 @@ module NATS
         end
 
         def endpoint(name, request: Request, response:, subject: true)
-          define_endpoint(name, response)
+          define_endpoint(name, request, response)
 
           if subject
             define_endpoint_with_subject(name)
@@ -36,7 +36,7 @@ module NATS
           end
         end
 
-        def define_endpoint(name, response)
+        def define_endpoint(name, request, response)
           define_reader "#{name}_endpoint" do
             Endpoint.new(
               name: name, 
@@ -49,13 +49,13 @@ module NATS
         end
 
         def define_endpoint_with_subject(name)
-          define_method name do |subject, data = nil, params = {}|
+          define_method name do |subject, data = {}, params = {}|
             send("#{name}_endpoint").call(subject, data, params)
           end
         end
 
         def define_endpoint_without_subject(name)
-          define_method name do |data = nil, params = {}|
+          define_method name do |data = {}, params = {}|
             send("#{name}_endpoint").call(nil, data, params)
           end
         end

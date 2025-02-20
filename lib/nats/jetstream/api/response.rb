@@ -44,6 +44,16 @@ module NATS
         end
       end
 
+      class SuccessResponse < Response
+        schema do
+          bool :success
+        end
+
+        def success?
+          data.success
+        end
+      end
+
       class ErrorResponse < Response
         schema do
           # HTTP like error code in the 300 to 500 range

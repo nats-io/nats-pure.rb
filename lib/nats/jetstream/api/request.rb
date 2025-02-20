@@ -24,7 +24,7 @@ module NATS
         end
 
         def to_json
-          data.nil? ? "" : data.to_json
+          data.to_json
         end
 
         private

@@ -15,13 +15,9 @@ module NATS
         schema Stream::Info
       end
 
-      class StreamDeleteResponse < Response
-        schema do
-          bool :success
-        end
-      end
+      class StreamDeleteResponse < SuccessResponse; end
 
-      class StreamPurgeResponse < Response
+      class StreamPurgeResponse < SuccessResponse
         schema do
           bool :success
           integer :purged
@@ -52,11 +48,7 @@ module NATS
         schema Message::Info
       end
 
-      class StreamMsgDeleteResponse < Response
-        schema do
-          bool :success
-        end
-      end
+      class StreamMsgDeleteResponse < SuccessResponse; end
 
       class StreamSnapshotResponse < Response
         schema do
@@ -71,17 +63,8 @@ module NATS
         end
       end
 
-      class StreamRemovePeerResponse < Response
-        schema do
-          bool :success
-        end
-      end
-
-      class StreamLeaderStepdownResponse < Response
-        schema do
-          bool :success
-        end
-      end
+      class StreamRemovePeerResponse < SuccessResponse; end
+      class StreamLeaderStepdownResponse < SuccessResponse; end
     end
   end
 end

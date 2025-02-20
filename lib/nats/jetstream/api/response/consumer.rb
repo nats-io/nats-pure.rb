@@ -11,11 +11,7 @@ module NATS
         schema Consumer::Info
       end
 
-      class ConsumerDeleteResponse < Response
-        schema do
-          bool :succes
-        end
-      end
+      class ConsumerDeleteResponse < SuccessResponse; end
 
       class ConsumerListResponse < ListResponse
         schema do
@@ -37,11 +33,7 @@ module NATS
         end
       end
 
-      class ConsumerLeaderStepdownResponse < Response
-        schema do
-          bool :succes
-        end
-      end
+      class ConsumerLeaderStepdownResponse < SuccessResponse; end
     end
   end
 end

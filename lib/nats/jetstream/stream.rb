@@ -9,14 +9,17 @@ require_relative "stream/list"
 module NATS
   class JetStream
     class Stream
-      attr_reader :jetstream, :config, :subject
+      attr_reader :jetstream, :config, :subject, :messages
 
       alias js jetstream
 
       def initialize(jetstream, config)
         @jetstream = jetstream
+
         @config = Config.new(config)
         @subject = @config.name
+
+        @messages = Message::List.new(self)
       end
 
       def create
@@ -36,20 +39,15 @@ module NATS
       end
 
       def delete
-        response = js.api.stream.delete(subject)
-        response.data.success
+        js.api.stream.delete(subject).success?
       end
 
-      def info
-        js.api.stream.info(subject).data
+      def info(params = {})
+        js.api.stream.info(subject, params).data
       end
 
-      def purge
-        response = js.api.stream.purge(subject)
-        response.data.success
-      end
-
-      def messages
+      def purge(params = {})
+        js.api.stream.purge(subject, params).success?
       end
     end
   end

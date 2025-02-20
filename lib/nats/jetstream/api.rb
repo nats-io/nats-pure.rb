@@ -15,7 +15,7 @@ module NATS
 
       group :stream do
         endpoint :create, request: StreamCreateRequest, response: StreamCreateResponse
-        endpoint :update, response: StreamUpdateResponse
+        endpoint :update, request: StreamUpdateRequest, response: StreamUpdateResponse
         endpoint :info, request: StreamInfoRequest, response: StreamInfoResponse
         endpoint :delete, response: StreamDeleteResponse
         endpoint :purge, request: StreamPurgeRequest, response: StreamPurgeResponse
