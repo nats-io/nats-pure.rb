@@ -5,6 +5,10 @@ begin
 rescue LoadError
 end
 
+if ENV["CI"]
+  require "rspec/retry"
+end
+
 ENV["RAILS_ENV"] = "test"
 
 require "nats-pure"
@@ -41,5 +45,12 @@ RSpec.configure do |config|
         client.close unless client.closed?
       end
     end
+  end
+
+  if ENV["CI"]
+    # rspec-retry
+    config.verbose_retry = true
+    config.display_try_failure_messages = true
+    config.default_retry_count = 5
   end
 end
