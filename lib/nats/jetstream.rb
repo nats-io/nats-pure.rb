@@ -13,7 +13,7 @@ module NATS
 
     def initialize(client)
       @client = client
-      @api = API.new(client)
+      @api = API.new(self)
 
       @streams = Stream::List.new(self)
       @consumers = Consumer::List.new(self)

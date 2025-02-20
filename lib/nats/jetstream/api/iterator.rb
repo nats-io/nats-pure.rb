@@ -1,0 +1,48 @@
+# frozen_string_literal: true
+
+module NATS
+  class JetStream
+    class API
+      class Iterator
+        include Enumerable
+
+        attr_reader :api, :js, :data
+
+        def initialize(api, data, &block)
+          @api = api
+          @js = api.js
+          @data = data
+
+          instance_eval(&block)
+        end
+
+        def request(&block)
+          @request = block
+        end
+
+        def iterate(&block)
+          @iterate = block
+        end
+
+        def each(&block)
+          enumerator.each(&block)
+        end
+
+        private
+
+        def enumerator
+          @enumerator ||= Enumerator.new do |yielder|
+            params = data
+
+            begin
+              response = @request.call(params)
+              @iterate.call(response, yielder)
+
+              params.merge!(offset: response.next_page)
+            end until response.last?
+          end
+        end
+      end
+    end
+  end
+end

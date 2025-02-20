@@ -35,10 +35,36 @@ module NATS
         end
         alias add_or_update upsert
 
-        def each
+        def each(&block)
+          all.each(&block)
         end
 
-        def names
+        def all(params = {})
+          js.api.iterate(params) do
+            request do |params|
+              js.api.consumer.list(params)
+            end
+
+            iterate do |response, consumers|
+              response.data.consumers.each do |consumer|
+                consumers << Consumer.new(stream, consumer.config)
+              end
+            end
+          end
+        end
+
+        def names(params = {})
+          js.api.iterate(params) do
+            request do |params|
+              js.api.stream.names(params)
+            end
+
+            iterate do |response, consumers|
+              response.data.consumers.each do |consumer|
+                consumers << consumer
+              end
+            end
+          end
         end
 
         def js

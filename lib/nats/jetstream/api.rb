@@ -5,6 +5,7 @@ require_relative "api/group"
 require_relative "api/endpoint"
 require_relative "api/request"
 require_relative "api/response"
+require_relative "api/iterator"
 
 module NATS
   class JetStream
@@ -54,15 +55,22 @@ module NATS
         endpoint :names, request: ConsumerNamesRequest, response: ConsumerNamesResponse
       end
 
-      attr_reader :client
+      attr_reader :jetstream, :client
 
-      def initialize(client, prefix = nil)
-        @client = client
+      alias js jetstream
+
+      def initialize(jetstream, prefix = nil)
+        @jetstream = jetstream
+        @client = jetstream.client
         @prefix = prefix || "$JS.API"
       end
 
       def subject
         @prefix
+      end
+
+      def iterate(data = {}, &block)
+        API::Iterator.new(self, data, &block)
       end
     end
   end

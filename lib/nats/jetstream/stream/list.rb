@@ -20,32 +20,35 @@ module NATS
         alias create add
 
         def each(&block)
-          iterator = Iterator.new do |stream|
-            Stream.new(js, stream.config)
-          end
-
-          iterator.each(&block)
+          all.each(&block)
         end
 
-        #def each
-          #response = js.api.stream.list
+        def all(params = {})
+          js.api.iterate(params) do
+            request do |params|
+              api.stream.list(params)
+            end
 
-          #until response.last?
-            #response.data.streams.each do |stream|
-              #yield Stream.new(js, stream.config)
-            #end
-
-            #response = js.api.stream.list(offset: response.next_page)
-          #end
-
-          #self
-        #end
+            iterate do |response, streams|
+              response.data.streams.each do |stream|
+                streams << Stream.new(js, stream.config)
+              end
+            end
+          end
+        end
 
         def names(params = {})
-        end
+          js.api.iterate(params) do
+            request do |params|
+              api.stream.names(params)
+            end
 
-        def all
-          map(&:itself)
+            iterate do |response, streams|
+              response.data.streams.each do |stream|
+                streams << stream
+              end
+            end
+          end
         end
       end
     end
