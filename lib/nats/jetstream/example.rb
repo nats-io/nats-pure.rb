@@ -26,7 +26,6 @@ message.delete
 # Consumers
 
 js.consumers
-stream.consumers
 
 consumer = js.consumers.find(name)
 consumer = js.consumers.add(**config)

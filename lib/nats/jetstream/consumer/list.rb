@@ -4,21 +4,46 @@ module NATS
   class JetStream
     class Consumer
       class List < NATS::Utils::List
-        alias js parent
+        alias stream parent
 
         def find(name)
           response = js.api.consumer.info(name)
-          Consumer.new(js, response.data.config)
+          Consumer.new(stream, response.data.config)
         end
 
         def add(config)
-          Consumer.new(js, config).create
+          response = js.api.consumer.create(
+            stream.subject,
+            stream_name: stream.name,
+            config: config,
+            action: "create"
+          )
+
+          Consumer.new(stream, response.data.config)
         end
         alias create add
 
         def upsert(config)
+          response = js.api.consumer.create(
+            stream.subject,
+            stream_name: stream.name,
+            config: config,
+            action: ""
+          )
+
+          Consumer.new(stream, response.data.config)
         end
         alias add_or_update upsert
+
+        def each
+        end
+
+        def names
+        end
+
+        def js
+          stream.jetstream
+        end
       end
     end
   end

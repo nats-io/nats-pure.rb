@@ -9,7 +9,7 @@ require_relative "stream/list"
 module NATS
   class JetStream
     class Stream
-      attr_reader :jetstream, :config, :subject, :messages
+      attr_reader :jetstream, :config, :subject, :consumers, :messages
 
       alias js jetstream
 
@@ -19,22 +19,14 @@ module NATS
         @config = Config.new(config)
         @subject = @config.name
 
+        @consumers = Consumer::List.new(self)
         @messages = Message::List.new(self)
       end
 
-      def create
-        response = js.api.stream.create(subject, config)
-        config.update(response.data.config)
-
-        self
-      end
-
-      def update(values)
-        config.update(values)
-
+      def update(config)
         response = js.api.stream.update(subject, config)
-        config.update(response.data.config)
 
+        @config = response.data.config
         self
       end
 

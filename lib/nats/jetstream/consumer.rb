@@ -8,37 +8,45 @@ require_relative "consumer/list"
 module NATS
   class JetStream
     class Consumer
-      attr_reader :jetstream, :config
+      attr_reader :jetstream, :config, :subject
 
       alias js jetstream
 
-      def initialize(jetstream, config)
-        @jetstream = jetstream
-        @config = Config.new(config)
+      def initialize(stream, config)
+        @stream = stream
+        @jetstream = stream.jetstream
 
-        js.api.consumer.create(stream, config)
+        @config = Config.new(config)
+        @subject = "#{stream.subject}.#{config.name}"
       end
 
-      def update(values)
-        config.update(values)
-        api.consumer.update(stream, config)
+      def update(config)
+        response = js.api.consumer.create(
+          subject,
+          stream_name: stream.name,
+          config: config,
+          action: "update"
+        )
+
+        @config = response.data.config
+        self
       end
 
       def delete
-        api.consumer.delete(stream, config)
+        api.consumer.delete(subject).success?
       end
 
       def info
-        api.consumer.delete(stream, config)
+        api.consumer.delete(subject).data
       end
 
       def next
       end
 
-      def fetch(options)
+      def fetch(params)
       end
 
-      def consume(options, &block)
+      def consume(params, &block)
       end
     end
   end

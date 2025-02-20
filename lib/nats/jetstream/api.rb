@@ -50,8 +50,8 @@ module NATS
         endpoint :delete, response: ConsumerDeleteResponse
         endpoint :info, response: ConsumerInfoResponse
 
-        endpoint :list, request: ConsumerListRequest, response: ConsumerListResponse, subject: false
-        endpoint :names, request: ConsumerNamesRequest, response: ConsumerNamesResponse, subject: false
+        endpoint :list, request: ConsumerListRequest, response: ConsumerListResponse
+        endpoint :names, request: ConsumerNamesRequest, response: ConsumerNamesResponse
       end
 
       attr_reader :client
