@@ -4,28 +4,38 @@ module NATS
   class JetStream
     class API
       class Request
-        attr_reader :name, :response, :client
+        class << self
+          attr_reader :data_schema
 
-        def initialize(name:, parent:, response:, client:)
-          @name = name
-          @response = response
-          @client = client
-          @subject = "#{parent.subject}.#{name.upcase}"
+          def schema(schema = nil, &block)
+            if block
+              schema = Class.new(NATS::Utils::Config)
+              schema.class_eval(&block)
+            end
+
+            @data_schema = schema
+          end
         end
 
-        def request(subject, data = nil, params = {})
-          subject = [@subject, subject].compact.join(".")
-          data = data.nil? ? "" : data.to_json
+        attr_reader :data
 
-          message = begin
-            client.request(subject, data, **params)
-          rescue NATS::IO::NoRespondersError
-            raise JetStream::ServiceUnavailableError
-          end
+        def initialize(data)
+          @data = data_schema ? data_schema.new(data) : data
+        end
 
-          response.build(message)
+        def to_json
+          data.nil? ? "" : data.to_json
+        end
+
+        private
+
+        def data_schema
+          self.class.data_schema
         end
       end
     end
   end
 end
+
+require_relative "request/consumer"
+require_relative "request/stream"

@@ -17,13 +17,13 @@ module NATS
           end
         end
 
-        def request(name, response, subject: true)
-          define_request(name, response)
+        def endpoint(name, request: Request, response:, subject: true)
+          define_endpoint(name, response)
 
           if subject
-            define_request_with_subject(name)
+            define_endpoint_with_subject(name)
           else
-            define_request_without_subject(name)
+            define_endpoint_without_subject(name)
           end
         end
 
@@ -36,10 +36,11 @@ module NATS
           end
         end
 
-        def define_request(name, response)
-          define_reader "#{name}_request" do
-            Request.new(
+        def define_endpoint(name, response)
+          define_reader "#{name}_endpoint" do
+            Endpoint.new(
               name: name, 
+              request: request,
               response: response,
               client: client,
               parent: self
@@ -47,15 +48,15 @@ module NATS
           end
         end
 
-        def define_request_with_subject(name)
+        def define_endpoint_with_subject(name)
           define_method name do |subject, data = nil, params = {}|
-            send("#{name}_request").request(subject, data, params)
+            send("#{name}_endpoint").call(subject, data, params)
           end
         end
 
-        def define_request_without_subject(name)
+        def define_endpoint_without_subject(name)
           define_method name do |data = nil, params = {}|
-            send("#{name}_request").request(nil, data, params)
+            send("#{name}_endpoint").call(nil, data, params)
           end
         end
       end

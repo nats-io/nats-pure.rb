@@ -2,6 +2,7 @@
 
 require_relative "api/dsl"
 require_relative "api/group"
+require_relative "api/endpoint"
 require_relative "api/request"
 require_relative "api/response"
 
@@ -10,46 +11,47 @@ module NATS
     class API
       extend DSL
 
-      request :info, AccountInfoResponse, subject: false
+      endpoint :info, response: AccountInfoResponse, subject: false
 
       group :stream do
-        request :create, StreamCreateResponse
-        request :update, StreamUpdateResponse
-        request :info, StreamInfoResponse
-        request :delete, StreamDeleteResponse
-        request :purge, StreamPurgeResponse
+        endpoint :create, request: StreamCreateRequest, response: StreamCreateResponse
+        endpoint :update, response: StreamUpdateResponse
+        endpoint :info, request: StreamInfoRequest, response: StreamInfoResponse
+        endpoint :delete, response: StreamDeleteResponse
+        endpoint :purge, request: StreamPurgeRequest, response: StreamPurgeResponse
 
-        request :names, StreamNamesResponse, subject: false
-        request :list, StreamListResponse, subject: false
+        endpoint :list, request: StreamListRequest, response: StreamListResponse, subject: false
+        endpoint :names, request: StreamNamesRequest, response: StreamNamesResponse, subject: false
 
         group :msg do
-          request :get, StreamMsgGetResponse
-          request :delete, StreamMsgDeleteResponse
+          endpoint :get, request: StreamMsgGetRequest, response: StreamMsgGetResponse
+          endpoint :delete, response: StreamMsgDeleteResponse
         end
 
-        request :snapshot, StreamSnapshotResponse
-        request :restore, StreamRestoreResponse
+        endpoint :snapshot, request: StreamSnapshotRequest, response: StreamSnapshotResponse
+        endpoint :restore, request: StreamRestoreRequest, response: StreamRestoreResponse
 
         group :peer do
-          request :remove, StreamRemovePeerResponse
+          endpoint :remove, request: StreamRemovePeerRequest, response: StreamRemovePeerResponse
         end
 
         group :leader do
-          request :stepdown, StreamLeaderStepdownResponse
+          endpoint :stepdown, response: StreamLeaderStepdownResponse
         end
       end
 
       group :consumer do
-        request :create, ConsumerCreateResponse
+        endpoint :create, request: ConsumerCreateRequest, response: ConsumerCreateResponse
 
         group :durable do
-          request :create, ConsumerCreateResponse
+          endpoint :create, response: ConsumerCreateResponse
         end
 
-        request :delete, ConsumerDeleteResponse
-        request :info, ConsumerInfoResponse
-        request :list, ConsumerListResponse, subject: false
-        request :names, ConsumerNamesResponse, subject: false
+        endpoint :delete, response: ConsumerDeleteResponse
+        endpoint :info, response: ConsumerInfoResponse
+
+        endpoint :list, request: ConsumerListRequest, response: ConsumerListResponse, subject: false
+        endpoint :names, request: ConsumerNamesRequest, response: ConsumerNamesResponse, subject: false
       end
 
       attr_reader :client
