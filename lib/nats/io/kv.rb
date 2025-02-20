@@ -270,6 +270,7 @@ module NATS
       subject = "#{@pre}#{keys}"
       init_setup = new_cond
       init_setup_done = false
+      nc = @js.nc
       watcher = KeyWatcher.new(@js)
 
       deliver_policy = if !(params[:include_history])
@@ -301,9 +302,8 @@ module NATS
         end
 
         # Control Message like Heartbeats and Flow Control
-        meta = msg.metadata
         status = msg.header[STATUS_HDR] unless msg.header.nil?
-        if meta.nil? && !status.nil? && status == CTRL_STATUS
+        if !status.nil? && status == CTRL_STATUS
           desc = msg.header[DESC_HDR]
           if desc.start_with?("Idle")
             # A watcher is active if it continues to receive Idle Heartbeat messages.
@@ -314,22 +314,28 @@ module NATS
             # Nats-Last-Stream: 185
             #
             watcher.synchronize { watcher._active = true }
+          elsif desc.start_with?("FlowControl")
+            # HMSG _INBOX.q6Y3JAFxOnNJi4QdwQnFtg 2 $JS.FC.KV_TEST.t00CunIG.GT4W 36 36
+            # NATS/1.0 100 FlowControl Request
+            nc.publish(msg.reply)
           end
-          # Skip processing the heartbeat.
+          # Skip processing the control message
           next
-        else
-          watcher.synchronize { watcher._active = true }
-          # Track the sequences
-          #
-          # $JS.ACK.KV_TEST.CKRGrWpf.1.10.10.1739859923871837000.0
-          #
-          tokens = msg.reply.split(".")
-          sseq = tokens[5]
-          dseq = tokens[6]
-          watcher.synchronize do
-            watcher._dseq = dseq.to_i + 1
-            watcher._sseq = sseq.to_i
-          end
+        end
+
+        # Track sequences
+        meta = msg.metadata
+        watcher.synchronize { watcher._active = true }
+        # Track the sequences
+        #
+        # $JS.ACK.KV_TEST.CKRGrWpf.1.10.10.1739859923871837000.0
+        #
+        tokens = msg.reply.split(".")
+        sseq = tokens[5]
+        dseq = tokens[6]
+        watcher.synchronize do
+          watcher._dseq = dseq.to_i + 1
+          watcher._sseq = sseq.to_i
         end
 
         # Keys() handling
@@ -404,7 +410,6 @@ module NATS
 
       # Need to handle reconnect if missing too many heartbeats.
       hb_interval = params[:idle_heartbeat] * 2
-      nc = @js.nc
       watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do |task|
         task.shutdown if nc.closed?
         next unless nc.connected?
