@@ -384,7 +384,7 @@ module NATS
       stream_name = nil
       begin
         cinfo = sub.consumer_info
-        stream_name = sub.consumer_info.stream_name
+        stream_name = cinfo.stream_name
 
         synchronize do
           init_setup_done = true
