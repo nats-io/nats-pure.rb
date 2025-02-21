@@ -1,0 +1,15 @@
+<h1>Greetings, stranger!</h1>
+<p>How do you greet in your language?</p>
+
+<%= form_with url: test_publish_url do |f| %>
+  <%= f.text_field :message %>
+  <%= f.submit "Greet" %>
+<% end %>
+
+<ul>
+<% @messages.each do |msg| %>
+  <li>A stranger said “<strong><%= msg.text %></strong>” <%= msg.created_at.to_formatted_s(:short) %></li>
+<% end %>
+</ul>
+
+<p><small>Please note that greeting sometimes may not appear immediately, because of the long way they need to make through our systems</small></p>
