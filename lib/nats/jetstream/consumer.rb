@@ -23,7 +23,7 @@ module NATS
       def update(config)
         response = js.api.consumer.create(
           subject,
-          stream_name: stream.name,
+          stream_name: stream.config.name,
           config: config,
           action: "update"
         )
@@ -33,20 +33,23 @@ module NATS
       end
 
       def delete
-        api.consumer.delete(subject).success?
+        js.api.consumer.delete(subject).success?
       end
 
       def info
-        api.consumer.delete(subject).data
+        js.api.consumer.info(subject).data
       end
 
-      def next
+      def fetch(batch = 1, params = {})
+        Fetch.new(self, batch: batch, **params)
       end
 
-      def fetch(params)
+      def next(params)
+        fetch(1, params)
       end
 
       def consume(params, &block)
+        Consume.new(self, params, &block)
       end
     end
   end

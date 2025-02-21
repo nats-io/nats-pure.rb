@@ -53,6 +53,10 @@ module NATS
 
         endpoint :list, request: ConsumerListRequest, response: ConsumerListResponse
         endpoint :names, request: ConsumerNamesRequest, response: ConsumerNamesResponse
+
+        group :msg do
+          endpoint :next, request: ConsumerGetNextRequest, response: false
+        end
       end
 
       attr_reader :jetstream, :client
@@ -69,8 +73,13 @@ module NATS
         @prefix
       end
 
-      def iterate(data = {}, &block)
-        API::Iterator.new(self, data, &block)
+      def iterator(params, options = {}, &block)
+        API::Iterator.new(
+          api: self,
+          params: params,
+          options: options,
+          &block
+        )
       end
     end
   end

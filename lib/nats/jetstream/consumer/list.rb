@@ -14,7 +14,7 @@ module NATS
         def add(config)
           response = js.api.consumer.create(
             stream.subject,
-            stream_name: stream.name,
+            stream_name: stream.config.name,
             config: config,
             action: "create"
           )
@@ -26,7 +26,7 @@ module NATS
         def upsert(config)
           response = js.api.consumer.create(
             stream.subject,
-            stream_name: stream.name,
+            stream_name: stream.config.name,
             config: config,
             action: ""
           )
@@ -40,23 +40,23 @@ module NATS
         end
 
         def all(params = {})
-          js.api.iterate(params) do
+          js.api.iterator(params, stream: stream) do
             request do |params|
-              js.api.consumer.list(params)
+              js.api.consumer.list(options[:stream].subject, params)
             end
 
             iterate do |response, consumers|
               response.data.consumers.each do |consumer|
-                consumers << Consumer.new(stream, consumer.config)
+                consumers << Consumer.new(options[:stream], consumer.config)
               end
             end
           end
         end
 
         def names(params = {})
-          js.api.iterate(params) do
+          js.api.iterator(params) do
             request do |params|
-              js.api.stream.names(params)
+              js.api.consumer.list(options[:stream].subject, params)
             end
 
             iterate do |response, consumers|

@@ -13,7 +13,7 @@ module NATS
         # The server time the consumer info was created
         string :ts # date-time
 
-        object :config, as: Config
+        object :config, of: Config
 
         # The time the Consumer was created
         string :created

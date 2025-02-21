@@ -79,13 +79,13 @@ module NATS
         bool :headers_only, default: false
 
         # The largest batch property that may be specified when doing a pull on a Pull Consumer
-        integer :max_batch, default: 0
+        integer :max_batch#, default: 0
 
         # The maximum expires value that may be set when doing a pull on a Pull Consumer
         integer :max_expires, default: 0
 
         # The maximum bytes value that maybe set when dong a pull on a Pull Consumer
-        integer :max_bytes, min: 0, deafult: 0
+        integer :max_bytes, min: 0#, deafult: 0
 
         # Duration that instructs the server to cleanup ephemeral consumers that are inactive for that long
         integer :inactive_threshold, default: 0

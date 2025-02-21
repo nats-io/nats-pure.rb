@@ -6,12 +6,14 @@ module NATS
       class Iterator
         include Enumerable
 
-        attr_reader :api, :js, :data
+        attr_reader :api, :js, :default_params, :options
 
-        def initialize(api, data, &block)
+        def initialize(api:, params:, options:, &block)
           @api = api
           @js = api.js
-          @data = data
+
+          @default_params = params
+          @options = options
 
           instance_eval(&block)
         end
@@ -32,7 +34,7 @@ module NATS
 
         def enumerator
           @enumerator ||= Enumerator.new do |yielder|
-            params = data
+            params = default_params
 
             begin
               response = @request.call(params)
