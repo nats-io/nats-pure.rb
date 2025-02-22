@@ -72,15 +72,6 @@ module NATS
       def subject
         @prefix
       end
-
-      def iterator(params, options = {}, &block)
-        API::Iterator.new(
-          api: self,
-          params: params,
-          options: options,
-          &block
-        )
-      end
     end
   end
 end

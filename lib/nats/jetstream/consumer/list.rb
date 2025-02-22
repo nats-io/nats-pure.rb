@@ -40,30 +40,26 @@ module NATS
         end
 
         def all(params = {})
-          js.api.iterator(params, stream: stream) do
-            request do |params|
-              js.api.consumer.list(options[:stream].subject, params)
+          API::Iterator.new(params) do |params, consumers|
+            response = js.api.consumer.list(stream.subject, params)
+
+            response.data.consumers.each do |consumer|
+              consumers << Consumer.new(options[:stream], consumer.config)
             end
 
-            iterate do |response, consumers|
-              response.data.consumers.each do |consumer|
-                consumers << Consumer.new(options[:stream], consumer.config)
-              end
-            end
+            response
           end
         end
 
         def names(params = {})
-          js.api.iterator(params) do
-            request do |params|
-              js.api.consumer.list(options[:stream].subject, params)
+          API::Iterator.new(params) do |params, consumers|
+            response = js.api.consumer.list(stream.subject, params)
+
+            response.data.consumers.each do |consumer|
+              consumers << consumer
             end
 
-            iterate do |response, consumers|
-              response.data.consumers.each do |consumer|
-                consumers << consumer
-              end
-            end
+            response
           end
         end
 
