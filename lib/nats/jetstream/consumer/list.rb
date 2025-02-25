@@ -40,7 +40,7 @@ module NATS
         end
 
         def all(params = {})
-          API::Iterator.new(params) do |params, consumers|
+          js.api.iterator(params) do |params, consumers|
             response = js.api.consumer.list(stream.subject, params)
 
             response.data.consumers.each do |consumer|
@@ -52,7 +52,7 @@ module NATS
         end
 
         def names(params = {})
-          API::Iterator.new(params) do |params, consumers|
+          js.api.iterator(params) do |params, consumers|
             response = js.api.consumer.list(stream.subject, params)
 
             response.data.consumers.each do |consumer|

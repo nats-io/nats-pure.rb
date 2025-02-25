@@ -5,7 +5,6 @@ require_relative "api/group"
 require_relative "api/endpoint"
 require_relative "api/request"
 require_relative "api/response"
-require_relative "api/iterator"
 
 module NATS
   class JetStream
@@ -71,6 +70,17 @@ module NATS
 
       def subject
         @prefix
+      end
+
+      def iterator(default_params = {}, &block)
+        Enumerator.new do |yielder|
+          params = default_params.dup
+
+          begin
+            response = block.call(params, yielder)
+            params.merge!(offset: response.next_page)
+          end until response.last?
+        end
       end
     end
   end

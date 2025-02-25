@@ -24,7 +24,7 @@ module NATS
         end
 
         def all(params = {})
-          API::Iterator.new(params) do |params, streams|
+          js.api.iterator(params) do |params, streams|
             response = js.api.stream.list(params)
 
             response.data.streams.each do |stream|
@@ -36,7 +36,7 @@ module NATS
         end
 
         def names(params = {})
-          API::Iterator.new(params) do |params, streams|
+          js.api.iterator(params) do |params, streams|
             response = js.api.stream.names(params)
 
             response.data.streams.each do |stream|

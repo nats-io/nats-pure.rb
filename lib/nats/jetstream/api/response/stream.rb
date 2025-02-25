@@ -45,7 +45,24 @@ module NATS
       end
 
       class StreamMsgGetResponse < Response
-        schema Message::Info
+        schema do
+          object :message do
+            # The subject the message was originally received on
+            string :subject
+
+            # The sequence number of the message in the Stream
+            integer :seq, min: 0
+
+            # The base64 encoded payload of the message body
+            string :data
+
+            # The time the message was received
+            string :time
+
+            # Base64 encoded headers for the message
+            string :hdrs
+          end
+        end
       end
 
       class StreamMsgDeleteResponse < SuccessResponse; end
