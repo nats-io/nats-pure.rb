@@ -2,7 +2,7 @@
 
 cd $(dirname $0)/..
 
-export DEFAULT_NATS_SERVER_VERSION=latest
+export DEFAULT_NATS_SERVER_VERSION=release/v2.10.26
 export NATS_SERVER_VERSION="${NATS_SERVER_VERSION:=$DEFAULT_NATS_SERVER_VERSION}"
 
 platform=$(uname -s)
