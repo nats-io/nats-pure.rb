@@ -4,9 +4,11 @@ on:
   push:
     branches:
     - main
-    - 'release/**'
-    - 'dev/**'
+    - "release/**"
+    - "dev/**"
   pull_request:
+  schedule:
+    - cron: "30 5 * * *"
 
 jobs:
   rspec:
