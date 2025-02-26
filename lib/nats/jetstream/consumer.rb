@@ -40,12 +40,12 @@ module NATS
         js.api.consumer.info(subject).data
       end
 
-      def fetch(batch = 1, params = {})
-        Fetch.new(self, batch: batch, **params)
+      def fetch(params = {})
+        Fetch.new(self, params)
       end
 
-      def next(params)
-        fetch(1, params)
+      def next(params = {})
+        fetch(max_messages: 1, **params).first
       end
 
       def consume(params, &block)

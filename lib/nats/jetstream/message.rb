@@ -20,7 +20,6 @@ module NATS
       end
 
       def delete
-        raise "" unless seq
         js.api.stream.msg.delete(seq).success?
       end
     end

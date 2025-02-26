@@ -5,6 +5,14 @@ module NATS
     class Consumer
       class Fetch
         include Enumerable
+
+        def initialize(consumer, params)
+          @consumer = consumer
+          @subsciption = Subscription::Fetch.new(params)
+        end
+
+        def each
+        end
       end
     end
   end

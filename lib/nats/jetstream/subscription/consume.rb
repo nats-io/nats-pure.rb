@@ -2,8 +2,8 @@
 
 module NATS
   class JetStream
-    class Consumer
-      class Consume < Subscription::Pull
+    class Subscription
+      class Consume < Pull
         def handle_message(message)
           push(message)
         end

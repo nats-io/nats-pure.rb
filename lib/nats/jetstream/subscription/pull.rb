@@ -9,24 +9,24 @@ module NATS
         include MonitorMixin
 
         class Config < NATS::Utils::Config
-          integer :expires, min: 0
+          integer :expires, min: 1, default: 30 # seconds 
           integer :idle_heartbeat, default: 30
 
-          integer :max_messages, default: 1
-          integer :max_bytes, default: -1
+          integer :max_messages, min: 1, default: 100 # 1_000_000 for max_bytes
+          integer :max_bytes, min: 0
+
+          integer :threshold_messages, min: 0, default: 50
+          integer :threshold_bytes
         end
 
-        def initialize(client, params = {})
+        def initialize(jetstream, params = {})
           super()
 
-          @client = client
+          @jetstream = jetstream
           @config = Config.new(params)
-          @inbox = client.new_inbox
 
+          @inbox = client.new_inbox
           @in_progress = false
-          @messages = []
-          @messages_fetched = 0
-          @bytes_fetched = 0
         end
 
         def in_progress?
@@ -37,40 +37,23 @@ module NATS
           !@in_progress
         end
 
-        def drain
-        end
-
         private
 
         def subscription
           @subscription ||= @client.subscribe(inbox) do |message|
-            #return if done?
-            response = Response.build(stream, message)
-
-            case response
-            when NoMessages, RequestTimeout, MaxBytesExceeded
-              synchronize { done! }
-            when Message
-              synchronize { push(message) }
-            else
-              raise "error"
-            end
+            message = Message.build(stream, message)
+            synchronize { handle(message) }
           end
         end
 
-        def push(message)
-          @messages << message
-          @messages_fetched += 1
-          @bytes_fetched += message.bytesize
-
-          done! if full?
-        end
-
-        def full?
-          if config.max_messages
-            @messages_fetched == config.max_messages
-          else 
-            @bytes_fetched >= config.max_bytes
+        def handle(message)
+          case message
+          when NoMessages, RequestTimeout, PullTerminated
+            handle_termination(message)
+          when UserMessage
+            handle_message(message)
+          else
+            handle_error(message)
           end
         end
 
