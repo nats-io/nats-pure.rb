@@ -7,6 +7,10 @@ module NATS
         class << self
           attr_reader :data_schema
 
+          def inherited(subclass)
+            subclass.schema(data_schema)
+          end
+
           def schema(schema = nil, &block)
             if block
               schema = Class.new(NATS::Utils::Config)
