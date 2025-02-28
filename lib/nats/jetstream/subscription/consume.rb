@@ -5,7 +5,29 @@ module NATS
     class Subscription
       class Consume < Pull
         def handle_message(message)
-          push(message)
+          synchronize do
+            heartbeats.reset
+
+            messages.consumed(message)
+            request_messages if messages.threashold?
+          end
+
+          handler.call(message)
+        end
+
+        def handle_heartbeat(message)
+          synchronize do
+            heartbeats.reset
+          end
+        end
+
+        def handle_termintation(message)
+        end
+
+        def handle_error(message)
+        end
+
+        def handle_heartbeats_error
         end
       end
     end

@@ -41,7 +41,7 @@ module NATS
       end
 
       def fetch(params = {})
-        Fetch.new(self, params)
+        Subscription::Fetch.new(self, params)
       end
 
       def next(params = {})
@@ -49,7 +49,10 @@ module NATS
       end
 
       def consume(params, &block)
-        Consume.new(self, params, &block)
+        pull = Subscription::Consume.new(self, params, &block)
+        pull.execute
+
+        pull
       end
     end
   end

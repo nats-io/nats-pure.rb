@@ -8,6 +8,8 @@ module NATS
       class Pull
         include MonitorMixin
 
+        STATUSES = %i[pending processing draining closed]
+
         class Config < NATS::Utils::Config
           integer :expires, min: 1#, default: 30 # seconds 
           integer :idle_heartbeat #, default: 30 # seconds
@@ -19,72 +21,94 @@ module NATS
           integer :threshold_bytes
         end
 
-        attr_reader :consumer, :jetstream, :config, :inbox
-
-        alias js jetstream
+        attr_reader :consumer, :js, :config, :inbox, :handler, :messages
 
         def initialize(consumer, params = {}, &block)
           super()
 
           @consumer = consumer
-          @jetstream = consumer.jetstream
-          @config = Config.new(params)
+          @js = consumer.js
           @handler = block
 
           @inbox = js.client.new_inbox
-          @in_progress = false
+          @config = Config.new(params)
+          @messages = Messages.new(self)
+
+          @status = :pending
         end
 
-        def start
-          @in_progress = true
-          subscription
-          request
+        def execute
+          return false unless pending?
+
+          processing!
+
+          schedule_expiration
+          schedule_heartbeats
+
+          setup_subscription
+          request_messages
         end
 
-        def in_progress?
-          @in_progress
+        def drain
+          draining!
+
+          subscription.unsubscribe
+          expiration.cancel
+          heartbeats.cancel
+
+          close!
         end
 
-        def done?
-          !@in_progress
+        def error(message)
+        end
+
+        STATUSES.each do |status|
+          define_method "#{status}?" do
+            @status == status
+          end
+
+          define_method "#{status}!" do
+            @status = status
+          end
         end
 
         private
 
-        def request
-          js.api.consumer.msg.next(
-            consumer.subject,
-            {
-              expires: config.expires,
-              batch: config.max_messages,
-              max_bytes: config.max_bytes,
-              idle_heartbeat: config.idle_heartbeat
-            },
-            reply_to: inbox
-          )
-        end
+        def setup_subscription
+          @subscription = js.client.subscribe(inbox) do |message|
+            message = ConsumerMessage.build(pull.consumer, message)
 
-        def subscription
-          @subscription ||= js.client.subscribe(inbox) do |message|
-            puts "MESSAGE: #{message.inspect}"
-            message = ConsumerMessage.build(consumer, message)
-            puts "CONSUMER MESSAGE: #{message.inspect}"
-
-            if message.termination?
-              handle_termination(message)
-            elsif message.error?
-              handle_error(message)
-            else
+            case message
+            when ConsumerMessage
               handle_message(message)
+            when IdleHeartBeatMessage
+              handle_heartbeat(message)
+            when WarningMessage
+              handle_termination(message)
+            else
+              handle_error(message)
             end
           rescue => error
+            #handle_error(error)
             puts error.message
             puts error.backtrace
           end
         end
 
-        def done!
-          @in_progress = false
+        def request_messages
+          js.api.consumer.msg.next(consumer.subject, config, reply_to: inbox)
+        end
+
+        def schedule_expiration
+          @expiration = Concurrent::ScheduledTask.execute(expires) do
+            synchronize { drain }
+          end
+        end
+
+        def schedule_heartbeats
+          @heartbeats = Concurrent::ScheduledTask.execute(idle_heartbeat) do
+            handle_heartbeats_error
+          end
         end
       end
     end

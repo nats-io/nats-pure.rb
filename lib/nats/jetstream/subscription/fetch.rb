@@ -4,42 +4,52 @@ module NATS
   class JetStream
     class Subscription
       class Fetch < Pull
-        attr_reader :messages
+        include Enumerable
 
-        def initialize(consumer, params = {}, &block)
-          super
-
-          @messages = []
-          @messages_fetched = 0
-          @bytes_fetched = 0
+        def each(&block)
+          @handler = block
+          execute
+          # wait on cond before return
+          self
         end
+
+        private
 
         def handle_message(message)
           synchronize do
-            @messages << message
-            @messages_fetched += 1
-            @bytes_fetched += message.bytesize
+            heartbeats.reset
+
+            messages.fetched(message)
+            drain if messages.full?
           end
 
           handler.call(message)
+        end
 
+        def handle_heartbeat(message)
           synchronize do
-            done! if full?
+            heartbeats.reset
           end
         end
 
-        def handle_termination(message)
-          syncronize { done! }
+        def handle_termintation(message)
+          synchronize do
+            error(message)
+            drain
+          end
         end
 
         def handle_error(message)
+          synchronize do
+            error(message)
+            drain
+          end
         end
 
-        def full?
-          if config.max_messages
-            @messages_fetched == config.max_messages
-          else 
-            @bytes_fetched >= config.max_bytes
+        def handle_heartbeats_error
+          synchronize do
+            #error()
+            drain
           end
         end
       end
