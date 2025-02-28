@@ -27,7 +27,7 @@ module NATS
         def handle_error(message)
         end
 
-        def handle_heartbeats_error
+        def handle_no_heartbeats
         end
       end
     end

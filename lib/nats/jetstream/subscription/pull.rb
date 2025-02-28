@@ -11,8 +11,8 @@ module NATS
         STATUSES = %i[pending processing draining closed]
 
         class Config < NATS::Utils::Config
-          integer :expires, min: 1#, default: 30 # seconds 
-          integer :idle_heartbeat #, default: 30 # seconds
+          integer :expires, min: 1, default: 30 * 10**9
+          integer :idle_heartbeat, default: 15 * 10**9
 
           integer :max_messages, min: 1, default: 100 # 1_000_000 for max_bytes
           integer :max_bytes, min: 0
@@ -23,7 +23,7 @@ module NATS
           alias batch max_messages
         end
 
-        attr_reader :consumer, :js, :config, :inbox, :handler, :messages, :heartbeats, :expiration
+        attr_reader :consumer, :js, :config, :inbox, :handler, :messages, :heartbeats, :expiration, :subscription
 
         def initialize(consumer, params = {}, &block)
           super()
@@ -52,16 +52,18 @@ module NATS
         end
 
         def drain
+          puts "Draining (#{Thread.current.object_id})"
           draining!
 
-          subscription.unsubscribe
+          js.client.send(:drain_sub, subscription)
           expiration.cancel
           heartbeats.cancel
 
-          close!
+          closed!
         end
 
         def error(message)
+          @error = message
         end
 
         STATUSES.each do |status|
@@ -79,11 +81,12 @@ module NATS
         def setup_subscription
           @subscription = js.client.subscribe(inbox) do |message|
             message = ConsumerMessage.build(consumer, message)
+            puts "Message: #{message.inspect} (#{Thread.current.object_id})"
 
             case message
             when ConsumerMessage
               handle_message(message)
-            when IdleHeartBeatMessage
+            when IdleHeartbeatMessage
               handle_heartbeat(message)
             when WarningMessage
               handle_warning(message)
@@ -91,9 +94,9 @@ module NATS
               handle_error(message)
             end
           rescue => error
-            #handle_error(error)
             puts error.message
             puts error.backtrace
+            handle_error(error)
           end
         end
 
@@ -103,13 +106,15 @@ module NATS
 
         def schedule_expiration
           @expiration = Concurrent::ScheduledTask.execute(config.expires) do
+            puts "Expired"
             synchronize { drain }
           end
         end
 
         def schedule_heartbeats
-          @heartbeats = Concurrent::ScheduledTask.execute(config.idle_heartbeat) do
-            handle_heartbeats_error
+          @heartbeats = Concurrent::ScheduledTask.execute(2 * config.idle_heartbeat) do
+            puts "No Heartbeats"
+            handle_no_heartbeats
           end
         end
       end

@@ -3,10 +3,11 @@
 module NATS
   class JetStream
     class StatusMessage
-      attr_reader :consumer
+      attr_reader :consumer, :message
 
       def initialize(consumer, message)
         @consumer = consumer
+        @message = message
       end
 
       def code

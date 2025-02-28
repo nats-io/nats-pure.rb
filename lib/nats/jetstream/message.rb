@@ -16,7 +16,7 @@ module NATS
 
           case status
           when "100"
-            IdleHeartBeatMessage
+            IdleHeartbeatMessage
           when "400"
             BadRequestMessage
           when "404"

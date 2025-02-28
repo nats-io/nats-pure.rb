@@ -6,24 +6,45 @@ module NATS
       class Fetch < Pull
         include Enumerable
 
+        def initialize(consumer, params = {}, &block)
+          super
+
+          @closed_cond = new_cond
+        end
+
         def each(&block)
-          @handler = block
-          execute
-          # wait on cond before return
+          synchronize do
+            @handler = block
+            execute
+
+            @closed_cond.wait(config.expires)
+          end
+
           self
         end
 
         private
 
+        def closed!
+          puts "Closing (#{Thread.current.object_id})"
+          synchronize do
+            super
+            @closed_cond.signal
+          end
+        end
+
         def handle_message(message)
           synchronize do
             heartbeats.reset
-
-            messages.fetched(message)
-            drain if messages.full?
           end
 
           handler.call(message)
+
+          synchronize do
+            messages.fetched(message)
+            puts "Messages Full? = #{messages.full?} (#{Thread.current.object_id})"
+            drain if messages.full?
+          end
         end
 
         def handle_heartbeat(message)
@@ -46,7 +67,7 @@ module NATS
           end
         end
 
-        def handle_heartbeats_error
+        def handle_no_heartbeats
           synchronize do
             #error()
             drain

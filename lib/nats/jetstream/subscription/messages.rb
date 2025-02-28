@@ -16,22 +16,22 @@ module NATS
         def reset
           @list = []
 
-          @count_fetched = 0
+          @messages_fetched = 0
           @bytes_fetched = 0
 
-          @count_pending = 0
+          @messages_pending = 0
           @bytes_pending = 0
         end
 
         def fetched(message)
           @list << message
 
-          @count_fetched += 1
+          @messages_fetched += 1
           @bytes_fetched = message.bytesize
         end
 
         def consumed(message)
-          @count_pending -= 1
+          @messages_pending -= 1
           @bytes_pending = message.bytesize
         end
 
@@ -45,9 +45,9 @@ module NATS
 
         def empty?
           if config.max_messages
-            @count_pending == 0
+            @messages_pending == 0
           else 
-            @bytes_fetched <= 0
+            @bytes_pending <= 0
           end
         end
       end
