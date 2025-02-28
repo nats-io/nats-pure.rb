@@ -29,7 +29,7 @@ module NATS
       end
 
       def [](name)
-        send(name)
+        send(name) if respond_to?(name)
       end
 
       def to_h

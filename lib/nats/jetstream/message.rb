@@ -8,16 +8,56 @@ module NATS
     class Message < NATS::Utils::Config
       class << self
         def build(consumer, message)
-          if message.header && message.header["Status"]
-            StatusMessage.new(consumer, message)
+          message_type(message).new(consumer, message)
+        end
+
+        def message_type(message)
+          status = message.header["Status"] if message.header
+
+          case status
+          when "100"
+            IdleHeartBeatMessage
+          when "400"
+            BadRequestMessage
+          when "404"
+            NoMessagesMessage
+          when "408"
+            RequestTimeout
+          when "409"
+            message_409_type(message)
+          when "503"
+            NoRespondersMessage
           else
-            ConsumerMessage.new(consumer, message)
+            ConsumerMessage
+          end
+        end
+
+        def message_409_type(message)
+          description = message.header["Description"]
+
+          case description.downcase
+          when /exceeded maxrequestbatch/
+            MaxRequestBatchMessage
+          when /exceeded maxrequestexpires/
+            MaxRequestExpiresMessage
+          when /exceeded maxrequestmaxbytes/
+            MaxRequestMaxBytesMessage
+          when /exceeded maxwaiting/
+            MaxWaitingMessage
+          when /message size exceeds maxbytes/
+            MaxBytesExceeded
+          when /batch completed/
+            BatchCompletedMessage
+          when /consumer deleted/
+            ConsumerDeletedMessage # ErrorMessage
+          when /leadership change/
+            ConsumerLeadershipChangedMessage
           end
         end
       end
 
       def inspect
-        "@subject=#{subject}, @header=#{header}, @data=#{data}"
+        "#<#{self.class} @subject=#{subject}, @header=#{header}, @data=#{data}>"
       end
     end
   end

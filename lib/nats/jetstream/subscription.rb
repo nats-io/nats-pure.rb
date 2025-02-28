@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "subscription/messages"
 require_relative "subscription/pull"
 require_relative "subscription/fetch"
 require_relative "subscription/consume"

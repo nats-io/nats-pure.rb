@@ -3,51 +3,41 @@
 module NATS
   class JetStream
     class StatusMessage
-      #Errors:
-      #400 Bad Request
-      #409 Consumer Deleted
-      #409 Consumer is push based
-
-      #Warnings:
-      #409 Exceeded MaxRequestBatch of %d
-      #409 Exceeded MaxRequestExpires of %v
-      #409 Exceeded MaxRequestMaxBytes of %v
-      #409 Exceeded MaxWaiting
-
-      #Not Telegraphed:
-      #404 No Messages
-      #408 Request Timeout
-      #409 Message Size Exceeds MaxBytes
-      STATUSES = {
-        "100" => :control_message,
-        "400" => :bad_request,
-        "404" => :no_messages,
-        "408" => :request_timeout,
-        "409" => :pull_terminated,
-        "503" => :no_responders
-      }.freeze
-
-      attr_reader :consumer, :code, :description
+      attr_reader :consumer
 
       def initialize(consumer, message)
         @consumer = consumer
-        @code = message.header["Status"]
-        @description = message.header["Description"]
       end
 
-      def status
-        STATUSES[code]
+      def code
+        message.header["Status"]
+      end
+
+      def description
+        message.header["Description"]
       end
 
       def inspect
-        "@code=#{code}, @description=#{description}"
+        "#<#{self.class} @code=#{code}, @description=#{description}>"
       end
     end
 
     class IdleHeartbeatMessage < StatusMessage
     end
 
-    class IdleHeartbeatMessage < StatusMessage
-    end
+    class ErrorMessage < StatusMessage; end
+    class WarningMessage < StatusMessage; end
+
+    class BadRequestMessage < ErrorMessage; end
+    class NoMessagesMessgage < WarningMessage; end
+
+    class RequestTimeout < WarningMessage; end
+    class MaxBytesExceededMessage < WarningMessage; end
+    class BatchCompletedMessage < WarningMessage; end
+
+    class ConsumerDeletedMessage < ErrorMessage; end
+    class ConsumerLeadershipChangedMessage < ErrorMessage; end
+
+    class NoRespondersMessage < ErrorMessage; end
   end
 end

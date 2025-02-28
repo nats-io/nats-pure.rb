@@ -21,7 +21,7 @@ module NATS
           end
         end
 
-        def handle_termintation(message)
+        def handle_warning(message)
         end
 
         def handle_error(message)

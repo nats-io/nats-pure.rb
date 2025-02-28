@@ -32,7 +32,7 @@ module NATS
       end
 
       def inspect
-        "@subject=#{subject}, @header=#{header}, @data=#{data}, @seq=#{seq}, @time=#{time}"
+        "#<#{self.class} @subject=#{subject}, @header=#{header}, @data=#{data}, @seq=#{seq}, @time=#{time}>"
       end
 
       private

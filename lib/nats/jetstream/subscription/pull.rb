@@ -19,9 +19,11 @@ module NATS
 
           integer :threshold_messages, min: 0, default: 50
           integer :threshold_bytes
+
+          alias batch max_messages
         end
 
-        attr_reader :consumer, :js, :config, :inbox, :handler, :messages
+        attr_reader :consumer, :js, :config, :inbox, :handler, :messages, :heartbeats, :expiration
 
         def initialize(consumer, params = {}, &block)
           super()
@@ -76,7 +78,7 @@ module NATS
 
         def setup_subscription
           @subscription = js.client.subscribe(inbox) do |message|
-            message = ConsumerMessage.build(pull.consumer, message)
+            message = ConsumerMessage.build(consumer, message)
 
             case message
             when ConsumerMessage
@@ -84,7 +86,7 @@ module NATS
             when IdleHeartBeatMessage
               handle_heartbeat(message)
             when WarningMessage
-              handle_termination(message)
+              handle_warning(message)
             else
               handle_error(message)
             end
@@ -100,13 +102,13 @@ module NATS
         end
 
         def schedule_expiration
-          @expiration = Concurrent::ScheduledTask.execute(expires) do
+          @expiration = Concurrent::ScheduledTask.execute(config.expires) do
             synchronize { drain }
           end
         end
 
         def schedule_heartbeats
-          @heartbeats = Concurrent::ScheduledTask.execute(idle_heartbeat) do
+          @heartbeats = Concurrent::ScheduledTask.execute(config.idle_heartbeat) do
             handle_heartbeats_error
           end
         end

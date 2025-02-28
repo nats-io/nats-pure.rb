@@ -8,6 +8,7 @@ module NATS
       string :subject
       hash :header, default: {}
       string :data
+      string :reply
 
       def initialize(consumer, message)
         @consumer = consumer
@@ -15,8 +16,14 @@ module NATS
         super(
           subject: message.subject,
           header: message.header,
-          data: message.data
+          data: message.data,
+          reply: message.reply
         )
+      end
+
+      def bytesize
+        #subject.bytesize + header.bytesize + data.bytesize + reply.bytesize
+        subject.bytesize + data.bytesize + reply.bytesize
       end
     end
   end

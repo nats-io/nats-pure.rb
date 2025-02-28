@@ -32,7 +32,7 @@ module NATS
           end
         end
 
-        def handle_termintation(message)
+        def handle_warning(message)
           synchronize do
             error(message)
             drain
