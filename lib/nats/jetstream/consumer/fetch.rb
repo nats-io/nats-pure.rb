@@ -8,10 +8,13 @@ module NATS
 
         def initialize(consumer, params)
           @consumer = consumer
-          @subsciption = Subscription::Fetch.new(params)
         end
 
-        def each
+        def each(&block)
+          @subsciption = Subscription::Fetch.new(params, &block)
+
+          until subscription.done?
+          end
         end
       end
     end

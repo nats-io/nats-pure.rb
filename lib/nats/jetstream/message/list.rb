@@ -2,13 +2,13 @@
 
 module NATS
   class JetStream
-    class Message
+    class Message < NATS::Utils::Config
       class List < NATS::Utils::List
         alias stream parent
 
         def find(params)
-          response = js.api.stream.msg.get(params)
-          Message.new(stream, response.data)
+          response = js.api.stream.msg.get(stream.subject, params)
+          StreamMessage.new(stream, response.data.message)
         end
 
         private

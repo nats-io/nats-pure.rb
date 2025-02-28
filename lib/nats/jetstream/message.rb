@@ -1,27 +1,27 @@
 # frozen_string_literal: true
 
+require_relative "message/status"
 require_relative "message/list"
 
 module NATS
   class JetStream
     class Message < NATS::Utils::Config
-      string :subject
-      string :data
-      hash :header
-
-      integer :seq
-      string :time
-
-      attr_reader :stream
-
-      def initialize(stream, config)
-        @stream = stream
-        super config
+      class << self
+        def build(consumer, message)
+          if message.header && message.header["Status"]
+            StatusMessage.new(consumer, message)
+          else
+            ConsumerMessage.new(consumer, message)
+          end
+        end
       end
 
-      def delete
-        js.api.stream.msg.delete(seq).success?
+      def inspect
+        "@subject=#{subject}, @header=#{header}, @data=#{data}"
       end
     end
   end
 end
+
+require_relative "message/consumer"
+require_relative "message/stream"

@@ -6,7 +6,7 @@ module NATS
       class Fetch < Pull
         attr_reader :messages
 
-        def initialize(jetstream, params = {})
+        def initialize(consumer, params = {}, &block)
           super
 
           @messages = []
@@ -15,21 +15,24 @@ module NATS
         end
 
         def handle_message(message)
-          @messages << message
+          synchronize do
+            @messages << message
+            @messages_fetched += 1
+            @bytes_fetched += message.bytesize
+          end
 
-          increate_fetched(message)
+          handler.call(message)
+
+          synchronize do
+            done! if full?
+          end
         end
 
         def handle_termination(message)
-          done!
+          syncronize { done! }
         end
 
         def handle_error(message)
-        end
-
-        def increate_fetched(message)
-          @messages_fetched += 1
-          @bytes_fetched += message.bytesize
         end
 
         def full?

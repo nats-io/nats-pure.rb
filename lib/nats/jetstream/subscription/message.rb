@@ -4,17 +4,8 @@ require "monitor"
 
 module NATS
   class JetStream
-    class Subsciption
+    class Subscription
       class Message
-        STATUSES = {
-          "100" => ControlMessage,
-          "400" => BadRequest,
-          "404" => NoMessages,
-          "408" => RequestTimeout,
-          "409" => PullTerminated,
-          "503" => NoResponders
-        }.freeze
-
         #Errors:
         #400 Bad Request
         #409 Consumer Deleted
@@ -32,36 +23,14 @@ module NATS
         #409 Message Size Exceeds MaxBytes
 
         class << self
-          def build(stream, message)
-            message.header
-          end
         end
 
-        attr_reader
+        attr_reader :consumer, :code, :description
 
-        def initialize(stream, )
+        def initialize(consumer, message)
+          @consumer = consumer
+          @message = message
         end
-      end
-
-      class UserMessage < Message
-      end
-
-      class ControlMessage < Message
-      end
-
-      class BadRequest < Message
-      end
-
-      class NoMessages < Message
-      end
-
-      class RequestTimeout < Message
-      end
-
-      class PullTerminated < Message
-      end
-
-      class NoResponders < Message
       end
     end
   end

@@ -9,8 +9,8 @@ module NATS
         include MonitorMixin
 
         class Config < NATS::Utils::Config
-          integer :expires, min: 1, default: 30 # seconds 
-          integer :idle_heartbeat, default: 30
+          integer :expires, min: 1#, default: 30 # seconds 
+          integer :idle_heartbeat #, default: 30 # seconds
 
           integer :max_messages, min: 1, default: 100 # 1_000_000 for max_bytes
           integer :max_bytes, min: 0
@@ -19,14 +19,26 @@ module NATS
           integer :threshold_bytes
         end
 
-        def initialize(jetstream, params = {})
+        attr_reader :consumer, :jetstream, :config, :inbox
+
+        alias js jetstream
+
+        def initialize(consumer, params = {}, &block)
           super()
 
-          @jetstream = jetstream
+          @consumer = consumer
+          @jetstream = consumer.jetstream
           @config = Config.new(params)
+          @handler = block
 
-          @inbox = client.new_inbox
+          @inbox = js.client.new_inbox
           @in_progress = false
+        end
+
+        def start
+          @in_progress = true
+          subscription
+          request
         end
 
         def in_progress?
@@ -39,21 +51,35 @@ module NATS
 
         private
 
-        def subscription
-          @subscription ||= @client.subscribe(inbox) do |message|
-            message = Message.build(stream, message)
-            synchronize { handle(message) }
-          end
+        def request
+          js.api.consumer.msg.next(
+            consumer.subject,
+            {
+              expires: config.expires,
+              batch: config.max_messages,
+              max_bytes: config.max_bytes,
+              idle_heartbeat: config.idle_heartbeat
+            },
+            reply_to: inbox
+          )
         end
 
-        def handle(message)
-          case message
-          when NoMessages, RequestTimeout, PullTerminated
-            handle_termination(message)
-          when UserMessage
-            handle_message(message)
-          else
-            handle_error(message)
+        def subscription
+          @subscription ||= js.client.subscribe(inbox) do |message|
+            puts "MESSAGE: #{message.inspect}"
+            message = ConsumerMessage.build(consumer, message)
+            puts "CONSUMER MESSAGE: #{message.inspect}"
+
+            if message.termination?
+              handle_termination(message)
+            elsif message.error?
+              handle_error(message)
+            else
+              handle_message(message)
+            end
+          rescue => error
+            puts error.message
+            puts error.backtrace
           end
         end
 

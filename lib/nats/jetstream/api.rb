@@ -25,7 +25,7 @@ module NATS
 
         group :msg do
           endpoint :get, request: StreamMsgGetRequest, response: StreamMsgGetResponse
-          endpoint :delete, response: StreamMsgDeleteResponse
+          endpoint :delete, request: StreamMsgGetRequest, response: StreamMsgDeleteResponse
         end
 
         endpoint :snapshot, request: StreamSnapshotRequest, response: StreamSnapshotResponse
