@@ -7,12 +7,18 @@ module NATS
         def handle_message(message)
           synchronize do
             heartbeats.reset
-
-            messages.consumed(message)
-            request_messages if messages.threashold?
           end
 
           handler.call(message)
+
+          synchronize do
+            messages.consumed(message)
+
+            if messages.depleting?
+              messages.replenish
+              request_messages 
+            end
+          end
         end
 
         def handle_heartbeat(message)
@@ -22,9 +28,16 @@ module NATS
         end
 
         def handle_warning(message)
+          synchronize do
+            heartbeats.reset
+          end
         end
 
         def handle_error(message)
+          synchronize do
+            error(message)
+            drain
+          end
         end
 
         def handle_no_heartbeats

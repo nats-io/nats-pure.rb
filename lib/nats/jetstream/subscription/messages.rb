@@ -43,12 +43,15 @@ module NATS
           end
         end
 
-        def empty?
-          if config.max_messages
-            @messages_pending == 0
+        def depleting?
+          if config.threshold_messages
+            @messages_pending <= config.threshold_messages
           else 
-            @bytes_pending <= 0
+            @bytes_pending <= config.threshold_bytes
           end
+        end
+
+        def replenish
         end
       end
     end
