@@ -18,17 +18,19 @@ RSpec.describe NATS::JetStream::Fetch do
   let(:params) { {expires: 1.to_nsec} }
 
   let(:consumer) { stream.consumers.upsert(name: "consumer") }
-  let(:stream) { js.streams.create(name: "stream") }
+  let!(:stream) { js.streams.create(name: "stream") }
 
   let(:js) { NATS::JetStream::Context.new(client) }
   let(:client) { NATS.connect }
+
+  after { stream.delete }
 
   include_examples "NATS::JetStream::Pull"
 
   describe "#wait" do
     before do
       3.times do |index|
-        stream.publish("data_#{index}")
+        js.publish("stream", "data_#{index}")
       end
 
       subject.start
@@ -40,8 +42,6 @@ RSpec.describe NATS::JetStream::Fetch do
       3.times do |index|
         stream.messages.find(seq: first_seq + index).delete
       end
-
-      stream.delete
     end
 
     context "when fetch does not take too long to finish" do

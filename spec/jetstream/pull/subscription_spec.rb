@@ -50,7 +50,7 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
       it "processes an incoming message" do
         subject.start
 
-        stream.publish("data")
+        js.publish("stream", "data")
         sleep 0.25
 
         expect(pull.handler).to have_received(:handle).at_least(1)
@@ -67,7 +67,7 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
       it "handles the error" do
         subject.start
 
-        stream.publish("data")
+        js.publish("stream", "data")
         sleep 0.25
 
         expect(pull.handler).to have_received(:error).at_least(1)

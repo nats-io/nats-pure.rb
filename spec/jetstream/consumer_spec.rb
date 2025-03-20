@@ -16,7 +16,7 @@ RSpec.describe NATS::JetStream::Consumer do
 
   subject { stream.consumers.upsert(name: "consumer") }
 
-  let(:stream) { js.streams.create(name: "stream") }
+  let!(:stream) { js.streams.create(name: "stream") }
   let(:js) { NATS.connect.js }
 
   after { stream.delete }
@@ -85,10 +85,7 @@ RSpec.describe NATS::JetStream::Consumer do
     let(:next_message) { subject.next(expires: 1.to_nsec) }
 
     context "when there are messages in the stream" do
-      before do
-        stream.publish("data")
-        sleep 0.05
-      end
+      before { js.publish("stream", "data") }
 
       it "returns the next message" do
         expect(next_message).to be_a(NATS::JetStream::ConsumerMessage).and(

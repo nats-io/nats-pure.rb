@@ -23,17 +23,23 @@ module NATS
 
     class MessageAckedError < Error
       def message
-        "messages has already been acked"
+        "message was already acknowledged"
+      end
+    end
+
+    class NoStreamResponseError < Error
+      def message
+        "no response from stream"
       end
     end
 
     class ApiError < JetStream::Error
       attr_reader :code, :err_code, :description
 
-      def initialize(data)
-        @code = data.code
-        @err_code = data.err_code
-        @description = data.description
+      def initialize(data = {})
+        @code = data[:code]
+        @err_code = data[:err_code]
+        @description = data[:description]
       end
 
       def to_s

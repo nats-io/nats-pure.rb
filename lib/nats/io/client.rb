@@ -20,7 +20,7 @@ require_relative "errors"
 require_relative "msg"
 require_relative "subscription"
 require_relative "client/status_listener"
- require_relative "jetstream"
+require_relative "jetstream"
 
 require "nats/nuid"
 require "socket"
@@ -857,12 +857,14 @@ module NATS
     # @option params [String] :domain JetStream Domain to use for the requests.
     # @option params [Float] :timeout Default timeout to use for JS requests.
     # @return [NATS::JetStream]
+    # Legacy JetStream API
     def jetstream(options = {})
       ::NATS::JetStream.new(self, options)
     end
     alias_method :JetStream, :jetstream
     alias_method :jsm, :jetstream
 
+    # Simplified JetStream API
     def js(options = {})
       ::NATS::JetStream::Context.new(self, options)
     end

@@ -26,10 +26,7 @@ RSpec.describe NATS::JetStream::Message::List do
   describe "#find" do
     let(:find) { subject.find(params) }
 
-    before do
-      stream.publish("data")
-      sleep 0.05
-    end
+    before { js.publish("stream", "data") }
 
     context "when a messages has been found" do
       context "and searched by params[:seq]" do

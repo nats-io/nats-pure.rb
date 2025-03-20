@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe NATS::JetStream::Api do
-  subject { NATS::JetStream::Api.new(jetstream, prefix) }
+  subject { described_class.new(jetstream, prefix) }
 
   let(:jetstream) { NATS::JetStream::Context.new(client) }
   let(:client) { double(NATS::Client) }

@@ -16,11 +16,6 @@ RSpec.describe NATS::JetStream::Consume do
     @server.kill_server
   end
 
-  after do
-    consumer.delete
-    stream.delete
-  end
-
   subject { described_class.new(consumer, params, &block) }
 
   let(:block) { ->(message) { message } }
@@ -31,6 +26,11 @@ RSpec.describe NATS::JetStream::Consume do
 
   let(:js) { NATS::JetStream::Context.new(client) }
   let(:client) { NATS.connect }
+
+  after do
+    consumer.delete
+    stream.delete
+  end
 
   include_examples "NATS::JetStream::Pull"
 end

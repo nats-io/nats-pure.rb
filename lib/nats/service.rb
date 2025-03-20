@@ -6,6 +6,7 @@ require "nats/utils/validator"
 
 require_relative "service/group"
 require_relative "service/endpoint"
+require_relative "service/message"
 require_relative "service/errors"
 
 require_relative "service/callbacks"

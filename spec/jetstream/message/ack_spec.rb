@@ -87,7 +87,7 @@ RSpec.describe NATS::JetStream::Message::Ack do
     context "without params" do
       let(:params) { {} }
 
-      it "acks message" do
+      it "nacks message" do
         nack
 
         expect(client).to have_received(:request).with("reply", "-NACK")
@@ -131,7 +131,7 @@ RSpec.describe NATS::JetStream::Message::Ack do
     context "without params" do
       let(:params) { {} }
 
-      it "acks message" do
+      it "terms message" do
         term
 
         expect(client).to have_received(:request).with("reply", "+TERM")
@@ -141,7 +141,7 @@ RSpec.describe NATS::JetStream::Message::Ack do
     context "with :reason param" do
       let(:params) { {reason: "reason"} }
 
-      it "sets delay for the term request" do
+      it "sets reason for the term request" do
         term
 
         expect(client).to have_received(:request).with("reply", "+TERM reason", reason: "reason")
@@ -165,7 +165,7 @@ RSpec.describe NATS::JetStream::Message::Ack do
     context "without params" do
       let(:params) { {} }
 
-      it "acks message" do
+      it "marks message as in progress" do
         in_progress
 
         expect(client).to have_received(:request).with("reply", "+WPI")

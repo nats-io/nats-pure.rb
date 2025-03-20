@@ -41,10 +41,6 @@ module NATS
       def purge(params = {})
         js.api.stream.purge(subject, params).success?
       end
-
-      def publish(data, options = {})
-        js.client.publish(subject, data, nil, **options)
-      end
     end
   end
 end

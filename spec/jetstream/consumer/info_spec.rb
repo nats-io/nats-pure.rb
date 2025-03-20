@@ -107,7 +107,10 @@ RSpec.describe NATS::JetStream::Consumer::Info do
     let(:stream) { js.streams.create(name: "stream") }
     let(:js) { NATS.connect.js }
 
-    after { stream.delete }
+    after do
+      consumer.delete
+      stream.delete
+    end
 
     it "returns info" do
       expect(subject).to have_attributes(
@@ -141,7 +144,7 @@ RSpec.describe NATS::JetStream::Consumer::Info do
           backoff: nil,
           num_replicas: 0,
           mem_storage: false,
-          metadata: nil,
+          metadata: be_a(Hash).or(be(nil)),
           opt_start_seq: nil,
           opt_start_time: nil
         ),

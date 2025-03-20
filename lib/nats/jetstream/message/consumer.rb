@@ -32,7 +32,7 @@ module NATS
         @ack.ack(params)
       end
 
-      def nak(params = {})
+      def nack(params = {})
         @ack.nack(params)
       end
 

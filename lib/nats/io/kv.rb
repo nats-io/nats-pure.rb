@@ -273,7 +273,7 @@ module NATS
       nc = @js.nc
       watcher = KeyWatcher.new(@js)
 
-      deliver_policy = if !(params[:include_history])
+      deliver_policy = if !params[:include_history]
         "last_per_subject"
       end
 

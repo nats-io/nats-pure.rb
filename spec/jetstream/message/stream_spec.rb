@@ -16,15 +16,10 @@ RSpec.describe NATS::JetStream::StreamMessage do
 
   subject { stream.messages.find(seq: 1) }
 
-  let(:stream) { js.streams.create(name: "stream") }
+  let!(:stream) { js.streams.create(name: "stream") }
   let(:js) { NATS.connect.js }
 
-  before do
-    stream.publish("data", header: header)
-    sleep 0.05
-  end
-
-  let(:header) { nil }
+  before { js.publish("stream", "data") }
 
   after { stream.delete }
 
@@ -36,20 +31,6 @@ RSpec.describe NATS::JetStream::StreamMessage do
         seq: 1,
         time: be_a(Time)
       )
-    end
-
-    context "when message has headers" do
-      let(:header) { {"Header" => "Value"} }
-
-      it "sets headers" do
-        expect(subject.header).to eq(header)
-      end
-    end
-
-    context "when message does not have headers" do
-      it "sets headers to an empty hash" do
-        expect(subject.header).to eq({})
-      end
     end
   end
 

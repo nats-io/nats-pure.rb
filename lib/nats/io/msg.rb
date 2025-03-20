@@ -15,7 +15,6 @@
 
 module NATS
   class Msg
-    attr_accessor :subject, :reply, :data, :header
     attr_accessor :subject, :reply, :data, :header, :raw_header
 
     def initialize(opts = {})

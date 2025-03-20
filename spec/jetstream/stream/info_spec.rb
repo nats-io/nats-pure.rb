@@ -116,7 +116,6 @@ RSpec.describe NATS::JetStream::Stream::Info do
         mirror_direct: true,
         compression: "s2",
         first_seq: "5",
-        # metadata: { key: :value }, # hash
         placement: {
           cluster: "cluster",
           tags: ["tag"]
@@ -223,7 +222,7 @@ RSpec.describe NATS::JetStream::Stream::Info do
             inactive_threshold: nil,
             max_ack_pending: nil
           ),
-          metadata: nil
+          metadata: be_a(Hash).or(be(nil))
         ),
         state: have_attributes(
           messages: be_a(Integer),

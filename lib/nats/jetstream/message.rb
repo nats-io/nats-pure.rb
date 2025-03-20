@@ -56,10 +56,6 @@ module NATS
           end
         end
       end
-
-      def inspect
-        "#<#{self.class} @subject=#{subject}, @header=#{header}, @data=#{data}>"
-      end
     end
   end
 end

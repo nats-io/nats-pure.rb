@@ -7,6 +7,7 @@ require_relative "jetstream/consumer"
 require_relative "jetstream/message"
 
 require_relative "jetstream/info"
+require_relative "jetstream/publisher"
 require_relative "jetstream/pull"
 
 require_relative "jetstream/api"

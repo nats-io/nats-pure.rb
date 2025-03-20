@@ -1,18 +1,32 @@
 # frozen_string_literal: true
 
+require_relative "publisher/options"
+require_relative "publisher/ack"
+
 module NATS
   class JetStream
     class Publisher
-      alias_method :js, :jetstream
+      attr_reader :js
 
       def initialize(jetstream)
-        @jetstream = jetstream
+        @js = jetstream
       end
 
-      def publish
-      end
+      def publish(subject, data, params = {})
+        options = Options.new(params)
 
-      def publish_async
+        message = begin
+          js.client.request(
+            subject,
+            data,
+            header: options.header,
+            timeout: options.timeout
+          )
+        rescue NATS::IO::NoRespondersError
+          raise JetStream::NoStreamResponseError
+        end
+
+        Ack.build(message)
       end
     end
   end

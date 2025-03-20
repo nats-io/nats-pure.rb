@@ -18,7 +18,7 @@ RSpec.describe NATS::JetStream::Consumer::Fetch do
 
   let(:params) { {max_messages: 3, expires: 1.to_nsec} }
   let(:consumer) { stream.consumers.upsert(name: "consumer") }
-  let(:stream) { js.streams.create(name: "stream") }
+  let!(:stream) { js.streams.create(name: "stream") }
   let(:js) { NATS.connect.js }
 
   after do
@@ -42,7 +42,7 @@ RSpec.describe NATS::JetStream::Consumer::Fetch do
 
       context "and there are enough messages in the stream" do
         before do
-          3.times { |index| stream.publish("data_#{index}") }
+          3.times { |index| js.publish("stream", "data_#{index}") }
         end
 
         it "iterates over messages" do
@@ -52,7 +52,7 @@ RSpec.describe NATS::JetStream::Consumer::Fetch do
 
       context "and there are not enough messages in the stream" do
         before do
-          3.times { |index| stream.publish("data_#{index}") }
+          3.times { |index| js.publish("stream", "data_#{index}") }
         end
 
         let(:params) { {max_messages: 6, expires: 1.to_nsec} }
@@ -71,7 +71,7 @@ RSpec.describe NATS::JetStream::Consumer::Fetch do
 
     context "when messages have been already fetched" do
       before do
-        3.times { |index| stream.publish("data_#{index}") }
+        3.times { |index| js.publish("stream", "data_#{index}") }
       end
 
       before { subject.each(&:data) }

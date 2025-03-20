@@ -14,7 +14,7 @@ RSpec.describe NATS::JetStream::Stream do
     @server.kill_server
   end
 
-  subject { js.streams.create(name: "stream") }
+  subject! { js.streams.create(name: "stream") }
 
   let(:js) { NATS.connect.js }
 
@@ -118,8 +118,7 @@ RSpec.describe NATS::JetStream::Stream do
     let(:purge) { subject.purge(params) }
 
     before do
-      3.times { subject.publish("data") }
-      sleep 0.05
+      3.times { js.publish("stream", "data") }
     end
 
     context "without params" do
@@ -161,35 +160,6 @@ RSpec.describe NATS::JetStream::Stream do
 
         expect(subject.info.state.messages).to eq(1)
         expect(subject.info.state.first_seq).to eq(3)
-      end
-    end
-  end
-
-  describe "#publish" do
-    let(:publish) do
-      subject.publish("data", options)
-      sleep 0.05
-    end
-
-    let(:message) { subject.messages.find(seq: 1) }
-
-    context "when options are present" do
-      let(:options) { {header: {"Header" => "Value"}} }
-
-      it "publishes a message with the specified options" do
-        publish
-
-        expect(message).to have_attributes(data: "data", header: {"Header" => "Value"})
-      end
-    end
-
-    context "when options are not present" do
-      let(:options) { {} }
-
-      it "publishes a message without options" do
-        publish
-
-        expect(message).to have_attributes(data: "data", header: {})
       end
     end
   end

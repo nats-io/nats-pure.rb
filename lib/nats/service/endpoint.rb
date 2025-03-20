@@ -15,52 +15,6 @@
 
 module NATS
   class Service
-    class Request < ::NATS::Msg
-      attr_reader :error, :endpoint
-
-      def initialize(opts = {})
-        super
-        @endpoint = opts[:endpoint]
-        @error = nil
-      end
-
-      def respond_with_error(error)
-        @error = NATS::Service::ErrorWrapper.new(error)
-
-        message = dup
-        message.subject = reply
-        message.reply = ""
-        message.data = @error.data
-
-        message.header = {
-          "Nats-Service-Error" => @error.message,
-          "Nats-Service-Error-Code" => @error.code
-        }
-
-        respond_msg(message)
-      end
-
-      def inspect
-        dot = "..." if @data.length > 10
-        dat = "#{data.slice(0, 10)}#{dot}"
-        "#<Service::Request(subject: \"#{@subject}\", reply: \"#{@reply}\", data: #{dat.inspect})>"
-      end
-
-      class << self
-        def from_msg(svc, msg)
-          request = Request.new(endpoint: svc)
-          request.subject = msg.subject
-          request.reply = msg.reply
-          request.data = msg.data
-          request.header = msg.header
-          request.nc = msg.nc
-          request.sub = msg.sub
-
-          request
-        end
-      end
-    end
-
     class Endpoint
       attr_reader :name, :service, :subject, :metadata, :queue, :stats
 
@@ -113,12 +67,12 @@ module NATS
       end
 
       def create_handler(block)
-        service.client.subscribe(subject, queue: queue) do |msg|
+        service.client.subscribe(subject, queue: queue) do |message|
           started_at = Time.now
 
-          req = Request.from_msg(self, msg)
-          block.call(req)
-          stats.error(req.error) if req.error
+          message = Message.new(service, message)
+          block.call(message)
+          stats.error(message.error) if message.error?
         rescue NATS::Error => error
           stats.error(error)
           service.stop(error)
@@ -126,7 +80,7 @@ module NATS
           raise error
         rescue => error
           stats.error(error)
-          Request.from_msg(self, msg).respond_with_error(error)
+          Message.new(service, message).respond_with_error(error)
         ensure
           stats.record(started_at)
         end
