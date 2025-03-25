@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.shared_examples "NATS::JetStream::Pull" do
+RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
   describe "#start" do
     context "when in pending status" do
       let(:params) { {} }
@@ -38,7 +38,7 @@ RSpec.shared_examples "NATS::JetStream::Pull" do
           "stream.consumer",
           have_attributes(
             expires: 30.to_nsec,
-            idle_heartbeat: 15.to_nsec,
+            idle_heartbeat: idle_heartbeat,
             max_messages: 100,
             max_bytes: nil
           ),
@@ -88,11 +88,31 @@ RSpec.shared_examples "NATS::JetStream::Pull" do
 
         expect(subject.subscription).to have_received(:drain)
       end
+
+      context "and draining due to an error" do
+        let(:error) { StandardError.new }
+
+        it "sets the error" do
+          subject.drain(error)
+
+          expect(subject.error).to eq(error)
+        end
+      end
     end
 
     context "when not in processing status" do
       it "returns false" do
         expect(subject.drain).to eq(false)
+      end
+
+      context "and draining due to an error" do
+        let(:error) { StandardError.new }
+
+        it "does not set the error" do
+          subject.drain(error)
+
+          expect(subject.error).to be(nil)
+        end
       end
     end
   end

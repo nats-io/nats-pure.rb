@@ -35,7 +35,7 @@ RSpec.describe NATS::Service::Group do
       let(:name) { "$%^&" }
 
       it "raises InvalidNameError" do
-        expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
+        expect { subject }.to raise_error(NATS::Service::InvalidNameError)
       end
     end
 
@@ -71,7 +71,7 @@ RSpec.describe NATS::Service::Group do
       let(:queue) { ">queue" }
 
       it "raises InvalidQueueError" do
-        expect { subject }.to raise_error(NATS::Utils::InvalidQueueError)
+        expect { subject }.to raise_error(NATS::Service::InvalidQueueError)
       end
     end
   end

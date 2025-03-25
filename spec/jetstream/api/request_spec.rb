@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::JetStream::Api::Request do
+RSpec.describe NATS::JetStream::API::Request do
   describe ".schema" do
     context "when schema is defined by a block" do
       subject do
@@ -49,7 +49,7 @@ RSpec.describe NATS::JetStream::Api::Request do
     let(:data) { {batch: "10", expires: 100, no_wait: "t"} }
 
     context "when schema is set" do
-      subject { NATS::JetStream::Api::ConsumerGetNextRequest.new(data) }
+      subject { NATS::JetStream::API::ConsumerGetNextRequest.new(data) }
 
       it "runs data through schema and calls to_json" do
         expect(subject.to_json).to eq(

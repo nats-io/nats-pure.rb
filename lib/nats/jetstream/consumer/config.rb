@@ -13,11 +13,11 @@ module NATS
         # A short description of the purpose of this consumer
         string :description
 
-        # DeliverPolicy defines from which point to start delivering messages
+        # Defines from which point to start delivering messages
         # from the stream. Defaults to DeliverAllPolicy.
         string :deliver_policy, in: %w[all last new by_start_sequence by_start_time last_per_subject], default: "all"
 
-        # AckPolicy defines the acknowledgement policy for the consumer.
+        # Defines the acknowledgement policy for the consumer.
         # Defaults to AckExplicitPolicy.
         string :ack_policy, in: %w[none all explicit], default: "explicit"
 
@@ -34,7 +34,7 @@ module NATS
         # Filter the stream by multiple subjects
         array :filter_subjects, of: :string
 
-        # ReplayPolicy defines the rate at which messages are sent to the
+        # Defines the rate at which messages are sent to the
         # consumer. If ReplayOriginalPolicy is set, messages are sent in the
         # same intervals in which they were stored on stream. This can be used
         # e.g. to simulate production traffic in development environments. If

@@ -8,7 +8,7 @@ require_relative "api/response"
 
 module NATS
   class JetStream
-    class Api
+    class API
       extend DSL
 
       endpoint :info, response: AccountInfoResponse, subject: false
@@ -58,14 +58,20 @@ module NATS
         end
       end
 
-      attr_reader :jetstream, :client
+      attr_reader :js, :client
 
-      alias_method :js, :jetstream
+      def initialize(js, params = {})
+        @js = js
+        @client = js.client
 
-      def initialize(jetstream, prefix = nil)
-        @jetstream = jetstream
-        @client = jetstream.client
-        @prefix = prefix || "$JS.API"
+        @prefix =
+          if params[:prefix]
+            params[:prefix]
+          elsif params[:domain]
+            "$JS.#{params[:domain]}.API"
+          else
+            "$JS.API"
+          end
       end
 
       def subject

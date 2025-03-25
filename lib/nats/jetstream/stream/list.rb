@@ -20,10 +20,10 @@ module NATS
         alias_method :create, :add
 
         def each(&block)
-          all.each(&block)
+          with.each(&block)
         end
 
-        def all(params = {})
+        def with(params = {})
           js.api.iterator(params) do |params, streams|
             response = js.api.stream.list(params)
 

@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       class Endpoint
         attr_reader :name, :request, :response, :client
 
@@ -19,15 +19,15 @@ module NATS
           payload = request.new(data).to_json
 
           if response
-            reply(subject, payload, params)
+            request_message(subject, payload, params)
           else
-            publish(subject, payload, params)
+            publish_message(subject, payload, params)
           end
         end
 
         private
 
-        def reply(subject, payload, params)
+        def request_message(subject, payload, params)
           message = begin
             client.request(subject, payload, **params)
           rescue NATS::IO::NoRespondersError
@@ -37,7 +37,7 @@ module NATS
           response.build(message)
         end
 
-        def publish(subject, payload, params)
+        def publish_message(subject, payload, params)
           reply_to = params.delete(:reply_to)
           client.publish(subject, payload, reply_to, **params)
         end

@@ -25,7 +25,6 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
 
   before do
     allow(pull.handler).to receive(:handle).and_call_original
-    allow(pull.handler).to receive(:error).and_call_original
   end
 
   after do
@@ -70,7 +69,8 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
         js.publish("stream", "data")
         sleep 0.25
 
-        expect(pull.handler).to have_received(:error).at_least(1)
+        expect(pull.error).to be_a(StandardError)
+        expect(pull.closed?).to be(true)
       end
     end
   end

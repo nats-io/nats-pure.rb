@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::JetStream::Api::Response do
+RSpec.describe NATS::JetStream::API::Response do
   describe ".schema" do
     context "when schema is defined by a block" do
       subject do
@@ -123,7 +123,7 @@ RSpec.describe NATS::JetStream::Api::Response do
   end
 end
 
-RSpec.describe NATS::JetStream::Api::ListResponse do
+RSpec.describe NATS::JetStream::API::ListResponse do
   let(:response) do
     Class.new(described_class) do
       schema do
@@ -173,7 +173,7 @@ RSpec.describe NATS::JetStream::Api::ListResponse do
   end
 end
 
-RSpec.describe NATS::JetStream::Api::SuccessResponse do
+RSpec.describe NATS::JetStream::API::SuccessResponse do
   subject { described_class.new(success: success) }
 
   describe "#success?" do
@@ -195,7 +195,7 @@ RSpec.describe NATS::JetStream::Api::SuccessResponse do
   end
 end
 
-RSpec.describe NATS::JetStream::Api::ErrorResponse do
+RSpec.describe NATS::JetStream::API::ErrorResponse do
   subject do
     described_class.new(
       code: code,
@@ -311,7 +311,7 @@ RSpec.describe NATS::JetStream::Api::ErrorResponse do
     context "when any other error is occured" do
       let(:code) { 300 }
 
-      it "returns NATS::JetStream::ApiError" do
+      it "returns NATS::JetStream::APIError" do
         expect(to_error).to be_kind_of(NATS::JetStream::ApiError)
       end
 

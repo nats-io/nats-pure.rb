@@ -10,3 +10,5 @@ stream = js.add_stream(
 
 js.publish("hello", "hello")
 js.publish("world", "world")
+
+client.close

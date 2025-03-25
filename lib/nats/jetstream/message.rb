@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "message/status"
-require_relative "message/list"
 require_relative "message/ack"
+require_relative "message/metadata"
 
 module NATS
   class JetStream
@@ -29,7 +29,7 @@ module NATS
           when "503"
             NoRespondersMessage
           else
-            ConsumerMessage
+            Message
           end
         end
 
@@ -56,9 +56,66 @@ module NATS
           end
         end
       end
+
+      attr_reader :stream, :metadata
+
+      string :subject
+      hash :header, default: {}
+      string :raw_header
+      string :data
+      string :reply
+
+      def initialize(consumer, message)
+        @stream = consumer.stream
+
+        super(
+          subject: message.subject,
+          header: message.header,
+          raw_header: message.raw_header,
+          data: message.data,
+          reply: message.reply
+        )
+
+        @ack = Ack.new(self)
+        @metadata = Metadata.new(reply)
+      end
+
+      def acked?
+        @ack.acked?
+      end
+
+      def ack(params = {})
+        @ack.ack(params)
+      end
+
+      def nack(params = {})
+        @ack.nack(params)
+      end
+
+      def term(params = {})
+        @ack.term(params)
+      end
+
+      def in_progress(params = {})
+        @ack.in_progress(params)
+      end
+
+      def delete
+        js.api.stream.msg.delete(stream.subject, seq: metadata.sequence).success?
+      end
+
+      def bytesize
+        [subject, raw_header, data, reply].compact.map(&:bytesize).sum
+      end
+
+      def inspect
+        "#<#{self.class} @subject=#{subject}, @header=#{header}, @data=#{data}>"
+      end
+      alias_method :to_s, :inspect
+
+      def to_error
+        PullMessageError.new(self)
+      end
     end
   end
 end
-
-require_relative "message/consumer"
-require_relative "message/stream"

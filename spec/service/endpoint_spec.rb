@@ -46,7 +46,7 @@ RSpec.describe NATS::Service::Endpoint do
       let(:name) { "$bar.*" }
 
       it "raises InvalidNameError" do
-        expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
+        expect { subject }.to raise_error(NATS::Service::InvalidNameError)
       end
     end
 
@@ -84,7 +84,7 @@ RSpec.describe NATS::Service::Endpoint do
       let(:options) { {subject: ">baz"} }
 
       it "raises InvalidSubjectError" do
-        expect { subject }.to raise_error(NATS::Utils::InvalidSubjectError)
+        expect { subject }.to raise_error(NATS::Service::InvalidSubjectError)
       end
     end
 
@@ -108,7 +108,7 @@ RSpec.describe NATS::Service::Endpoint do
       let(:options) { {queue: ">qux"} }
 
       it "raises InvalidQueueError" do
-        expect { subject }.to raise_error(NATS::Utils::InvalidQueueError)
+        expect { subject }.to raise_error(NATS::Service::InvalidQueueError)
       end
     end
 

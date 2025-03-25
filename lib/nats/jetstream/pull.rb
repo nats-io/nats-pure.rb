@@ -3,11 +3,8 @@
 require_relative "pull/config"
 require_relative "pull/buffer"
 require_relative "pull/subscription"
-require_relative "pull/monitor"
+require_relative "pull/heartbeats"
 require_relative "pull/handler"
-
-require_relative "pull/fetch"
-require_relative "pull/consume"
 
 module NATS
   class JetStream
@@ -16,8 +13,8 @@ module NATS
 
       STATUSES = %i[pending processing draining closed]
 
-      attr_reader :js, :consumer, :last_error
-      attr_reader :config, :buffer, :subscription, :handler, :monitor
+      attr_reader :js, :consumer, :error, :config
+      attr_reader :buffer, :subscription, :handler, :monitor, :heartbeats
 
       def initialize(consumer, params = {})
         super()
@@ -28,7 +25,7 @@ module NATS
         @status = :pending
         @closed_cond = new_cond
 
-        @last_error = nil
+        @error = nil
       end
 
       def start
@@ -36,27 +33,26 @@ module NATS
           return false unless pending?
           processing!
 
-          monitor.start
           subscription.start
           request_messages
+
+          heartbeats.start
+          monitor.start
         end
       end
 
-      def drain
+      def drain(error = nil)
         synchronize do
           return false unless processing?
           draining!
 
+          @error = error
+
           subscription.drain
+          heartbeats.stop
           monitor.stop
 
           closed! if handler.drained?
-        end
-      end
-
-      def error(message)
-        synchronize do
-          @last_error = message
         end
       end
 

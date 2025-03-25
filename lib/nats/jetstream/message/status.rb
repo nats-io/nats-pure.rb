@@ -21,10 +21,13 @@ module NATS
       def inspect
         "#<#{self.class} @code=#{code}, @description=#{description}>"
       end
+
+      def to_error
+        PullMessageError.new(self)
+      end
     end
 
-    class IdleHeartbeatMessage < StatusMessage
-    end
+    class IdleHeartbeatMessage < StatusMessage; end
 
     class WarningMessage < StatusMessage
       def pull_terminated?

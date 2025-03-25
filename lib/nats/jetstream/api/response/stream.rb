@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       class StreamCreateResponse < Response
         schema Stream::Info
       end

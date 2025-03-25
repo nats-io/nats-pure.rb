@@ -257,7 +257,7 @@ module NATS
         end
       end
 
-      # StreamCreateResponse is the response from the JetStream $JS.API.STREAM.CREATE API.
+      # StreamCreate is the response from the JetStream $JS.API.STREAM.CREATE API.
       #
       # @!attribute type
       #   @return [String]
@@ -269,7 +269,7 @@ module NATS
       #   @return [StreamState]
       # @!attribute did_create
       #   @return [Boolean]
-      StreamCreateResponse = Struct.new(:type, :config, :created, :state, :did_create,
+      StreamCreate = Struct.new(:type, :config, :created, :state, :did_create,
         keyword_init: true) do
         def initialize(opts = {})
           rem = opts.keys - members

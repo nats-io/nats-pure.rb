@@ -27,9 +27,35 @@ module NATS
       end
     end
 
+    class NotJsMessageError < Error
+      def message
+        "not a JetStream message"
+      end
+    end
+
     class NoStreamResponseError < Error
       def message
         "no response from stream"
+      end
+    end
+
+    class NoHeartbeatError < Error
+      def message
+        "no heartbeat received"
+      end
+    end
+
+    class PullTimeoutError < Error
+      def message
+        "pull request timeout"
+      end
+    end
+
+    class PullMessageError < Error
+      attr_reader :message
+
+      def initialize(message)
+        @message = message
       end
     end
 

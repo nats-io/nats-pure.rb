@@ -6,7 +6,7 @@ module NATS
       attr_reader :service, :name, :subject, :queue, :groups, :endpoints
 
       def initialize(name:, parent:, queue:)
-        Utils::Validator.validate(name: name, queue: queue)
+        validate(name, queue)
 
         @name = name
 
@@ -16,6 +16,12 @@ module NATS
 
         @groups = Groups.new(self)
         @endpoints = Endpoints.new(self)
+      end
+
+      def validate(name, queue)
+        Utils::Validator.validate(name: name, queue: queue)
+      rescue NATS::Utils::Error => error
+        raise error.to_service_error
       end
     end
 

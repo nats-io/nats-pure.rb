@@ -5,16 +5,15 @@ require_relative "stream/config"
 require_relative "stream/state"
 require_relative "stream/info"
 require_relative "stream/list"
+require_relative "stream/message"
 
 module NATS
   class JetStream
     class Stream
-      attr_reader :jetstream, :config, :subject, :consumers, :messages
+      attr_reader :js, :config, :subject, :consumers, :messages
 
-      alias_method :js, :jetstream
-
-      def initialize(jetstream, config)
-        @jetstream = jetstream
+      def initialize(js, config)
+        @js = js
 
         @config = Config.new(config)
         @subject = @config.name

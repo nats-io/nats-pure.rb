@@ -98,6 +98,57 @@ RSpec.describe NATS::JetStream::Stream::List do
     end
   end
 
+  describe "#with" do
+    let(:with) do
+      subject.with(params).map do |stream|
+        {name: stream.config.name}
+      end
+    end
+
+    before do
+      3.times.map do |index|
+        subject.create(name: "stream_#{index}")
+      end
+    end
+
+    context "when params are present" do
+      let(:params) { {offset: 1} }
+
+      after { js.streams.each(&:delete) }
+
+      it "iterates found streams" do
+        expect(with).to match_array([
+          {name: "stream_1"},
+          {name: "stream_2"}
+        ])
+      end
+    end
+
+    context "when params are blank" do
+      let(:params) { {} }
+
+      after { js.streams.each(&:delete) }
+
+      it "iterates over all streams" do
+        expect(with).to match_array([
+          {name: "stream_0"},
+          {name: "stream_1"},
+          {name: "stream_2"}
+        ])
+      end
+    end
+
+    context "when no streams exist" do
+      let(:params) { {} }
+
+      before { js.streams.each(&:delete) }
+
+      it "iterates over an empty array" do
+        expect(with).to eq([])
+      end
+    end
+  end
+
   describe "#names" do
     let(:names) { subject.names.map(&:itself) }
 

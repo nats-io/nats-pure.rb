@@ -88,7 +88,7 @@ RSpec.describe NATS::JetStream::Consumer do
       before { js.publish("stream", "data") }
 
       it "returns the next message" do
-        expect(next_message).to be_a(NATS::JetStream::ConsumerMessage).and(
+        expect(next_message).to be_a(NATS::JetStream::Message).and(
           have_attributes(data: "data")
         )
       end

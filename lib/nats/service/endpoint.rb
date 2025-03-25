@@ -58,6 +58,8 @@ module NATS
           subject: options[:subject],
           queue: options[:queue]
         )
+      rescue NATS::Utils::Error => error
+        raise error.to_service_error
       end
 
       def build_subject(parent, options)

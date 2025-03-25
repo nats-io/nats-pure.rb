@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       class Response
         class << self
           attr_reader :data_schema

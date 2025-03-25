@@ -16,7 +16,7 @@ module NATS
           super
 
           if idle_heartbeat.nil?
-            @idle_heartbeat = expires / 2
+            set_idle_heartbeat
           end
 
           if idle_heartbeat * 2 > expires
@@ -30,6 +30,19 @@ module NATS
 
         def idle_heartbeat_seconds
           idle_heartbeat.from_nsec
+        end
+
+        private
+
+        def set_idle_heartbeat
+          return if idle_heartbeat
+
+          @idle_heartbeat =
+            if ordered? && expires >= 10.to_nsec
+              5.to_nsec
+            else
+              expires / 2
+            end
         end
       end
     end

@@ -36,10 +36,10 @@ module NATS
         alias_method :add_or_update, :upsert
 
         def each(&block)
-          all.each(&block)
+          with.each(&block)
         end
 
-        def all(params = {})
+        def with(params = {})
           js.api.iterator(params) do |params, consumers|
             response = js.api.consumer.list(stream.subject, params)
 
@@ -66,7 +66,7 @@ module NATS
         private
 
         def js
-          stream.jetstream
+          stream.js
         end
       end
     end

@@ -4,26 +4,35 @@ module NATS
   class JetStream
     class Pull
       class Subscription
-        attr_reader :js, :inbox, :handler
+        attr_reader :pull, :client, :inbox, :handler
 
         def initialize(pull)
-          @js = pull.js
+          @pull = pull
+          @client = pull.js.client
           @handler = pull.handler
 
-          @inbox = js.client.new_inbox
+          @inbox = client.new_inbox
         end
 
         def start
-          @subscription = js.client.subscribe(inbox) do |message|
+          @subscription = client.subscribe(inbox) do |message|
             handler.handle(message)
           rescue => error
-            handler.error(error.message)
+            error(error)
             raise error
           end
         end
 
         def drain
-          js.client.send(:drain_sub, @subscription)
+          client.send(:drain_sub, @subscription)
+        end
+
+        private
+
+        def error(error)
+          pull.synchronize do
+            pull.drain(error)
+          end
         end
       end
     end

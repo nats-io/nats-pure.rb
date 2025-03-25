@@ -77,8 +77,8 @@ RSpec.describe NATS::JetStream::Stream do
   end
 
   describe "#messages" do
-    it "returns Messsage::List" do
-      expect(subject.messages).to be_a(NATS::JetStream::Message::List)
+    it "returns Stream::Messsage::List" do
+      expect(subject.messages).to be_a(NATS::JetStream::Stream::Message::List)
     end
   end
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::JetStream::Api::Endpoint do
+RSpec.describe NATS::JetStream::API::Endpoint do
   subject(:endpoint) do
     described_class.new(
       parent: parent,
@@ -10,13 +10,13 @@ RSpec.describe NATS::JetStream::Api::Endpoint do
     )
   end
 
-  let(:api) { NATS::JetStream::Api.new(jetstream) }
+  let(:api) { NATS::JetStream::API.new(jetstream) }
   let(:jetstream) { NATS::JetStream::Context.new(client) }
 
   let(:parent) { api }
   let(:name) { :info }
-  let(:response) { NATS::JetStream::Api::AccountInfoResponse }
-  let(:request) { NATS::JetStream::Api::Request }
+  let(:response) { NATS::JetStream::API::AccountInfoResponse }
+  let(:request) { NATS::JetStream::API::Request }
 
   let(:client) do
     double(NATS::Client, request: reply, publish: nil)
@@ -35,7 +35,7 @@ RSpec.describe NATS::JetStream::Api::Endpoint do
 
     context "when parent is a group" do
       let(:parent) do
-        NATS::JetStream::Api::Group.new(parent: api, name: :stream)
+        NATS::JetStream::API::Group.new(parent: api, name: :stream)
       end
 
       it "makes a request using group.subject" do
@@ -60,7 +60,7 @@ RSpec.describe NATS::JetStream::Api::Endpoint do
     end
 
     context "when response is defined" do
-      let(:response) { NATS::JetStream::Api::AccountInfoResponse }
+      let(:response) { NATS::JetStream::API::AccountInfoResponse }
 
       it "makes a request request" do
         call
@@ -141,7 +141,7 @@ RSpec.describe NATS::JetStream::Api::Endpoint do
       let(:params) { {timeout: 1} }
 
       context "and response is defined" do
-        let(:response) { NATS::JetStream::Api::AccountInfoResponse }
+        let(:response) { NATS::JetStream::API::AccountInfoResponse }
 
         it "sends params with a request" do
           call

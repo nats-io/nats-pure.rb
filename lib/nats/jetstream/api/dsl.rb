@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       module DSL
         def group(name, &block)
           klass = Class.new(Group)

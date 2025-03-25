@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       class StreamCreateRequest < Request
         schema Stream::Config
       end
@@ -14,7 +14,7 @@ module NATS
       class StreamInfoRequest < Request
         schema do
           # When true will result in a full list of deleted message
-          # IDs being returned in the info respons
+          # IDs being returned in the info response
           bool :deleted_details
 
           # When set will return a list of subjects and how many messages

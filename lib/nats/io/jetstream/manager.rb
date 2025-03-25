@@ -32,7 +32,7 @@ module NATS
       # @param config [JetStream::API::StreamConfig] Configuration of the stream to create.
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
-      # @return [JetStream::API::StreamCreateResponse] The result of creating a Stream.
+      # @return [JetStream::API::StreamCreate] The result of creating a Stream.
       def add_stream(config, params = {})
         config = if !config.is_a?(JetStream::API::StreamConfig)
           JetStream::API::StreamConfig.new(config)
@@ -46,7 +46,7 @@ module NATS
 
         cfg = config.to_h.compact
         result = api_request(req_subject, cfg.to_json, params)
-        JetStream::API::StreamCreateResponse.new(result)
+        JetStream::API::StreamCreate.new(result)
       end
 
       # stream_info retrieves the current status of a stream.
@@ -66,7 +66,7 @@ module NATS
       # @param config [JetStream::API::StreamConfig] Configuration of the stream to create.
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
-      # @return [JetStream::API::StreamCreateResponse] The result of creating a Stream.
+      # @return [JetStream::API::StreamCreate] The result of creating a Stream.
       def update_stream(config, params = {})
         config = if !config.is_a?(JetStream::API::StreamConfig)
           JetStream::API::StreamConfig.new(config)
@@ -79,7 +79,7 @@ module NATS
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
         cfg = config.to_h.compact
         result = api_request(req_subject, cfg.to_json, params)
-        JetStream::API::StreamCreateResponse.new(result)
+        JetStream::API::StreamCreate.new(result)
       end
 
       # delete_stream deletes a stream.

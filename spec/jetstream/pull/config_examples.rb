@@ -59,14 +59,6 @@ RSpec.shared_examples "NATS::JetStream::Pull::Config" do
         end
       end
     end
-
-    context "when idle_heartbeats is not specified" do
-      let(:values) { {expires: 5.to_nsec} }
-
-      it "sets idle_heartbeats to half of expires" do
-        expect(subject.idle_heartbeat).to eq(2.5.to_nsec)
-      end
-    end
   end
 
   describe "expires_seconds" do

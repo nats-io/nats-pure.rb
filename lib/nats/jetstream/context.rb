@@ -8,7 +8,7 @@ module NATS
       def initialize(client, params = {})
         @client = client
 
-        @api = Api.new(self, params[:prefix])
+        @api = API.new(self, params)
         @publisher = Publisher.new(self)
         @streams = Stream::List.new(self)
       end

@@ -2,7 +2,7 @@
 
 module NATS
   class JetStream
-    class Api
+    class API
       class ConsumerCreateRequest < Request
         schema do
           # The name of the stream to create the consumer in

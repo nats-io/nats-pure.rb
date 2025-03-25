@@ -21,7 +21,7 @@ module NATS
             data = JSON.parse(message.data, symbolize_names: true)
 
             if data[:error]
-              raise Api::ErrorResponse.new(data[:error]).to_error
+              raise API::ErrorResponse.new(data[:error]).to_error
             end
 
             new(data)

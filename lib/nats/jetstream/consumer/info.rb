@@ -4,7 +4,7 @@ module NATS
   class JetStream
     class Consumer
       class Info < NATS::Utils::Config
-        # The Stream the consumer belongs t
+        # The Stream the consumer belongs to
         string :stream_name
 
         # A unique name for the consumer, either machine generated or the durable nam

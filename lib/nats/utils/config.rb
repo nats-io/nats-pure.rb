@@ -46,6 +46,10 @@ module NATS
         to_h.to_json
       end
 
+      def to_s
+        to_h.to_s
+      end
+
       private
 
       def validate(values)

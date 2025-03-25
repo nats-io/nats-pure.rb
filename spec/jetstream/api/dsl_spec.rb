@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::JetStream::Api::DSL do
-  let(:api) { NATS::JetStream::Api.new(jetstream) }
+RSpec.describe NATS::JetStream::API::DSL do
+  let(:api) { NATS::JetStream::API.new(jetstream) }
   let(:jetstream) { NATS::JetStream::Context.new(client) }
   let(:client) { double(NATS::Client) }
 
-  let(:parent) { Class.new(NATS::JetStream::Api::Group) }
+  let(:parent) { Class.new(NATS::JetStream::API::Group) }
   let(:group) { parent.new(parent: api, name: :api) }
 
   describe ".group" do
     let(:define_group) do
       parent.group(:stream) do
-        endpoint :info, response: NATS::JetStream::Api::StreamInfoResponse
+        endpoint :info, response: NATS::JetStream::API::StreamInfoResponse
       end
     end
 
@@ -24,7 +24,7 @@ RSpec.describe NATS::JetStream::Api::DSL do
     it "defines a sub-group method" do
       define_group
 
-      expect(group.stream).to be_a(NATS::JetStream::Api::Group).and(
+      expect(group.stream).to be_a(NATS::JetStream::API::Group).and(
         have_attributes(name: :stream)
       )
     end
@@ -35,22 +35,22 @@ RSpec.describe NATS::JetStream::Api::DSL do
       parent.endpoint(:info, response: response, request: request, subject: subject)
     end
 
-    let(:response) { NATS::JetStream::Api::StreamInfoResponse }
-    let(:request) { NATS::JetStream::Api::StreamInfoRequest }
+    let(:response) { NATS::JetStream::API::StreamInfoResponse }
+    let(:request) { NATS::JetStream::API::StreamInfoRequest }
     let(:subject) { false }
 
     let(:data) { {config: {name: "stream"}} }
     let(:params) { {timeout: 5} }
 
     before do
-      allow_any_instance_of(NATS::JetStream::Api::Endpoint).to receive(:call)
+      allow_any_instance_of(NATS::JetStream::API::Endpoint).to receive(:call)
     end
 
     context "when request is present" do
       it "defines endpoint reader with the provided request" do
         define_endpoint
 
-        expect(group.info_endpoint).to be_a(NATS::JetStream::Api::Endpoint).and(
+        expect(group.info_endpoint).to be_a(NATS::JetStream::API::Endpoint).and(
           have_attributes(
             name: :info,
             request: request,
@@ -66,10 +66,10 @@ RSpec.describe NATS::JetStream::Api::DSL do
       it "defines endpoint reader with default request" do
         define_endpoint
 
-        expect(group.info_endpoint).to be_a(NATS::JetStream::Api::Endpoint).and(
+        expect(group.info_endpoint).to be_a(NATS::JetStream::API::Endpoint).and(
           have_attributes(
             name: :info,
-            request: NATS::JetStream::Api::Request,
+            request: NATS::JetStream::API::Request,
             response: response
           )
         )

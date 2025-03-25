@@ -2,46 +2,50 @@
 
 module NATS
   class JetStream
-    class Message
+    class Message < NATS::Utils::Config
       class Ack
+        include MonitorMixin
+
         attr_reader :message, :js
 
         def initialize(message)
+          super()
+
           @message = message
-          @js = message.consumer.js
+          @js = message.stream.js
           @acked = false
         end
 
         def acked?
-          @acked
+          synchronize { @acked }
         end
 
         def ack(params = {})
-          reply(:ack, params)
+          ack_and_reply(:ack, params)
         end
 
         def nack(params = {})
-          reply(:nack, params)
+          ack_and_reply(:nack, params)
         end
 
         def term(params = {})
-          reply(:term, params)
+          ack_and_reply(:term, params)
         end
 
         def in_progress(params = {})
-          send_reply(:in_progress, params)
+          reply(:in_progress, params)
         end
 
         private
 
-        def reply(type, params)
+        def ack_and_reply(type, params)
           raise JetStream::MessageAckedError if acked?
 
-          send_reply(type, params)
-          @acked = true
+          reply(type, params)
+          synchronize { @acked = true }
         end
 
-        def send_reply(type, params)
+        def reply(type, params)
           js.client.request(
             message.reply,
             data(type, params),

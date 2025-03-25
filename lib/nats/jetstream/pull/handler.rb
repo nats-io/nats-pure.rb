@@ -40,7 +40,7 @@ module NATS
           message = build(message)
 
           case message
-          when ConsumerMessage
+          when Message
             consumer(message)
           when IdleHeartbeatMessage
             heartbeat(message)
@@ -59,7 +59,7 @@ module NATS
           pull.synchronize(&block)
         end
 
-        %i[monitor buffer].each do |method|
+        %i[heartbeats buffer].each do |method|
           define_method method do
             pull.send(method)
           end

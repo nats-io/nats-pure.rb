@@ -9,13 +9,11 @@ require_relative "consumer/fetch"
 module NATS
   class JetStream
     class Consumer
-      attr_reader :jetstream, :stream, :config, :subject
-
-      alias_method :js, :jetstream
+      attr_reader :js, :stream, :config, :subject
 
       def initialize(stream, config)
         @stream = stream
-        @jetstream = stream.jetstream
+        @js = stream.js
 
         @config = Config.new(config)
         @subject = "#{@stream.subject}.#{@config.name}"
@@ -46,7 +44,7 @@ module NATS
       end
 
       def next(params = {})
-        fetch(max_messages: 1, **params).first
+        fetch(params.merge(max_messages: 1)).first
       end
 
       def consume(params = {}, &block)

@@ -1646,6 +1646,7 @@ module NATS
         end
 
         @status = conn_status
+        status_listeners.send(conn_status)
 
         # Close the established connection in case
         # we still have it.
