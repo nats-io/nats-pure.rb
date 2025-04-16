@@ -52,6 +52,10 @@ module NATS
           end
         end
 
+        def inspect
+          "#<#{self.class} @messages_fetched=#{@messages_fetched}, @messages_pending=#{@messages_pending} @bytes_pending=#{@bytes_pending}>"
+        end
+
         private
 
         def messages_depleting?

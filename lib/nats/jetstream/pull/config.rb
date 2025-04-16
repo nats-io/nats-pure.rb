@@ -15,9 +15,7 @@ module NATS
         def initialize(values)
           super
 
-          if idle_heartbeat.nil?
-            set_idle_heartbeat
-          end
+          set_idle_heartbeat if idle_heartbeat.nil?
 
           if idle_heartbeat * 2 > expires
             raise InvalidIdleHeartbeatError
@@ -35,8 +33,6 @@ module NATS
         private
 
         def set_idle_heartbeat
-          return if idle_heartbeat
-
           @idle_heartbeat =
             if ordered? && expires >= 10.to_nsec
               5.to_nsec

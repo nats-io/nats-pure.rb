@@ -27,6 +27,10 @@ module NATS
             @bytes_fetched >= config.max_bytes
           end
         end
+
+        def inspect
+          "#<#{self.class} @messages_fetched=#{@messages_fetched}, @bytes_fetched=#{@bytes_fetched}>"
+        end
       end
     end
   end
