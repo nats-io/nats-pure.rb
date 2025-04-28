@@ -27,7 +27,7 @@ RSpec.describe NATS::JetStream::Fetch::Handler do
 
   before do
     pull.heartbeats.start
-    allow(pull).to receive(:drain)
+    allow(pull).to receive(:stop)
   end
 
   after { pull.heartbeats.stop }
@@ -58,7 +58,7 @@ RSpec.describe NATS::JetStream::Fetch::Handler do
         it "does not drain pull" do
           handle
 
-          expect(pull).to_not have_received(:drain)
+          expect(pull).to_not have_received(:stop)
         end
       end
 
@@ -68,7 +68,7 @@ RSpec.describe NATS::JetStream::Fetch::Handler do
         it "drains pull" do
           handle
 
-          expect(pull).to have_received(:drain)
+          expect(pull).to have_received(:stop)
         end
       end
     end
@@ -91,7 +91,7 @@ RSpec.describe NATS::JetStream::Fetch::Handler do
       it "drains pull and sets error to message description" do
         handle
 
-        expect(pull).to have_received(:drain).with(
+        expect(pull).to have_received(:stop).with(
           be_a(NATS::JetStream::PullMessageError).and(
             have_attributes(message: be_a(NATS::JetStream::RequestTimeoutMessage))
           )
@@ -109,7 +109,7 @@ RSpec.describe NATS::JetStream::Fetch::Handler do
       it "drains pull and sets error to message description" do
         handle
 
-        expect(pull).to have_received(:drain).with(
+        expect(pull).to have_received(:stop).with(
           be_a(NATS::JetStream::PullMessageError).and(
             have_attributes(message: be_a(NATS::JetStream::BadRequestMessage))
           )

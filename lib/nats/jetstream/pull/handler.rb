@@ -4,34 +4,27 @@ module NATS
   class JetStream
     class Pull
       class Handler
-        attr_reader :pull, :block, :processing
+        attr_reader :pull, :block
 
         def initialize(pull, &block)
           @pull = pull
           @block = block
-          @processing = 0
         end
 
         def handle(message)
-          start
           process(message)
         ensure
           finish
         end
 
         def drained?
-          pull.draining? && processing <= 0
+          pull.draining? && pull.subscription.empty?
         end
 
         private
 
-        def start
-          synchronize { @processing += 1 }
-        end
-
         def finish
           synchronize do
-            @processing -= 1
             pull.closed! if drained?
           end
         end

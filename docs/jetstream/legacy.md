@@ -1,4 +1,9 @@
-# frozen_string_literal: true
+# JetStream Legacy API
+
+Introduced in v2.0.0 series, the client can now publish and receive messages from JetStream.
+
+```ruby
+require 'nats/client'
 
 nc = NATS.connect("nats://demo.nats.io:4222")
 js = nc.jetstream
@@ -25,5 +30,4 @@ loop do
     puts "Retry later..."
   end
 end
-
-nc.close
+```

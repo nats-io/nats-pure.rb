@@ -14,7 +14,7 @@ RSpec.describe NATS::JetStream::Fetch::Heartbeats do
 
   let(:heartbeats) { subject.send(:task) }
 
-  before { allow(pull).to receive(:drain) }
+  before { allow(pull).to receive(:stop) }
 
   describe "#start" do
     after { subject.stop }
@@ -45,7 +45,7 @@ RSpec.describe NATS::JetStream::Fetch::Heartbeats do
     it "sets error to No Heartbeats and drains pull" do
       sleep 1.25
 
-      expect(pull).to have_received(:drain).with(NATS::JetStream::NoHeartbeatError)
+      expect(pull).to have_received(:stop).with(NATS::JetStream::NoHeartbeatError)
     end
   end
 end

@@ -26,6 +26,8 @@ Key differences between the new and legacy APIs include:
   - [Next](#next)
   - [Consume](#consume)
   - [Message Acknowledgment](#message-acknowledgment)
+  - [Error Handling](#error-handling)
+- [Examples](#examplees)
 
 ## Basics
 
@@ -450,7 +452,6 @@ Consumers are responsible for monitoring the delivery and acknowledgments of mes
 
 ```ruby
 consumer.consume do |message|
-  puts message
   message.ack
 end
 ```
@@ -463,26 +464,35 @@ There are four ways to acknowledge a message:
 
 ### Error Handling
 
+If an unrecoverable error occurs during fetch, next, or consume, the retrieval process will automatically stop.
+For fetch and consume operations, you can inspect the cause using the `error` method.
+
+To check if any errors occured during `fetch`:
+
 ```ruby
 messages = consumer.fetch(max_messages: 100)
 
-messages.count
-# 15
-messages.fetch.error
+messages.error
 # <NATS::JetStream::PullTimeoutError: pull request timeout>
 ```
 
+To check if any errors occured during `consume`:
 ```ruby
 consume = consumer.consume do |message|
-  puts message
-  raise ""
+  raise "error"
 end
 
+sleep 1
 consume.error
 # <RuntimeError: error>
 ```
 
-- `NATS::JetStream::NoHeartbeatError`
-- `NATS::JetStream::PullTimeoutError`
-- `NATS::JetStream::PullMessageError`
-- any other Ruby error
+There are four types of errors that may occur during fetch or consume:
+- `NATS::JetStream::NoHeartbeatError` - no heartbeat messages were received from the server.
+- `NATS::JetStream::PullTimeoutError` - the pull request timed out before it could complete (applies only to fetch).
+- `NATS::JetStream::PullMessageError` - the pull request was terminated by the server. You can view the server’s message using `error.message`. For a complete list of possible messages, see [message/status.rb](../lib/nats/jetstream/message/status.rb).
+- any other error – indicates an exception occurred within the `consume` block.
+
+## Examples
+
+For more examples, refer to [examples/jetstream](../examples/jetstream) directory.

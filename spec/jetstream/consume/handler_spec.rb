@@ -40,7 +40,7 @@ RSpec.describe NATS::JetStream::Consume::Handler do
     pull.heartbeats.start
 
     allow(pull).to receive(:request_messages)
-    allow(pull).to receive(:drain)
+    allow(pull).to receive(:stop)
   end
 
   after { pull.heartbeats.stop }
@@ -207,7 +207,7 @@ RSpec.describe NATS::JetStream::Consume::Handler do
       it "drains pull and sets error to message description" do
         handle
 
-        expect(pull).to have_received(:drain).with(
+        expect(pull).to have_received(:stop).with(
           be_a(NATS::JetStream::PullMessageError).and(
             have_attributes(message: be_a(NATS::JetStream::BadRequestMessage))
           )

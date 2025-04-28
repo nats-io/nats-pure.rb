@@ -13,7 +13,7 @@ module NATS
 
           publisher.stop if context[:publish]
 
-          js.client.close
+          client.close
         end
 
         def info
@@ -27,11 +27,15 @@ module NATS
         private
 
         def js
-          @js ||=
+          @js ||= client.js
+        end
+
+        def client
+          @client ||=
             if context[:server]
-              NATS.connect(context[:server]).js
+              NATS.connect(context[:server])
             else
-              NATS.connect.js
+              NATS.connect
             end
         end
 

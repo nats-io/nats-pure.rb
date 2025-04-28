@@ -14,7 +14,7 @@ RSpec.describe NATS::JetStream::Fetch::Timeout do
 
   let(:timeout) { subject.send(:task) }
 
-  before { allow(pull).to receive(:drain) }
+  before { allow(pull).to receive(:stop) }
 
   describe "#start" do
     after { subject.stop }
@@ -45,7 +45,7 @@ RSpec.describe NATS::JetStream::Fetch::Timeout do
     it "sets error to Request Timeout and drains pull" do
       sleep 2.25
 
-      expect(pull).to have_received(:drain).with(NATS::JetStream::PullTimeoutError)
+      expect(pull).to have_received(:stop).with(NATS::JetStream::PullTimeoutError)
     end
   end
 end

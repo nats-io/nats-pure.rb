@@ -142,15 +142,16 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false
     )
+    expect(si.config).to match(config)
+
     # v2.11 changes
     if ENV["NATS_SERVER_VERSION"] == "main"
-      config.metadata = {
+      expect(si.config.metadata).to match(
         "_nats.level": "1",
-        "_nats.ver": "2.11.1-dev",
+        "_nats.ver": start_with("2.11"),
         "_nats.req.level": "0"
-      }
+      )
     end
-    expect(si.config).to match(config)
 
     # Nothing from start
     expect do

@@ -98,12 +98,12 @@ module NATS
             return unless @needed && @buf.bytesize >= (@needed + CR_LF_SIZE)
             if @header_needed
               hbuf = @buf.slice(0, @header_needed)
-              payload = @buf.slice(@header_needed, (@needed - @header_needed))
+              payload = @buf.slice(@header_needed, @needed - @header_needed)
               @nc.send(:process_msg, @sub, @sid, @reply, payload, hbuf)
             else
               @nc.send(:process_msg, @sub, @sid, @reply, @buf.slice(0, @needed), nil)
             end
-            @buf = @buf.slice((@needed + CR_LF_SIZE), @buf.bytesize)
+            @buf = @buf.slice(@needed + CR_LF_SIZE, @buf.bytesize)
 
             @sub = @sid = @reply = @needed = @header_needed = nil
             @parse_state = AWAITING_CONTROL_LINE

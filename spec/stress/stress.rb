@@ -32,7 +32,6 @@ module NATS
         [test.logfile, test.log]
       rescue => error
         puts error.message
-        puts error.backtrace
         next
       end
 

@@ -23,7 +23,7 @@ module NATS
         def task
           @task ||= Concurrent::ScheduledTask.new(timeout) do
             pull.synchronize do
-              pull.drain(PullTimeoutError.new)
+              pull.stop(PullTimeoutError.new)
             end
           end
         end

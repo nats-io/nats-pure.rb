@@ -37,7 +37,7 @@ end
 sleep 5
 
 thread.exit
-consume.drain
+consume.stop
 
 consumer.delete
 stream.delete

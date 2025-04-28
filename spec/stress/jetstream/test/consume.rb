@@ -13,16 +13,19 @@ module NATS
           consume = consumer.consume(params) do |message|
             lock.synchronize do
               count += 1
-              logger.info("Received: #{message.inspect} (#{count})")
+              # logger.info("Received: #{message.inspect} (#{count})")
             end
 
             message.ack
+          rescue => error
+            logger.error(error.message)
+            next
           end
 
           sleep 30
           consume.drain
 
-          logger.info("Consumed #{messages.count} messages")
+          logger.info("Consumed total #{count} messages")
         end
 
         def operation

@@ -39,7 +39,7 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
   end
 
   describe "#start" do
-    after { pull.drain }
+    after { pull.stop }
 
     context "when no errors occur" do
       let(:pull) do
@@ -86,6 +86,38 @@ RSpec.describe NATS::JetStream::Pull::Subscription do
       expect(subs.values).to include(
         having_attributes(subject: subject.inbox, drained: true)
       )
+    end
+  end
+
+  describe "#empty?" do
+    let(:subscription) { subject.instance_variable_get("@subscription") }
+
+    context "when there are pending messages" do
+      before { subject.start }
+      after { subject.drain }
+
+      before do
+        subscription.dispatch(NATS::Msg.new(data: "data"))
+      end
+
+      it "returns false" do
+        expect(subject.empty?).to be(false)
+      end
+    end
+
+    context "when there are no pending messages" do
+      before { subject.start }
+      after { subject.drain }
+
+      it "returns true" do
+        expect(subject.empty?).to be(true)
+      end
+    end
+
+    context "when subscription has not started yet" do
+      it "returns true" do
+        expect(subject.empty?).to be(true)
+      end
     end
   end
 end

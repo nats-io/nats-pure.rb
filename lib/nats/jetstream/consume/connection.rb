@@ -56,13 +56,13 @@ module NATS
         def connect
           pull.request_messages
           pull.buffer.reset
-          pull.heartbeats.reset
+          pull.heartbeats.restart
 
           @connected = true
         end
 
         def close
-          pull.drain
+          pull.stop
           @connected = false
         end
       end

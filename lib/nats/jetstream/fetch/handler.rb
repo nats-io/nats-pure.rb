@@ -9,7 +9,7 @@ module NATS
             heartbeats.reset
             buffer.fetched(message)
 
-            pull.drain if buffer.full?
+            pull.stop if buffer.full?
           end
         end
 
@@ -21,13 +21,13 @@ module NATS
 
         def warning(message)
           synchronize do
-            pull.drain(message.to_error)
+            pull.stop(message.to_error)
           end
         end
 
         def error(message)
           synchronize do
-            pull.drain(message.to_error)
+            pull.stop(message.to_error)
           end
         end
       end

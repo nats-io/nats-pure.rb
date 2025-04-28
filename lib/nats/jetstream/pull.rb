@@ -41,7 +41,7 @@ module NATS
         end
       end
 
-      def drain(error = nil)
+      def stop(error = nil)
         synchronize do
           return false unless processing?
           draining!

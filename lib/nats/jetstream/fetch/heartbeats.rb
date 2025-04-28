@@ -12,7 +12,7 @@ module NATS
 
         def handle
           pull.synchronize do
-            pull.drain(NoHeartbeatError.new)
+            pull.stop(NoHeartbeatError.new)
           end
         end
       end

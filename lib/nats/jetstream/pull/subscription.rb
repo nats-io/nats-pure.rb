@@ -27,11 +27,15 @@ module NATS
           client.send(:drain_sub, @subscription)
         end
 
+        def empty?
+          !@subscription || @subscription.pending_queue.empty?
+        end
+
         private
 
         def error(error)
           pull.synchronize do
-            pull.drain(error)
+            pull.stop(error)
           end
         end
       end

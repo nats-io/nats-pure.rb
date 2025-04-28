@@ -34,7 +34,7 @@ module NATS
 
         def error(message)
           synchronize do
-            pull.drain(message.to_error)
+            pull.stop(message.to_error)
           end
         end
 

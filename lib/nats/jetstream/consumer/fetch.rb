@@ -20,6 +20,10 @@ module NATS
         def each(&block)
           fetch.messages.each(&block)
         end
+
+        def error
+          fetch.error
+        end
       end
     end
   end

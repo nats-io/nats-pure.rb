@@ -9,10 +9,14 @@ module NATS
           when :pending
             task.reset
           when :processing
-            stop
-            set
-            start
+            restart
           end
+        end
+
+        def restart
+          stop
+          set
+          start
         end
 
         private

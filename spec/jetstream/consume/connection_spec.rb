@@ -37,7 +37,7 @@ RSpec.describe NATS::JetStream::Consume::Connection do
 
   before do
     allow(pull).to receive(:request_messages)
-    allow(pull).to receive(:drain).and_call_original
+    allow(pull).to receive(:stop).and_call_original
   end
 
   describe "#start" do
@@ -123,7 +123,7 @@ RSpec.describe NATS::JetStream::Consume::Connection do
         client.close
         sleep 0.1
 
-        expect(pull).to have_received(:drain)
+        expect(pull).to have_received(:stop)
       end
     end
   end

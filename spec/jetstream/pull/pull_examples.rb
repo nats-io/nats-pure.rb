@@ -5,7 +5,7 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
     context "when in pending status" do
       let(:params) { {} }
 
-      after { subject.drain }
+      after { subject.stop }
 
       before do
         allow(subject.monitor).to receive(:start).and_call_original
@@ -50,7 +50,7 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
     context "when not in pending stats" do
       before do
         subject.start
-        subject.drain
+        subject.stop
       end
 
       it "returns false" do
@@ -59,7 +59,7 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
     end
   end
 
-  describe "#drain" do
+  describe "#stop" do
     context "when in processing status" do
       before { subject.start }
 
@@ -69,21 +69,21 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
       end
 
       it "moves to closed status" do
-        subject.drain
+        subject.stop
         subject.wait(1)
 
         expect(subject.closed?).to eq(true)
       end
 
       it "stops its monitor" do
-        subject.drain
+        subject.stop
         subject.wait(1)
 
         expect(subject.monitor).to have_received(:stop)
       end
 
       it "starts a subscription" do
-        subject.drain
+        subject.stop
         subject.wait(1)
 
         expect(subject.subscription).to have_received(:drain)
@@ -93,7 +93,7 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
         let(:error) { StandardError.new }
 
         it "sets the error" do
-          subject.drain(error)
+          subject.stop(error)
 
           expect(subject.error).to eq(error)
         end
@@ -102,14 +102,14 @@ RSpec.shared_examples "NATS::JetStream::Pull" do |idle_heartbeat:|
 
     context "when not in processing status" do
       it "returns false" do
-        expect(subject.drain).to eq(false)
+        expect(subject.stop).to eq(false)
       end
 
       context "and draining due to an error" do
         let(:error) { StandardError.new }
 
         it "does not set the error" do
-          subject.drain(error)
+          subject.stop(error)
 
           expect(subject.error).to be(nil)
         end

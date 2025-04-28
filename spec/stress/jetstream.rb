@@ -10,6 +10,18 @@ require_relative "jetstream/context"
 require_relative "jetstream/publisher"
 require_relative "jetstream/verbose"
 
+# To run all JetStream stress tests:
+#   require "./spec/stress/jetstream"
+#   NATS::Stress::JetStream.new.run
+#
+# To run specific tests:
+#   NATS::Stress::JetStream.new(test: [:fetch, :consume]).run
+#
+# To run specific contexts:
+#   NATS::Stress::JetStream.new(context: [:small_stream, :large_stream]).run
+#
+# To run on a different number of processes (10 by default):
+#   NATS::Stress::JetStream.new(processes: 5).run
 module NATS
   class Stress
     class JetStream < Stress
