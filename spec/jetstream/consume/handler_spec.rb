@@ -81,16 +81,36 @@ RSpec.describe NATS::JetStream::Consume::Handler do
       context "when buffer is depleting" do
         let(:params) { {max_messages: 2} }
 
-        it "requests new messages" do
-          handle
+        context "and pull is in process" do
+          before { pull.processing! }
 
-          expect(pull).to have_received(:request_messages)
+          it "requests new messages" do
+            handle
+
+            expect(pull).to have_received(:request_messages)
+          end
+
+          it "refills buffer" do
+            handle
+
+            expect(buffer.messages_pending).to eq(3)
+          end
         end
 
-        it "refills buffer" do
-          handle
+        context "and pull is draining" do
+          before { pull.draining! }
 
-          expect(buffer.messages_pending).to eq(3)
+          it "does not request new messages" do
+            handle
+
+            expect(pull).to_not have_received(:request_messages)
+          end
+
+          it "does not refill buffer" do
+            handle
+
+            expect(buffer.messages_pending).to eq(1)
+          end
         end
       end
     end
@@ -146,16 +166,36 @@ RSpec.describe NATS::JetStream::Consume::Handler do
         context "and buffer is depleting" do
           let(:params) { {max_messages: 7} }
 
-          it "requests new messages" do
-            handle
+          context "with pull in process" do
+            before { pull.processing! }
 
-            expect(pull).to have_received(:request_messages)
+            it "requests new messages" do
+              handle
+
+              expect(pull).to have_received(:request_messages)
+            end
+
+            it "refills buffer" do
+              handle
+
+              expect(buffer.messages_pending).to eq(9)
+            end
           end
 
-          it "refills buffer" do
-            handle
+          context "with pull in draining" do
+            before { pull.draining! }
 
-            expect(buffer.messages_pending).to eq(9)
+            it "does not request new messages" do
+              handle
+
+              expect(pull).to_not have_received(:request_messages)
+            end
+
+            it "does not refill buffer" do
+              handle
+
+              expect(buffer.messages_pending).to eq(2)
+            end
           end
         end
       end

@@ -18,10 +18,15 @@ module NATS
           count = 0
 
           consume = consumer.consume(logger: logger) do |message|
+            #lock.synchronize do
+              #count += 1
+              #logger.info("Consumed #{count} messages") if count % 1_000 == 0
+            #end
             lock.synchronize do
               count += 1
-              logger.info("Consumed #{count} messages") if count % 1_000 == 0
+              logger.info("Received: #{message.data} (#{count})")
             end
+
             message.ack
           end
 

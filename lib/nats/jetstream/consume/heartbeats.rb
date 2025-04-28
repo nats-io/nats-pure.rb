@@ -5,9 +5,10 @@ module NATS
     class Consume < Pull
       class Heartbeats < Pull::Heartbeats
         def reset
-          if task.pending?
+          case task.state
+          when :pending
             task.reset
-          else
+          when :processing
             stop
             set
             start

@@ -41,6 +41,8 @@ module NATS
         private
 
         def refill_messages
+          return unless pull.processing?
+
           pull.request_messages
           buffer.refill
         end

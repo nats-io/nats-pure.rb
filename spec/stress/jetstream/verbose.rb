@@ -32,7 +32,17 @@ module NATS
           end
 
           def drain(error = nil)
-            logger.info("Draining due to #{error}")
+            if error
+              logger.error("Draining due to #{error.inspect}")
+            else
+              logger.info("Draining pull")
+            end
+
+            super
+          end
+
+          def closed!
+            logger.info("Pull closed")
             super
           end
         end

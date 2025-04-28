@@ -11,7 +11,11 @@ module NATS
           count = 0
 
           consume = consumer.consume(params) do |message|
-            lock.synchronize { count += 1 }
+            lock.synchronize do
+              count += 1
+              logger.info("Received: #{message.inspect} (#{count})")
+            end
+
             message.ack
           end
 
