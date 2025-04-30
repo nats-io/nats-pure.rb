@@ -115,7 +115,8 @@ describe "KeyValue" do
     kv = js.create_key_value(bucket: "TEST", history: 5, ttl: 3600, description: "Basic KV")
 
     si = js.stream_info("KV_TEST")
-    config = NATS::JetStream::API::StreamConfig.new(
+
+    expect(si.config).to have_attributes(
       name: "KV_TEST",
       description: "Basic KV",
       subjects: ["$KV.TEST.>"],
@@ -142,7 +143,6 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false
     )
-    expect(si.config).to match(config)
 
     # v2.11 changes
     if ENV["NATS_SERVER_VERSION"] == "main"
