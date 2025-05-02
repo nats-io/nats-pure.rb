@@ -14,7 +14,7 @@ RSpec.describe NATS::JetStream::Message::Metadata do
         sequence: have_attributes(stream: 2795, consumer: 3495),
         num_delivered: 3,
         num_pending: 7,
-        timestamp: "1744033099995368000"
+        timestamp: 1744033099995368000
       )
     end
   end
@@ -31,7 +31,7 @@ RSpec.describe NATS::JetStream::Message::Metadata do
           sequence: have_attributes(stream: 2795, consumer: 3495),
           num_delivered: 3,
           num_pending: 7,
-          timestamp: "1744033099995368000"
+          timestamp: 1744033099995368000
         )
       end
     end
@@ -47,7 +47,7 @@ RSpec.describe NATS::JetStream::Message::Metadata do
           sequence: have_attributes(stream: 2795, consumer: 3495),
           num_delivered: 3,
           num_pending: 7,
-          timestamp: "1744033099995368000"
+          timestamp: 1744033099995368000
         )
       end
     end

@@ -119,5 +119,6 @@ module NATS
         service
       end
     end
+    alias_method :create, :add
   end
 end

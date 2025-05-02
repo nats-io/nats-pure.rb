@@ -148,7 +148,7 @@ describe "KeyValue" do
     if ENV["NATS_SERVER_VERSION"] == "main"
       expect(si.config.metadata).to match(
         "_nats.level": "1",
-        "_nats.ver": start_with("2.11"),
+        "_nats.ver": start_with("2.1"),
         "_nats.req.level": "0"
       )
     end

@@ -9,7 +9,7 @@ module NATS
             heartbeats.reset
           end
 
-          block.call(message)
+          block.call(message, pull)
 
           synchronize do
             buffer.consumed(message)

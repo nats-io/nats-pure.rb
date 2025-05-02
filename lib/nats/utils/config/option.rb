@@ -85,6 +85,12 @@ module NATS
         end
       end
 
+      class SymbolOption < Option
+        def typecast(value)
+          value&.to_sym
+        end
+      end
+
       class BoolOption < Option
         def typecast(value)
           %w[1 true t].include?(value.to_s.downcase)
@@ -117,6 +123,19 @@ module NATS
             value
           else
             raise TimeError.new(self, value)
+          end
+        end
+      end
+
+      class IoOption < Option
+        def typecast(value)
+          case value
+          when IO, File, Tempfile, StringIO
+            value
+          when String
+            StringIO.new(value)
+          else
+            raise IoError.new(self, value)
           end
         end
       end

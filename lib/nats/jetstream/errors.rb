@@ -2,7 +2,6 @@
 
 module NATS
   class JetStream
-    # Error is any error that may arise when interacting with JetStream.
     class Error < NATS::IO::Error; end
 
     class InvalidIdleHeartbeatError < Error

@@ -24,6 +24,7 @@ module NATS
         # Maximum age of any message in the stream, expressed
         # in nanoseconds. 0 for unlimited
         integer :max_age
+        alias_method :ttl, :max_age
 
         # How big the Stream may be, when the combined stream
         # size exceeds this old messages are removed. -1 for unlimited
@@ -101,7 +102,7 @@ module NATS
 
         # Allows the use of the Nats-Rollup header to replace all contents
         # of a stream, or subject in a stream, with a single new message
-        bool :allow_rollup, default: false
+        bool :allow_rollup_hdrs, default: false
 
         # Rules for republishing messages from a stream with subject
         # mapping onto new subjects for partitioning and more"

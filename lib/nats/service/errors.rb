@@ -2,7 +2,7 @@
 
 module NATS
   class Service
-    class Error < StandardError; end
+    class Error < NATS::IO::Error; end
 
     class InvalidNameError < Error; end
 

@@ -30,6 +30,12 @@ module NATS
         end
       end
 
+      class IoError < Error
+        def message
+          ":#{type.name} must be a string or an IO object, got #{value}"
+        end
+      end
+
       class HashError < Error
         def message
           ":#{type.name} must respond to to_h, got #{value}"

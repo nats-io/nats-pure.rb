@@ -869,6 +869,11 @@ module NATS
       ::NATS::JetStream::Context.new(self, options)
     end
 
+    def object_store(options = {})
+      ::NATS::Object::Context.new(self, options)
+    end
+    alias_method :os, :object_store
+
     def services
       synchronize { @_services ||= Services.new(self) }
     end

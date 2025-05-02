@@ -28,7 +28,7 @@ module NATS
         # The number of times a message will be redelivered to consumers if not acknowledged in time
         integer :max_deliver, default: -1
 
-        # Filter the stream by a single subjects
+        # Filter the stream by a single subject
         string :filter_subject
 
         # Filter the stream by multiple subjects

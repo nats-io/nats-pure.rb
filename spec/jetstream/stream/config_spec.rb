@@ -25,7 +25,7 @@ RSpec.describe NATS::JetStream::Stream::Config do
         sealed: true,
         deny_delete: true,
         deny_purge: true,
-        allow_rollup: true,
+        allow_rollup_hdrs: true,
         allow_direct: true,
         mirror_direct: true,
         compression: "s2",

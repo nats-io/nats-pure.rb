@@ -82,4 +82,11 @@ RSpec.describe NATS::JetStream::Context do
       end
     end
   end
+
+  describe "#object_store" do
+    it "returns ObjectStore::Context" do
+      expect(subject.object_store).to be_a(NATS::Object::Context)
+      expect(subject.object_store.js).to eq(subject)
+    end
+  end
 end

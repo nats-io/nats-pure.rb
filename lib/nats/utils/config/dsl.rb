@@ -9,12 +9,14 @@ module NATS
         OPTIONS = {
           string: NATS::Utils::Config::StringOption,
           integer: NATS::Utils::Config::IntegerOption,
+          symbol: NATS::Utils::Config::SymbolOption,
           bool: NATS::Utils::Config::BoolOption,
           date: NATS::Utils::Config::DateOption,
           time: NATS::Utils::Config::TimeOption,
           hash: NATS::Utils::Config::HashOption,
           array: NATS::Utils::Config::ArrayOption,
-          object: NATS::Utils::Config::ObjectOption
+          object: NATS::Utils::Config::ObjectOption,
+          io: NATS::Utils::Config::IoOption
         }.freeze
 
         def inherited(subclass)
@@ -37,6 +39,10 @@ module NATS
           register(:integer, name, params)
         end
 
+        def symbol(name, params = {})
+          register(:symbol, name, params)
+        end
+
         def bool(name, params = {})
           register(:bool, name, params)
         end
@@ -47,6 +53,10 @@ module NATS
 
         def time(name, params = {})
           register(:time, name, params)
+        end
+
+        def io(name, params = {})
+          register(:io, name, params)
         end
 
         def hash(name, params = {})

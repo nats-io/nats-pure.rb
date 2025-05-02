@@ -28,6 +28,20 @@ module NATS
 
         Ack.build(message)
       end
+
+      def publish_async(subject, data, params = {})
+        config = Config.new(params)
+
+        js.client.publish(
+          subject,
+          data,
+          nil,
+          header: config.headers,
+          timeout: config.timeout
+        )
+      rescue NATS::IO::NoRespondersError
+        raise JetStream::NoStreamResponseError
+      end
     end
   end
 end

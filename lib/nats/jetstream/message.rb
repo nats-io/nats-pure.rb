@@ -57,7 +57,7 @@ module NATS
         end
       end
 
-      attr_reader :stream, :metadata
+      attr_reader :stream, :metadata, :time
 
       string :subject
       hash :header, default: {}
@@ -78,6 +78,7 @@ module NATS
 
         @ack = Ack.new(self)
         @metadata = Metadata.new(reply)
+        @time = Time.at(metadata.timestamp)
       end
 
       def acked?
@@ -106,6 +107,10 @@ module NATS
 
       def bytesize
         [subject, raw_header, data, reply].compact.map(&:bytesize).sum
+      end
+
+      def json
+        JSON.parse(data, symbolize_names: true)
       end
 
       def inspect

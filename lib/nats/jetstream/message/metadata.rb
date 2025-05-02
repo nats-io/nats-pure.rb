@@ -44,7 +44,7 @@ module NATS
         integer :num_delivered
         integer :num_pending
 
-        string :timestamp
+        integer :timestamp
 
         alias_method :seq, :sequence
 

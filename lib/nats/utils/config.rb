@@ -22,8 +22,10 @@ module NATS
         validate(values)
 
         values.each do |name, value|
-          set(schema[name], value)
+          set(schema[name], value) if schema[name]
         end
+
+        self
       end
 
       def each
@@ -36,11 +38,20 @@ module NATS
         send(name) if respond_to?(name)
       end
 
-      def to_h
+      def dig(*names)
+        name = names.shift
+        value = self[name]
+
+        names.empty? ? value : value.dig(*names)
+      end
+
+      def to_hash
         schema.each_with_object({}) do |(name, option), hash|
           hash[name] = option.to_h(send(name))
         end
       end
+      alias_method :attributes, :to_hash
+      alias_method :to_h, :to_hash
 
       def to_json
         to_h.to_json

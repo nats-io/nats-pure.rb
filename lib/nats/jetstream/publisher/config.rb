@@ -34,7 +34,7 @@ module NATS
 
         # Used to apply a purge of all prior messages in
         # the stream or at the subject-level
-        string :rollup, in: %(stream sub)
+        string :rollup, in: %w[stream sub]
 
         # Custom header
         hash :header

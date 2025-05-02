@@ -13,6 +13,11 @@ module NATS
         @streams = Stream::List.new(self)
       end
 
+      def object_store
+        @object_store ||= Object::Context.new(client, js: self)
+      end
+      alias_method :os, :object_store
+
       def info
         api.info.data
       end

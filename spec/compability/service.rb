@@ -1,82 +1,67 @@
 # frozen_string_literal: true
 
+require_relative "test"
+
 module NATS
   class Compability
-    class ServiceApi
-      class Service
-        attr_reader :service, :client
+    class Service < Test
+      def initialize
+        @client = NATS.connect
+      end
 
-        def initialize(client)
-          @client = client
-        end
+      def start(message)
+        add_service
+        add_endpoints
 
-        def start
-          add_service
-          add_endpoints
-        end
+        message.respond("")
+      end
 
-        def stop
-          @service.stop
-        end
+      def stop(message)
+        @service.stop
+        message.respond("")
+      end
 
-        private
+      private
 
-        def add_service
-          @service = client.add_service(
-            name: "demo",
-            version: "1.0.0",
-            description: "demo service",
-            metadata: {workload: "cpu"}
-          )
+      def subject
+        "tests.service.core.>"
+      end
 
-          service.on_stats do |endpoint|
-            {endpoint: endpoint.name}
-          end
-        end
+      def add_service
+        @service = client.services.add(
+          name: "demo",
+          version: "1.0.0",
+          description: "demo service",
+          metadata: {workload: "cpu"}
+        )
 
-        def add_endpoints
-          group1 = service.add_group("g1")
-          group2 = service.add_group("g2", queue: "group-queue")
-
-          add_endpoint(service, "demo-default-queue", subject: "demo.default", metadata: {key: "value"})
-          add_endpoint(service, "demo-custom-queue", subject: "demo.default", queue: "endpoint-group")
-
-          add_endpoint(group1, "g1-parent-queue", subject: "parent.queue")
-          add_endpoint(group1, "g1-custom-queue", subject: "custom.queue", queue: "endpoint-group")
-
-          add_endpoint(group2, "g2-parent-queue", subject: "parent.queue")
-          add_endpoint(group2, "g2-custom-queue", subject: "custom.queue", queue: "endpoint-group")
-
-          service.add_endpoint("faulty", subject: "faulty") do |msg|
-            raise "handler error"
-          end
-        end
-
-        def add_endpoint(parent, name, options)
-          parent.add_endpoint(name, options) do |msg|
-            msg.respond(msg.data)
-          end
+        @service.on_stats do |endpoint|
+          {endpoint: endpoint.name}
         end
       end
 
-      attr_reader :service
+      def add_endpoints
+        group1 = @service.groups.add("g1")
+        group2 = @service.groups.add("g2", queue: "group-queue")
 
-      def run
-        @service = Service.new(client)
+        add_endpoint(@service, "demo-default-queue", subject: "demo.default", metadata: {key: "value"})
+        add_endpoint(@service, "demo-custom-queue", subject: "demo.default", queue: "endpoint-group")
 
-        client.subscribe("tests.service.core.>") do |msg|
-          if msg.data.empty?
-            service.stop
-          else
-            service.start
-          end
+        add_endpoint(group1, "g1-parent-queue", subject: "parent.queue")
+        add_endpoint(group1, "g1-custom-queue", subject: "custom.queue", queue: "endpoint-group")
 
-          msg.respond("")
+        add_endpoint(group2, "g2-parent-queue", subject: "parent.queue")
+        add_endpoint(group2, "g2-custom-queue", subject: "custom.queue", queue: "endpoint-group")
+
+        @service.endpoints.add("faulty", subject: "faulty") do |msg|
+          raise "handler error"
         end
       end
 
-      def client
-        @client ||= NATS.connect
+      def add_endpoint(parent, name, options)
+        parent.endpoints.add(name, options) do |msg|
+          msg.respond(msg.data)
+        end
       end
     end
   end

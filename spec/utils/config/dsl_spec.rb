@@ -104,6 +104,23 @@ RSpec.describe NATS::Utils::Config::DSL do
     end
   end
 
+  describe "#io" do
+    let(:block) do
+      option_params = params
+      proc { io(:option, option_params) }
+    end
+
+    let(:params) { {} }
+
+    it "registers an IO option" do
+      expect(option).to be_kind_of(NATS::Utils::Config::IoOption)
+    end
+
+    it "sets options attributes" do
+      expect(option).to have_attributes(name: :option)
+    end
+  end
+
   describe "#hash" do
     let(:block) do
       option_params = params

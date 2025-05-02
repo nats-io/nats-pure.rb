@@ -34,6 +34,10 @@ module NATS
           js.api.stream.msg.delete(stream.subject, seq: sequence).success?
         end
 
+        def json
+          JSON.parse(data, symbolize_names: true)
+        end
+
         def inspect
           "#<#{self.class} @subject=#{subject}, @header=#{header}, @data=#{data}, @sequence=#{sequence}, @time=#{time}>"
         end

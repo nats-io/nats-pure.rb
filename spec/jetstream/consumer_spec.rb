@@ -104,6 +104,8 @@ RSpec.describe NATS::JetStream::Consumer do
   describe "#consume" do
     let(:consume) { subject.consume(max_messages: 5) }
 
+    after { consume.stop }
+
     it "returns Consume" do
       expect(consume).to be_a(NATS::JetStream::Consume).and(
         be_config(config: {max_messages: 5})

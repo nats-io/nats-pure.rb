@@ -72,6 +72,39 @@ RSpec.describe NATS::JetStream::Message do
     end
   end
 
+  describe "json" do
+    subject { described_class.build(consumer, message) }
+
+    let(:consumer) { NATS::JetStream::Consumer.new(stream, name: "consumer") }
+    let(:stream) { NATS::JetStream::Stream.new(js, name: "stream") }
+    let(:client) { double(NATS::Client) }
+
+    let(:message) do
+      NATS::Msg.new(
+        subject: "subject",
+        raw_header: {},
+        data: data,
+        reply: "$JS.ACK.stream.consumer.3.2795.3495.1744033099995368000.7"
+      )
+    end
+
+    context "when data is a valid JSON" do
+      let(:data) { {key: :value}.to_json }
+
+      it "parses data as JSON" do
+        expect(subject.json).to eq(key: "value")
+      end
+    end
+
+    context "when data is not a valid JSON" do
+      let(:data) { "invalid" }
+
+      it "raises JSON::ParserError" do
+        expect { subject.json }.to raise_error(JSON::ParserError)
+      end
+    end
+  end
+
   describe "acks" do
     subject { consumer.next(expires: 1.to_nsec) }
 
