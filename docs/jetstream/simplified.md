@@ -236,10 +236,13 @@ consumer = stream.consumers.upsert(
 
 #### Find
 
-You can fetch an already existing consumer by its name with `#find`:
+You can fetch an already existing consumer by its name with `find`:
 
 ```ruby
-ConsumerNotFoundError`.
+consumer = stream.consumers.find("consumer")
+```
+
+If the consumer does not exists the method will raise `NATS::JetStream::ConsumerNotFoundError`.
 
 #### Update
 
