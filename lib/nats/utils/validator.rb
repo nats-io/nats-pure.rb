@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module NATS
-  class Service
+  module Utils
     module Validator
       REGEX = {
         name: /[A-Za-z0-9\-_]+$/,

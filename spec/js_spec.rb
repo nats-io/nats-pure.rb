@@ -1161,13 +1161,13 @@ describe "JetStream" do
         name: "mystream"
       }
       resp = nc.jsm.add_stream(stream_config)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.type).to eql("io.nats.jetstream.api.v1.stream_create_response")
       expect(resp.config.name).to eql("mystream")
       expect(resp.config.num_replicas).to eql(1)
 
       resp = nc.jsm.add_stream(name: "stream2")
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.config.name).to eql("stream2")
       expect(resp.config.num_replicas).to eql(1)
 
@@ -1177,7 +1177,7 @@ describe "JetStream" do
       }
       config = NATS::JetStream::API::StreamConfig.new(stream_config)
       resp = nc.jsm.add_stream(config)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.config.name).to eql("stream3")
       expect(resp.config.num_replicas).to eql(1)
 
@@ -1201,7 +1201,7 @@ describe "JetStream" do
         no_ack: true,
         # allow_direct: true,
         placement: placement)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       # expect(resp.config.allow_direct).to eql(true)
       expect(resp.config.no_ack).to eql(true)
       expect(resp.config.placement).to eql(placement)

@@ -70,37 +70,11 @@ nats.close
 
 ## JetStream Usage
 
-Introduced in v2.0.0 series, the client can now publish and receive messages from JetStream.
+JetStream is a built-in persistence engine that enables messages to be stored and replayed later.
 
-```ruby
-require 'nats/client'
+To find more information on JetStream API, visit [the docs](docs/jetstream/simplified.md).
 
-nc = NATS.connect("nats://demo.nats.io:4222")
-js = nc.jetstream
-
-js.add_stream(name: "mystream", subjects: ["foo"])
-
-Thread.new do
-  loop do
-    # Periodically publish messages
-    js.publish("foo", "Hello JetStream!")
-    sleep 0.1
-  end
-end
-
-psub = js.pull_subscribe("foo", "bar")
-
-loop do
-  begin
-    msgs = psub.fetch(5)
-    msgs.each do |msg|
-      msg.ack
-    end
-  rescue NATS::IO::Timeout
-    puts "Retry later..."
-  end
-end
-```
+> The current JetStream API replaces [the legacy JetStream API](docs/jetstream/legacy.md).
 
 ## Service API
 

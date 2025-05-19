@@ -21,7 +21,7 @@ require "time"
 module NATS
   class JetStream
     # JetStream::API are the types used to interact with the JetStream API.
-    module API
+    class API
       # When the server responds with an error from the JetStream API.
       Error = ::NATS::JetStream::Error::APIError
 
@@ -257,7 +257,7 @@ module NATS
         end
       end
 
-      # StreamCreateResponse is the response from the JetStream $JS.API.STREAM.CREATE API.
+      # StreamCreate is the response from the JetStream $JS.API.STREAM.CREATE API.
       #
       # @!attribute type
       #   @return [String]
@@ -269,7 +269,7 @@ module NATS
       #   @return [StreamState]
       # @!attribute did_create
       #   @return [Boolean]
-      StreamCreateResponse = Struct.new(:type, :config, :created, :state, :did_create,
+      StreamCreate = Struct.new(:type, :config, :created, :state, :did_create,
         keyword_init: true) do
         def initialize(opts = {})
           rem = opts.keys - members

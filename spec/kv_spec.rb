@@ -103,6 +103,8 @@ describe "KeyValue" do
     a = kv2.get("a")
     expect(a.value).to eql("aaaaaaaaaa")
 
+    js.delete_key_value("TEST2")
+
     nc.close
     nc2.close
   end
@@ -113,7 +115,8 @@ describe "KeyValue" do
     kv = js.create_key_value(bucket: "TEST", history: 5, ttl: 3600, description: "Basic KV")
 
     si = js.stream_info("KV_TEST")
-    config = NATS::JetStream::API::StreamConfig.new(
+
+    expect(si.config).to have_attributes(
       name: "KV_TEST",
       description: "Basic KV",
       subjects: ["$KV.TEST.>"],
@@ -140,15 +143,15 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false
     )
+
     # v2.11 changes
     if ENV["NATS_SERVER_VERSION"] == "main"
-      config.metadata = {
+      expect(si.config.metadata).to match(
         "_nats.level": "1",
-        "_nats.ver": "2.11.0-dev",
+        "_nats.ver": start_with("2.11"),
         "_nats.req.level": "0"
-      }
+      )
     end
-    expect(config).to eql(si.config)
 
     # Nothing from start
     expect do
@@ -293,6 +296,8 @@ describe "KeyValue" do
       kv.get("age")
     end.to raise_error NATS::KeyValue::KeyNotFoundError
 
+    js.delete_key_value("TEST")
+
     nc.close
   end
 
@@ -357,6 +362,7 @@ describe "KeyValue" do
     expect(entry.key).to eql("C")
     expect(entry.value).to eql("333")
 
+    js.delete_key_value("TESTDIRECT")
     nc.close
   end
 
@@ -395,6 +401,9 @@ describe "KeyValue" do
     expect(msg.data).to eql("")
     expect(msg.header["Nats-Msg-Size"]).to eql("12")
     sub.unsubscribe
+
+    js.delete_key_value("TESTRP")
+    js.delete_key_value("TEST_RP_HEADERS")
 
     nc.close
   end
@@ -547,6 +556,8 @@ describe "KeyValue" do
     expect(entries.last.key).to eql("name")
     expect(entries.last.value).to be_empty
 
+    js.delete_key_value("WATCH")
+
     nc.close
   end
 
@@ -590,12 +601,15 @@ describe "KeyValue" do
       )
     end.to raise_error NATS::KeyValue::KeyHistoryTooLargeError
 
+    js.delete_key_value("WATCHHISTORY")
+
     nc.close
   end
 
   it "should support using watchers as enumerables" do
     nc = NATS.connect(@s.uri)
     js = nc.jetstream
+
     kv = js.create_key_value(
       bucket: "WATCH"
     )
@@ -627,6 +641,8 @@ describe "KeyValue" do
     # Can still peek after stopped.
     entries = w.take(1)
     expect(entries.first.key).to eql("users.21")
+
+    js.delete_key_value("WATCH")
 
     nc.close
   end
@@ -690,6 +706,8 @@ describe "KeyValue" do
     expect(kv.keys.to_a.size).to eql(1)
     expect(kv.keys.to_a).to eql(["c"])
 
+    js.delete_key_value("KVS")
+
     nc.close
   end
 
@@ -731,6 +749,8 @@ describe "KeyValue" do
         end.to raise_error NATS::KeyValue::InvalidKeyError
       end
     end
+
+    js.delete_key_value("TEST")
 
     nc.close
   end
@@ -784,6 +804,8 @@ describe "KeyValue" do
       break if entries.size > 20
     end
     w.stop
+
+    js.delete_key_value("TEST")
 
     nc.close
     nc2.close

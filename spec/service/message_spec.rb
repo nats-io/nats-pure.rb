@@ -1,17 +1,43 @@
 # frozen_string_literal: true
 
-RSpec.describe NATS::Service::Request do
-  subject { described_class.new(options) }
+RSpec.describe NATS::Service::Message do
+  before(:all) do
+    @server = NatsServerControl.new
+    @server.start_server(true)
+  end
 
-  let(:options) do
-    {
+  after(:all) do
+    @server.kill_server
+  end
+
+  subject { described_class.new(service, message) }
+
+  let(:service) { client.services.add(name: "foo", queue: "queue") }
+  let(:client) { NATS.connect }
+
+  let(:message) do
+    NATS::Msg.new(
       subject: "foo",
       reply: "bar",
       data: "foo.bar",
-      header: {},
-      nc: nil,
-      sub: nil
-    }
+      header: {}
+    )
+  end
+
+  after do
+    service.stop
+    client.close
+  end
+
+  describe "#initialize" do
+    it "sets attributes" do
+      expect(subject).to have_attributes(
+        subject: "foo",
+        reply: "bar",
+        data: "foo.bar",
+        header: {}
+      )
+    end
   end
 
   describe "#respond_with_error" do

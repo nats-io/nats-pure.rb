@@ -1,21 +1,23 @@
 # frozen_string_literal: true
 
 module NATS
-  class Utils
+  module Utils
     class List
       include Enumerable
 
-      attr_reader :parent
+      attr_reader :parent, :items
 
       def initialize(parent)
         @parent = parent
         @items = Set.new
       end
 
-      def each
+      def each(&block)
         @items.each do |item|
           yield item
         end
+
+        self
       end
 
       def insert(item)

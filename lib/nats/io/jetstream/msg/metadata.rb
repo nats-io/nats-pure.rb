@@ -27,7 +27,7 @@ module NATS
           @domain = opts[Ack::Domain]
           @num_delivered = opts[Ack::NumDelivered].to_i
           @num_pending = opts[Ack::NumPending].to_i
-          @timestamp = Time.at((opts[Ack::Timestamp].to_i / 1_000_000_000.0))
+          @timestamp = Time.at(opts[Ack::Timestamp].to_i / 1_000_000_000.0)
           @stream = opts[Ack::Stream]
           @consumer = opts[Ack::Consumer]
           # TODO: Not exposed in Go client either right now.
