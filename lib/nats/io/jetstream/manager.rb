@@ -223,6 +223,12 @@ module NATS
         if params[:seq]
           req[:seq] = params[:seq]
         end
+        if params[:subject] && !params[:seq]
+          req[:last_by_subj] = params[:subject]
+        end
+        if params[:next]
+          req[:next] = params[:next]
+        end
 
         data = req.to_json
         if params[:direct]
@@ -231,6 +237,7 @@ module NATS
             data = ""
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}.#{params[:subject]}"
           else
+            # For direct mode with seq and/or next, use the generic endpoint
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}"
           end
         else
