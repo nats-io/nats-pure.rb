@@ -45,7 +45,7 @@ module NATS
         # SampleFrequency is an optional frequency for sampling how often
         # acknowledgements are sampled for observability. See
         # https://docs.nats.io/running-a-nats-service/nats_admin/monitoring/monitoring_jetstream
-        string :sample_frequency
+        string :sample_freq
 
         # The rate at which messages will be delivered to clients, expressed in
         # bit per second
