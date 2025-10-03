@@ -41,7 +41,7 @@ module NATS
         end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if /(\s|\.|>|\*)/.match?(stream)
         req_subject = "#{@prefix}.STREAM.CREATE.#{stream}"
 
         cfg = config.to_h.compact
@@ -75,7 +75,7 @@ module NATS
         end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if /(\s|\.|>|\*)/.match?(stream)
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
         cfg = config.to_h.compact
         result = api_request(req_subject, cfg.to_json, params)
@@ -220,13 +220,8 @@ module NATS
       # @option direct [Boolean] Use direct mode to for faster access (requires NATS v2.9.0)
       def get_msg(stream_name, params = {})
         req = {}
-        if params[:next]
+        if params[:seq]
           req[:seq] = params[:seq]
-          req[:next_by_subj] = params[:subject]
-        elsif params[:seq]
-          req[:seq] = params[:seq]
-        elsif params[:subject]
-          req[:last_by_subj] = params[:subject]
         end
 
         data = req.to_json

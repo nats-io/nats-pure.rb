@@ -27,7 +27,7 @@ module NATS
 
           # Filter the names to those consuming messages matching
           # this subject or wildcar
-          string :subject
+          string :filter
         end
       end
 

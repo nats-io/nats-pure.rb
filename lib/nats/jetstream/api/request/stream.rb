@@ -65,17 +65,8 @@ module NATS
 
       class StreamMsgGetRequest < Request
         schema do
-          # Stream sequence number of the message to retrieve,
-          # cannot be combined with last_by_subj
+          # Stream sequence number of the message to retrieve
           integer :seq
-
-          # Retrieves the last message for a given subject,
-          # cannot be combined with seq
-          string :last_by_subj
-
-          # Combined with sequence gets the next message
-          # for a subject with the given sequence or higher
-          string :next_by_subj
         end
       end
 

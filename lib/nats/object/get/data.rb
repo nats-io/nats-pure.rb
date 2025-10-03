@@ -47,7 +47,10 @@ module NATS
         end
 
         def valid?
-          digest == @info.raw_digest
+          calculated = digest
+          expected = @info.raw_digest
+
+          calculated == expected
         end
 
         def data
