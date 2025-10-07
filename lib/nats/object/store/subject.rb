@@ -36,9 +36,16 @@ module NATS
         private
 
         def consumer(object, options)
+          # Ensure ordered delivery to match Go implementation
+          # max_ack_pending: 1 forces sequential processing of chunks
+          # This is critical for correct digest calculation
           store.stream.consumers.create(
             name: consumer_name(object),
             filter_subject: subject(object),
+            deliver_policy: "all",
+            ack_policy: "explicit",
+            replay_policy: "instant",
+            max_ack_pending: 1,
             **options
           )
         end

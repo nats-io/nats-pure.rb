@@ -24,10 +24,6 @@ module NATS
       class ConsumerNamesRequest < Request
         schema do
           integer :offset, min: 0
-
-          # Filter the names to those consuming messages matching
-          # this subject or wildcar
-          string :filter
         end
       end
 

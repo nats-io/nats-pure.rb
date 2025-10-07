@@ -41,7 +41,7 @@ module NATS
 
         def with(params = {})
           js.api.iterator(params) do |params, consumers|
-            response = js.api.consumer.list(nil, params)
+            response = js.api.consumer.list(stream.subject, params)
 
             response.data.consumers.each do |consumer|
               consumers << Consumer.new(stream, consumer.config)
@@ -53,7 +53,7 @@ module NATS
 
         def names(params = {})
           js.api.iterator(params) do |params, consumers|
-            response = js.api.consumer.names(nil, params.merge(filter: stream.subject))
+            response = js.api.consumer.names(stream.subject, params)
 
             response.data.consumers.each do |consumer|
               consumers << consumer

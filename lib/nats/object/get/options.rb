@@ -22,11 +22,11 @@ module NATS
         def io
           case as
           when :string
-            StringIO.new
+            StringIO.new.tap { |io| io.set_encoding(Encoding::ASCII_8BIT) }
           when :file
-            path ? File.new(path, "w") : Tempfile.new
+            path ? File.new(path, "wb") : Tempfile.new.tap(&:binmode)
           when nil
-            Tempfile.new
+            Tempfile.new.tap(&:binmode)
           else
             as
           end
