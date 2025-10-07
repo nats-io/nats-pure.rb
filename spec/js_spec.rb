@@ -3,8 +3,8 @@
 describe "JetStream" do
   describe "Publish" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-publish")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-publish.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -59,8 +59,8 @@ describe "JetStream" do
 
   describe "Pull Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pullsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-pullsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -612,8 +612,8 @@ describe "JetStream" do
 
   describe "Push Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pushsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats-pushsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 

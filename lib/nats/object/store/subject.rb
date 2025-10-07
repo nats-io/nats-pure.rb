@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "securerandom"
+
 module NATS
   class Object
     class Store
@@ -12,27 +14,11 @@ module NATS
         end
 
         def find(object)
-          # NATS 2.12.0 strict mode doesn't support last_by_subj field
-          # Try to find the message by using the stream's last sequence
-          # and working backwards (this is a workaround)
-          begin
-            stream_info = store.stream.info
-            last_seq = stream_info.state.last_seq
+          # Use the new consumer-based approach for finding last message by subject
+          # This is the proper way to handle NATS 2.12 strict mode
 
-            # Try to get the last few messages and find one with matching subject
-            last_seq.downto([last_seq - 10, 1].max).each do |seq|
-              message = store.stream.messages.find(seq: seq)
-              if message.subject == subject(object)
-                return to_object(message)
-              end
-            rescue NATS::JetStream::MessageNotFoundError, NATS::JetStream::BadRequestError
-              next
-            end
-
-            nil
-          rescue
-            nil
-          end
+          message = store.stream.messages.find(last_by_subj: subject(object))
+          to_object(message)
         rescue NATS::JetStream::MessageNotFoundError, NATS::JetStream::BadRequestError
           nil
         end

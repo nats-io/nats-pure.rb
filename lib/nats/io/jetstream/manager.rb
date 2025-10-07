@@ -224,16 +224,18 @@ module NATS
           req[:seq] = params[:seq]
         end
         if params[:subject] && !params[:seq]
+          # Use last_by_subj (matches Go client JSON marshaling)
           req[:last_by_subj] = params[:subject]
         end
-        if params[:next]
-          req[:next] = params[:next]
+        if params[:next] && params[:subject]
+          # When fetching next message for a subject, use next_by_subj
+          req[:next_by_subj] = params[:subject]
         end
 
         data = req.to_json
         if params[:direct]
-          if params[:subject] && !params[:seq]
-            # last_by_subject type request requires no payload.
+          if params[:subject] && !params[:seq] && !params[:next]
+            # Direct mode with subject (last_by_subj only): use special endpoint with no payload (based on Go client)
             data = ""
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}.#{params[:subject]}"
           else
@@ -241,6 +243,7 @@ module NATS
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}"
           end
         else
+          # Non-direct mode: use regular endpoint with JSON payload
           req_subject = "#{@prefix}.STREAM.MSG.GET.#{stream_name}"
         end
         resp = api_request(req_subject, data, direct: params[:direct])
