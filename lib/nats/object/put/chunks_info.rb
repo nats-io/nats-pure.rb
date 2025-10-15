@@ -19,7 +19,7 @@ module NATS
         end
 
         def digest
-          "SHA-256=#{Base64.urlsafe_encode64(@sha256.digest)}"
+          "SHA-256=#{Base64.urlsafe_encode64(@sha256.digest, padding: true)}"
         end
 
         def to_hash

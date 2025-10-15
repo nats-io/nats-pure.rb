@@ -15,7 +15,7 @@ module NATS
 
         def subject(object)
           if object != ">"
-            object = Base64.urlsafe_encode64(object)
+            object = Base64.urlsafe_encode64(object, padding: true)
           end
 
           "$O.#{store.config.bucket}.M.#{object}"

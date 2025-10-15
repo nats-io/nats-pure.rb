@@ -48,7 +48,7 @@ module NATS
       end
 
       def store_empty?
-        !options.updates_only && !store.meta.find(">")
+        !options.updates_only && store.stream.info.state.messages == 0
       end
 
       def include?(info)

@@ -16,7 +16,7 @@ RSpec.describe NATS::JetStream::Consumer::Config do
         filter_subject: "consumer",
         filter_subjects: ["consumer"],
         replay_policy: "original",
-        sample_frequency: "frequency",
+        sample_freq: "frequency",
         rate_limit_bps: 100,
         max_ack_pending: 4,
         idle_heartbeat: 500,

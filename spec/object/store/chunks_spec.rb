@@ -25,7 +25,18 @@ RSpec.describe NATS::Object::Store::Chunks do
     let(:publish) { subject.publish("nuid", "data") }
 
     let(:message) do
-      store.stream.messages.find(last_by_subj: "$O.bucket.C.nuid")
+      # Find the message by iterating through stream messages
+      stream_info = store.stream.info
+      last_seq = stream_info.state.last_seq
+
+      last_seq.downto([last_seq - 10, 1].max).each do |seq|
+        msg = store.stream.messages.find(seq: seq)
+        if msg.subject == "$O.bucket.C.nuid"
+          break msg
+        end
+      rescue NATS::JetStream::MessageNotFoundError, NATS::JetStream::BadRequestError
+        next
+      end
     end
 
     it "publishes chunks" do

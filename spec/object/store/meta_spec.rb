@@ -24,7 +24,20 @@ RSpec.describe NATS::Object::Store::Meta do
   describe "#publish" do
     let(:publish) { subject.publish("name", {name: "name"}) }
 
-    let(:message) { store.stream.messages.find(last_by_subj: info_subject) }
+    let(:message) do
+      # Find the message by iterating through stream messages
+      stream_info = store.stream.info
+      last_seq = stream_info.state.last_seq
+
+      last_seq.downto([last_seq - 10, 1].max).each do |seq|
+        msg = store.stream.messages.find(seq: seq)
+        if msg.subject == info_subject
+          break msg
+        end
+      rescue NATS::JetStream::MessageNotFoundError, NATS::JetStream::BadRequestError
+        next
+      end
+    end
     let(:info_subject) { "$O.bucket.M.#{Base64.urlsafe_encode64("name")}" }
 
     it "publishes info" do

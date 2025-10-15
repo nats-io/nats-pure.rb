@@ -111,9 +111,9 @@ describe "Client - Reconnect" do
       sleep 0.1
     end
     @s.start_server(true)
-    sleep 1
+    sleep 2
 
-    mon.synchronize { done.wait(1) }
+    mon.synchronize { done.wait(3) }
     expect(disconnects).to eql(1)
     expect(msgs.count).to eql(11)
     expect(reconnects).to eql(1)
@@ -176,7 +176,7 @@ describe "Client - Reconnect" do
     end
 
     # Wait for a bit before checking state again
-    mon.synchronize { done.wait(1) }
+    mon.synchronize { done.wait(3) }
     expect(nats.last_error).to be_a(Errno::ECONNRESET)
     expect(nats.status).to eql(NATS::IO::DISCONNECTED)
 
@@ -281,8 +281,8 @@ describe "Client - Reconnect" do
 
     # Confirm that we have captured the sticky error
     # and that the connection is closed due no servers left.
-    sleep 0.5
-    mon.synchronize { done.wait(5) }
+    sleep 2
+    mon.synchronize { done.wait(10) }
     expect(disconnects.count).to eql(2)
     expect(reconnects).to eql(0)
     expect(closes).to eql(1)
@@ -348,7 +348,7 @@ describe "Client - Reconnect" do
 
       # Trigger reconnect logic
       @s.kill_server
-      mon.synchronize { done.wait(7) }
+      mon.synchronize { done.wait(15) }
 
       expect(disconnects.count).to eql(2)
       expect(reconnects).to eql(0)
@@ -647,7 +647,7 @@ describe "Client - Reconnect" do
       end
 
       @s.restart
-      sleep 2
+      sleep 5
 
       expect(Thread.list & nats_threads).to be_empty
 

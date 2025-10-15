@@ -3,8 +3,8 @@
 describe "JetStream" do
   describe "Publish" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-publish")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-publish.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -59,8 +59,8 @@ describe "JetStream" do
 
   describe "Pull Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pullsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-pullsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -612,8 +612,8 @@ describe "JetStream" do
 
   describe "Push Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pushsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats-pushsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -901,11 +901,7 @@ describe "JetStream" do
       info = js.account_info
 
       # v2.11 starts to include API levels.
-      api_hash = if ENV["NATS_SERVER_VERSION"] == "main"
-        {total: 5, errors: 0, level: 1}
-      else
-        {total: 5, errors: 0}
-      end
+      api_hash = {total: 5, errors: 0, level: 2}
 
       expected = a_hash_including({
         type: "io.nats.jetstream.api.v1.account_info_response",

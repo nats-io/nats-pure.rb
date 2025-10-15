@@ -41,7 +41,7 @@ module NATS
         end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if /(\s|\.|>|\*)/.match?(stream)
         req_subject = "#{@prefix}.STREAM.CREATE.#{stream}"
 
         cfg = config.to_h.compact
@@ -75,7 +75,7 @@ module NATS
         end
         stream = config[:name]
         raise ArgumentError.new(":name is required to create streams") unless stream
-        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
+        raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if /(\s|\.|>|\*)/.match?(stream)
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
         cfg = config.to_h.compact
         result = api_request(req_subject, cfg.to_json, params)
@@ -220,25 +220,30 @@ module NATS
       # @option direct [Boolean] Use direct mode to for faster access (requires NATS v2.9.0)
       def get_msg(stream_name, params = {})
         req = {}
-        if params[:next]
+        if params[:seq]
           req[:seq] = params[:seq]
-          req[:next_by_subj] = params[:subject]
-        elsif params[:seq]
-          req[:seq] = params[:seq]
-        elsif params[:subject]
+        end
+        if params[:subject] && !params[:seq]
+          # Use last_by_subj (matches Go client JSON marshaling)
           req[:last_by_subj] = params[:subject]
+        end
+        if params[:next] && params[:subject]
+          # When fetching next message for a subject, use next_by_subj
+          req[:next_by_subj] = params[:subject]
         end
 
         data = req.to_json
         if params[:direct]
-          if params[:subject] && !params[:seq]
-            # last_by_subject type request requires no payload.
+          if params[:subject] && !params[:seq] && !params[:next]
+            # Direct mode with subject (last_by_subj only): use special endpoint with no payload (based on Go client)
             data = ""
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}.#{params[:subject]}"
           else
+            # For direct mode with seq and/or next, use the generic endpoint
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}"
           end
         else
+          # Non-direct mode: use regular endpoint with JSON payload
           req_subject = "#{@prefix}.STREAM.MSG.GET.#{stream_name}"
         end
         resp = api_request(req_subject, data, direct: params[:direct])

@@ -25,7 +25,7 @@ module NATS
 
         group :msg do
           endpoint :get, request: StreamMsgGetRequest, response: StreamMsgGetResponse
-          endpoint :delete, request: StreamMsgGetRequest, response: StreamMsgDeleteResponse
+          endpoint :delete, request: StreamMsgDeleteRequest, response: StreamMsgDeleteResponse
         end
 
         endpoint :snapshot, request: StreamSnapshotRequest, response: StreamSnapshotResponse
@@ -83,8 +83,8 @@ module NATS
           params = default_params.dup
 
           loop do
-            response = block.call(params, yielder)
-            params.merge!(offset: response.next_page)
+            response = yield(params, yielder)
+            params[:offset] = response.next_page
             break if response.last?
           end
         end
