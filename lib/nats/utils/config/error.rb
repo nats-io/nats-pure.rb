@@ -1,0 +1,92 @@
+# frozen_string_literal: true
+
+module NATS
+  module Utils
+    class Config
+      class Error < StandardError
+        attr_reader :type, :value
+
+        def initialize(type, value)
+          @type = type
+          @value = value
+        end
+      end
+
+      class IntegerError < Error
+        def message
+          ":#{type.name} must respond to to_i, got #{value}"
+        end
+      end
+
+      class DateError < Error
+        def message
+          ":#{type.name} must be a valid date, got #{value}"
+        end
+      end
+
+      class TimeError < Error
+        def message
+          ":#{type.name} must be a valid time, got #{value}"
+        end
+      end
+
+      class IoError < Error
+        def message
+          ":#{type.name} must be a string or an IO object, got #{value}"
+        end
+      end
+
+      class HashError < Error
+        def message
+          ":#{type.name} must respond to to_h, got #{value}"
+        end
+      end
+
+      class ArrayError < Error
+        def message
+          ":#{type.name} must respond to map, got #{value}"
+        end
+      end
+
+      class ObjectError < Error
+        def message
+          ":#{type.name} must be a hash or a config, got #{value}"
+        end
+      end
+
+      class EmptyError < Error
+        def message
+          ":#{type.name} must be filled"
+        end
+      end
+
+      class InclusionError < Error
+        def message
+          ":#{type.name} must be in #{type.params[:in]}, got #{value}"
+        end
+      end
+
+      class MaxError < Error
+        def message
+          ":#{type.name} must be less than #{type.params[:max]}, got #{value}"
+        end
+      end
+
+      class MinError < Error
+        def message
+          ":#{type.name} must be greater than #{type.params[:min]}, got #{value}"
+        end
+      end
+
+      class InvalidInputError < Error
+        def initialize(values)
+          @values = values
+        end
+
+        def message
+          "must be a hash or a config, got #{value}"
+        end
+      end
+    end
+  end
+end

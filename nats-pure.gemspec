@@ -57,4 +57,5 @@ Gem::Specification.new do |s|
   s.add_development_dependency "rspec", ">= 3.5"
   s.add_development_dependency "timecop"
   s.add_development_dependency "resolv-replace"
+  s.add_development_dependency "parallel"
 end

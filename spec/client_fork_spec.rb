@@ -133,24 +133,28 @@ describe "Client - Fork detection" do
   end
 
   it "should be able to use jetstreams from child process after forking" do
-    js = nats.jetstream
-    js.add_stream(name: "forked-stream", subjects: ["foo"])
+    js = nats.js
+    stream = js.streams.add(name: "forked-stream", subjects: ["foo"])
 
     from_child, to_parent = IO.pipe
 
     pid = fork do # child process
       from_child.close # close unused ends
 
-      psub = js.pull_subscribe("foo", "bar")
-      msgs = psub.fetch(1)
-      msgs.each(&:ack)
+      consumer = stream.consumers.create(
+        name: "foo",
+        filter_subjects: %w[foo bar]
+      )
 
-      to_parent.write(msgs.first.data)
+      msg = consumer.next
+      msg.ack
+
+      to_parent.write(msg.data)
       nats.close
     end
     to_parent.close
 
-    js.publish("foo", "Hey JetStream!")
+    nats.publish("foo", "Hey JetStream!")
 
     result = from_child.read
     expect(result).to eq("Hey JetStream!")

@@ -13,6 +13,7 @@ end
 # Dev deps
 gem "debug", platform: :mri unless ENV["CI"]
 gem 'ruby-progressbar'
+gem 'websocket', '~> 1.2'
 eval_gemfile "gemfiles/rubocop.gemfile"
 
 local_gemfile = ENV.fetch("LOCAL_GEMFILE") { File.expand_path("../Gemfile.local", __dir__) }

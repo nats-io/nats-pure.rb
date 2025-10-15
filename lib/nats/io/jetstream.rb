@@ -305,7 +305,7 @@ module NATS
         # If attempting to bind, then this is a hard error.
         raise e if params[:stream] && !multi_filter
 
-        config = if !(params[:config])
+        config = if !params[:config]
           JetStream::API::ConsumerConfig.new
         elsif params[:config].is_a?(JetStream::API::ConsumerConfig)
           params[:config]

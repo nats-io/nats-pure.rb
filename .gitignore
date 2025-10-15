@@ -11,7 +11,9 @@
 *.sass-cache
 *.iml
 .idea/
-
+nats-go
+.yardoc
+doc/
 # Sublime
 *.sublime-project
 *.sublime-workspace

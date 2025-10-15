@@ -31,7 +31,7 @@ module NATS
     ROLLUP = "Nats-Rollup"
 
     VALID_BUCKET_RE = /\A[a-zA-Z0-9_-]+$/
-    VALID_KEY_RE = /\A[-\/_=\.a-zA-Z0-9]+$/
+    VALID_KEY_RE = /\A[-\/_=.a-zA-Z0-9]+$/
 
     class << self
       def is_valid_key(key)
@@ -39,7 +39,7 @@ module NATS
           false
         elsif key.start_with?(".") || key.end_with?(".")
           false
-        elsif key !~ VALID_KEY_RE
+        elsif !VALID_KEY_RE.match?(key)
           false
         else
           true
@@ -73,15 +73,23 @@ module NATS
       msg = nil
       subject = "#{@pre}#{key}"
 
-      msg = if params[:revision]
-        @js.get_msg(@stream,
-          seq: params[:revision],
-          direct: @direct)
-      else
-        @js.get_msg(@stream,
-          subject: subject,
-          seq: params[:revision],
-          direct: @direct)
+      begin
+        msg = if params[:revision]
+          @js.get_msg(@stream,
+            seq: params[:revision],
+            direct: @direct)
+        else
+          @js.get_last_msg(@stream, subject, direct: @direct)
+        end
+      rescue NATS::JetStream::Error::NotFound
+        raise KeyNotFoundError
+      rescue NATS::JetStream::Error::BadRequest => e
+        # Check if this is a "message not found" type error (err_code 10003)
+        if e.err_code == 10003
+          raise KeyNotFoundError
+        else
+          raise e
+        end
       end
 
       entry = Entry.new(bucket: @name, key: key, value: msg.data, revision: msg.seq)
@@ -273,7 +281,7 @@ module NATS
       nc = @js.nc
       watcher = KeyWatcher.new(@js)
 
-      deliver_policy = if !(params[:include_history])
+      deliver_policy = if !params[:include_history]
         "last_per_subject"
       end
 
@@ -465,6 +473,7 @@ module NATS
   class KeyWatcher
     include MonitorMixin
     include Enumerable
+
     attr_accessor :received, :pending, :_sub, :_updates, :_init_done, :_watcher_cond
     attr_accessor :_sseq, :_dseq, :_active, :_hb_task
 

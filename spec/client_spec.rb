@@ -617,4 +617,20 @@ describe "Client - Specification" do
       end
     end
   end
+
+  describe "#js" do
+    subject { NATS.connect(servers: [@s.uri]) }
+
+    it "returns JetStream::Context" do
+      expect(subject.js).to be_a(NATS::JetStream::Context)
+    end
+  end
+
+  describe "#object_store" do
+    subject { NATS.connect(servers: [@s.uri]) }
+
+    it "returns ObjectStore::Context" do
+      expect(subject.os).to be_a(NATS::Object::Context)
+    end
+  end
 end

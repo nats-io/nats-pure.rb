@@ -3,8 +3,8 @@
 describe "JetStream" do
   describe "Publish" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-publish")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-publish.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -59,8 +59,8 @@ describe "JetStream" do
 
   describe "Pull Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pullsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4524", "/tmp/test-nats-pullsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -612,8 +612,8 @@ describe "JetStream" do
 
   describe "Push Subscribe" do
     before do
-      @tmpdir = Dir.mktmpdir("ruby-jetstream")
-      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @tmpdir = Dir.mktmpdir("ruby-jetstream-pushsub")
+      @s = NatsServerControl.new("nats://127.0.0.1:4527", "/tmp/test-nats-pushsub.pid", "-js -sd=#{@tmpdir}")
       @s.start_server(true)
     end
 
@@ -901,11 +901,7 @@ describe "JetStream" do
       info = js.account_info
 
       # v2.11 starts to include API levels.
-      api_hash = if ENV["NATS_SERVER_VERSION"] == "main"
-        {total: 5, errors: 0, level: 1}
-      else
-        {total: 5, errors: 0}
-      end
+      api_hash = {total: 5, errors: 0, level: 2}
 
       expected = a_hash_including({
         type: "io.nats.jetstream.api.v1.account_info_response",
@@ -1161,13 +1157,13 @@ describe "JetStream" do
         name: "mystream"
       }
       resp = nc.jsm.add_stream(stream_config)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.type).to eql("io.nats.jetstream.api.v1.stream_create_response")
       expect(resp.config.name).to eql("mystream")
       expect(resp.config.num_replicas).to eql(1)
 
       resp = nc.jsm.add_stream(name: "stream2")
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.config.name).to eql("stream2")
       expect(resp.config.num_replicas).to eql(1)
 
@@ -1177,7 +1173,7 @@ describe "JetStream" do
       }
       config = NATS::JetStream::API::StreamConfig.new(stream_config)
       resp = nc.jsm.add_stream(config)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       expect(resp.config.name).to eql("stream3")
       expect(resp.config.num_replicas).to eql(1)
 
@@ -1201,7 +1197,7 @@ describe "JetStream" do
         no_ack: true,
         # allow_direct: true,
         placement: placement)
-      expect(resp).to be_a NATS::JetStream::API::StreamCreateResponse
+      expect(resp).to be_a NATS::JetStream::API::StreamCreate
       # expect(resp.config.allow_direct).to eql(true)
       expect(resp.config.no_ack).to eql(true)
       expect(resp.config.placement).to eql(placement)

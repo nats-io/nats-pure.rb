@@ -40,7 +40,7 @@ RSpec.describe NATS::Service do
       let(:options) { {name: "$foo.*"} }
 
       it "raises InvalidNameError" do
-        expect { subject }.to raise_error(NATS::Service::InvalidNameError)
+        expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
       end
     end
 
@@ -48,7 +48,7 @@ RSpec.describe NATS::Service do
       let(:options) { {name: nil} }
 
       it "raises InvalidNameError" do
-        expect { subject }.to raise_error(NATS::Service::InvalidNameError)
+        expect { subject }.to raise_error(NATS::Utils::InvalidNameError)
       end
     end
 
@@ -64,7 +64,7 @@ RSpec.describe NATS::Service do
       let(:options) { {version: "version-1.0-alpha"} }
 
       it "raises InvalidVersionError" do
-        expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
+        expect { subject }.to raise_error(NATS::Utils::InvalidVersionError)
       end
     end
 
@@ -72,7 +72,7 @@ RSpec.describe NATS::Service do
       let(:options) { {version: nil} }
 
       it "raises InvalidVersionError" do
-        expect { subject }.to raise_error(NATS::Service::InvalidVersionError)
+        expect { subject }.to raise_error(NATS::Utils::InvalidVersionError)
       end
     end
 
@@ -132,7 +132,7 @@ RSpec.describe NATS::Service do
       let(:options) { {queue: ">qux"} }
 
       it "raises InvalidQueueError" do
-        expect { subject }.to raise_error(NATS::Service::InvalidQueueError)
+        expect { subject }.to raise_error(NATS::Utils::InvalidQueueError)
       end
     end
 

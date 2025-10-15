@@ -2,11 +2,13 @@
 
 require "monitor"
 
+require "nats/utils/validator"
+
 require_relative "service/group"
 require_relative "service/endpoint"
+require_relative "service/message"
 require_relative "service/errors"
 
-require_relative "service/validator"
 require_relative "service/callbacks"
 require_relative "service/monitoring"
 require_relative "service/status"
@@ -77,7 +79,7 @@ module NATS
     private
 
     def validate(options)
-      Validator.validate(options.slice(:name, :version, :queue))
+      Utils::Validator.validate(options.slice(:name, :version, :queue))
     end
 
     def setup_options(options)
@@ -117,5 +119,6 @@ module NATS
         service
       end
     end
+    alias_method :create, :add
   end
 end
