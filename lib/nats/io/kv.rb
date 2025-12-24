@@ -424,8 +424,15 @@ module NATS
         }
         if !active
           ccreq = ordered.dup
-          ccreq[:deliver_policy] = "by_start_sequence"
-          ccreq[:opt_start_seq] = watcher._sseq
+          # When bucket is empty, watcher._sseq remains 0. JetStream rejects
+          # consumer creation with opt_start_seq=0 (err_code=10094).
+          # Keep original deliver_policy in that case.
+          if watcher._sseq.to_i > 0
+            ccreq[:deliver_policy] = "by_start_sequence"
+            ccreq[:opt_start_seq] = watcher._sseq
+          else
+            ccreq.delete(:opt_start_seq)
+          end
           ccreq[:deliver_subject] = deliver_subject
           ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
           ccreq[:inactive_threshold] = ordered[:inactive_threshold]
