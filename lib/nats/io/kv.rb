@@ -268,8 +268,6 @@ module NATS
       params[:idle_heartbeat] ||= 5 # seconds
       params[:inactive_threshold] ||= 5 * 60 # 5 minutes
       subject = "#{@pre}#{keys}"
-      init_setup = new_cond
-      init_setup_done = false
       nc = @js.nc
       watcher = KeyWatcher.new(@js)
 
@@ -277,184 +275,161 @@ module NATS
         "last_per_subject"
       end
 
-      ordered = {
-        # basic ordered consumer.
-        flow_control: true,
+      consumer_config = {
         ack_policy: "none",
-        max_deliver: 1,
         ack_wait: 22 * 3600,
-        idle_heartbeat: params[:idle_heartbeat],
-        num_replicas: 1,
-        mem_storage: true,
-        manual_ack: true,
-        # watch related options.
         deliver_policy: deliver_policy,
         headers_only: params[:meta_only],
-        inactive_threshold: params[:inactive_threshold]
+        inactive_threshold: params[:inactive_threshold],
+        replay_policy: "instant",
+        mem_storage: true,
+        num_replicas: 1
       }
 
-      # watch_updates callback.
-      sub = @js.subscribe(subject, config: ordered) do |msg|
-        synchronize do
-          if !init_setup_done
-            init_setup.wait(@js.opts[:timeout])
-          end
-        end
+      # Create a pull consumer with a generated name.
+      consumer_name = "_KV_WATCH_#{SecureRandom.hex(8)}"
+      sub = @js.pull_subscribe(subject, consumer_name, config: consumer_config)
+      watcher._sub = sub
+      watcher._pull_sub = sub
 
-        # Control Message like Heartbeats and Flow Control
-        status = msg.header[STATUS_HDR] unless msg.header.nil?
-        if !status.nil? && status == CTRL_STATUS
-          desc = msg.header[DESC_HDR]
-          if desc.start_with?("Idle")
-            # A watcher is active if it continues to receive Idle Heartbeat messages.
-            #
-            # Status: 100
-            # Description: Idle Heartbeat
-            # Nats-Last-Consumer: 185
-            # Nats-Last-Stream: 185
-            #
-            watcher.synchronize { watcher._active = true }
-          elsif desc.start_with?("FlowControl")
-            # HMSG _INBOX.q6Y3JAFxOnNJi4QdwQnFtg 2 $JS.FC.KV_TEST.t00CunIG.GT4W 36 36
-            # NATS/1.0 100 FlowControl Request
-            nc.publish(msg.reply)
-          end
-          # Skip processing the control message
-          next
-        end
-
-        # Track sequences
-        meta = msg.metadata
-        watcher.synchronize { watcher._active = true }
-        # Track the sequences
-        #
-        # $JS.ACK.KV_TEST.CKRGrWpf.1.10.10.1739859923871837000.0
-        #
-        tokens = msg.reply.split(".")
-        sseq = tokens[5]
-        dseq = tokens[6]
-        watcher.synchronize do
-          watcher._dseq = dseq.to_i + 1
-          watcher._sseq = sseq.to_i
-        end
-
-        # Keys() handling
-        op = nil
-        if msg.header && msg.header[KV_OP]
-          op = msg.header[KV_OP]
-          if params[:ignore_deletes]
-            if (op == KV_PURGE) || (op == KV_DEL)
-              if (meta.num_pending == 0) && !watcher._init_done
-                # Push this to unblock enumerators.
-                watcher._updates.push(nil)
-                watcher._init_done = true
-              end
-              next
-            end
-          end
-        end
-
-        # Convert the msg into an Entry.
-        key = msg.subject[@pre.size...msg.subject.size]
-        entry = Entry.new(
-          bucket: @name,
-          key: key,
-          value: msg.data,
-          revision: meta.sequence.stream,
-          delta: meta.num_pending,
-          created: meta.timestamp,
-          operation: op
-        )
-        watcher._updates.push(entry)
-
-        # When there are no more updates send an empty marker
-        # to signal that it is done, this will unblock iterators.
-        if (meta.num_pending == 0) && !watcher._init_done
+      # Check initial state to detect empty bucket.
+      stream_name = sub.jsi.stream
+      initial_pending = 0
+      begin
+        cinfo = sub.consumer_info
+        initial_pending = cinfo.num_pending
+        if initial_pending == 0
           watcher._updates.push(nil)
           watcher._init_done = true
         end
-      end # end of callback
-      watcher._sub = sub
-
-      # Snapshot the deliver subject for the consumer.
-      deliver_subject = sub.subject
-
-      # Check from consumer info what is the number of messages
-      # awaiting to be consumed to send the initial signal marker.
-      stream_name = nil
-      begin
-        cinfo = sub.consumer_info
-        stream_name = cinfo.stream_name
-
-        synchronize do
-          init_setup_done = true
-          # If no delivered and/or pending messages, then signal
-          # that this is the start.
-          # The consumer subscription will start receiving messages
-          # so need to check those that have already made it.
-          received = sub.delivered
-          init_setup.signal
-
-          # When there are no more updates send an empty marker
-          # to signal that it is done, this will unblock iterators.
-          if (cinfo.num_pending == 0) && (received == 0)
-            watcher._updates.push(nil)
-            watcher._init_done = true
-          end
-        end
       rescue => err
-        # cancel init
         sub.unsubscribe
         raise err
       end
 
-      # Need to handle reconnect if missing too many heartbeats.
-      hb_interval = params[:idle_heartbeat] * 2
-      watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do |task|
-        task.shutdown if nc.closed?
-        next unless nc.connected?
+      # Fetch loop configuration.
+      max_batch_size = 256
+      idle_heartbeat = params[:idle_heartbeat]
+      ignore_deletes = params[:ignore_deletes]
+      pre = @pre
+      bucket_name = @name
 
-        # Wait for all idle heartbeats to be received, one of them would have
-        # toggled the state of the consumer back to being active.
-        active = watcher.synchronize {
-          current = watcher._active
-          # A heartbeat or another incoming message needs to toggle back.
-          watcher._active = false
-          current
-        }
-        if !active
-          ccreq = ordered.dup
-          ccreq[:deliver_policy] = "by_start_sequence"
-          ccreq[:opt_start_seq] = watcher._sseq
-          ccreq[:deliver_subject] = deliver_subject
-          ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
-          ccreq[:inactive_threshold] = ordered[:inactive_threshold]
-
-          should_recreate = false
+      # Single background thread that fetches messages and pushes entries to _updates.
+      watcher._fetch_thread = Thread.new do
+        remaining = initial_pending
+        while !watcher._done
           begin
-            # Check if the original is still present, if it is then do not recreate.
-            begin
-              sub.consumer_info
-            rescue ::NATS::JetStream::Error::ConsumerNotFound => e
-              e.stream ||= sub.jsi.stream
-              e.consumer ||= sub.jsi.consumer
-              @js.nc.send(:err_cb_call, @js.nc, e, sub)
-              should_recreate = true
+            if watcher._init_done
+              msgs = sub.fetch(1, timeout: idle_heartbeat)
+            else
+              # Size batch to what we know is pending, capped at max_batch_size.
+              # Use a short timeout during catchup since fetch() always makes
+              # a second wait-request after the no_wait batch completes.
+              batch = [[remaining, 1].max, max_batch_size].min
+              msgs = sub.fetch(batch, timeout: 1)
             end
-            next unless should_recreate
 
-            # Recreate consumer that went away after a restart.
-            cinfo = @js.add_consumer(stream_name, ccreq)
-            sub.jsi.consumer = cinfo.name
-            watcher.synchronize { watcher._dseq = 1 }
+            msgs.each do |msg|
+              # Skip status/control messages.
+              next if msg.header && msg.header[STATUS_HDR]
+
+              meta = msg.metadata
+              watcher.synchronize do
+                watcher._active = true
+                watcher._sseq = meta.sequence.stream
+                watcher._dseq = meta.sequence.consumer
+              end
+
+              # Handle deletes/purges.
+              op = nil
+              if msg.header && msg.header[KV_OP]
+                op = msg.header[KV_OP]
+                if ignore_deletes
+                  if (op == KV_PURGE) || (op == KV_DEL)
+                    if (meta.num_pending == 0) && !watcher._init_done
+                      watcher._updates.push(nil)
+                      watcher._init_done = true
+                    end
+                    next
+                  end
+                end
+              end
+
+              # Convert the msg into an Entry.
+              key = msg.subject[pre.size...msg.subject.size]
+              entry = Entry.new(
+                bucket: bucket_name,
+                key: key,
+                value: msg.data,
+                revision: meta.sequence.stream,
+                delta: meta.num_pending,
+                created: meta.timestamp,
+                operation: op
+              )
+              watcher._updates.push(entry)
+
+              # Track remaining for batch sizing during catchup.
+              remaining = meta.num_pending
+
+              # When there are no more updates send an empty marker
+              # to signal that it is done, this will unblock iterators.
+              if (meta.num_pending == 0) && !watcher._init_done
+                watcher._updates.push(nil)
+                watcher._init_done = true
+              end
+            end
+          rescue NATS::Timeout
+            # Normal when no new messages; just retry.
+            next
           rescue => e
-            # Dispatch to the error NATS client error callback.
-            @js.nc.send(:err_cb_call, @js.nc, e, sub)
+            # Consumer may be gone (server restart). Attempt recreation.
+            next if watcher._done
+            begin
+              # Wait for reconnection.
+              sleep 1 until nc.connected? || watcher._done
+              next if watcher._done
+
+              # Check if consumer still exists.
+              begin
+                sub.consumer_info
+                next # Consumer still alive, transient error.
+              rescue ::NATS::JetStream::Error::ConsumerNotFound => cnf
+                cnf.stream ||= sub.jsi.stream
+                cnf.consumer ||= sub.jsi.consumer
+                nc.send(:err_cb_call, nc, cnf, sub)
+              end
+
+              # Recreate consumer with resume from last known sequence.
+              recreate_config = consumer_config.dup
+              recreate_config[:deliver_policy] = "by_start_sequence"
+              recreate_config[:opt_start_seq] = watcher._sseq + 1
+              cinfo = @js.add_consumer(stream_name, recreate_config)
+              sub.jsi.consumer = cinfo.name
+              # Update the next message subject for the new consumer.
+              sub.jsi.nms = "#{@js.instance_variable_get(:@prefix)}.CONSUMER.MSG.NEXT.#{stream_name}.#{cinfo.name}"
+              watcher.synchronize { watcher._dseq = 1 }
+            rescue => reconnect_err
+              nc.send(:err_cb_call, nc, reconnect_err, sub) rescue nil
+              sleep 1 unless watcher._done
+            end
           end
         end
+      end
+      watcher._fetch_thread.abort_on_exception = false
+
+      # Watchdog timer to detect fetch thread death and trigger reconnection.
+      hb_interval = params[:idle_heartbeat] * 2
+      watcher._hb_task = Concurrent::TimerTask.new(execution_interval: hb_interval) do |task|
+        task.shutdown if nc.closed? || watcher._done
+        next unless nc.connected?
+
+        # Check if fetch thread is still alive.
+        unless watcher._fetch_thread&.alive?
+          next if watcher._done
+          nc.send(:err_cb_call, nc, ::NATS::JetStream::Error.new("nats: kv watch fetch thread died"), sub) rescue nil
+        end
       rescue => e
-        # WRN: Unexpected error
-        @js.nc.send(:err_cb_call, @js.nc, e, sub)
+        nc.send(:err_cb_call, nc, e, sub) rescue nil
       end
       watcher._hb_task.execute
 
@@ -465,29 +440,34 @@ module NATS
   class KeyWatcher
     include MonitorMixin
     include Enumerable
-    attr_accessor :received, :pending, :_sub, :_updates, :_init_done, :_watcher_cond
-    attr_accessor :_sseq, :_dseq, :_active, :_hb_task
+    attr_accessor :received, :pending, :_sub, :_pull_sub, :_updates, :_init_done
+    attr_accessor :_sseq, :_dseq, :_active, :_hb_task, :_fetch_thread, :_done
 
     def initialize(js)
       super() # required to initialize monitor
       @js = js
       @_sub = nil
+      @_pull_sub = nil
       @_updates = SizedQueue.new(256)
       @_init_done = false
+      @_done = false
       @pending = nil
-      # Ordered consumer related
       @_dseq = 1
       @_sseq = 0
-      @_cmeta = nil
-      @_fcr = 0
-      @_fciseq = 0
       @_active = true
       @_hb_task = nil
+      @_fetch_thread = nil
     end
 
     def stop
-      @_hb_task.shutdown
-      @_sub.unsubscribe
+      @_done = true
+      @_hb_task&.shutdown
+      @_sub&.unsubscribe
+      # Fetch thread may be blocked in sub.fetch(); give it a brief
+      # chance to exit cleanly, then kill it.
+      if @_fetch_thread && !@_fetch_thread.join(0.1)
+        @_fetch_thread.kill
+      end
     end
 
     def updates(params = {})

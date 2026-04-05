@@ -534,9 +534,8 @@ describe "KeyValue" do
     expect(e.key).to eql("t.hello")
     expect(e.revision).to eql(15)
 
-    # Default watch timeout should 5 minutes
+    # Default inactive threshold should be 5 minutes
     ci = js.consumer_info("KV_WATCH", w._sub.jsi.consumer)
-    expect(ci.config.idle_heartbeat).to eql(5)
     expect(ci.config.inactive_threshold).to eql(300)
 
     # using meta only
