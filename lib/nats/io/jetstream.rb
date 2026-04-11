@@ -244,7 +244,13 @@ module NATS
         end
         cb = new_cb
       end
-      sub = @nc.subscribe(config.deliver_subject, queue: config.deliver_group, &cb)
+      sub_opts = {queue: config.deliver_group}
+      # Allow callers (e.g. KV watch) to size the subscription's pending
+      # queue so ordered push-consumer catchup can buffer deep bursts
+      # without the read loop dropping messages as "slow consumer".
+      sub_opts[:pending_msgs_limit] = params[:pending_msgs_limit] if params[:pending_msgs_limit]
+      sub_opts[:pending_bytes_limit] = params[:pending_bytes_limit] if params[:pending_bytes_limit]
+      sub = @nc.subscribe(config.deliver_subject, sub_opts, &cb)
       sub.extend(PushSubscription)
       sub.jsi = JS::Sub.new(
         js: self,

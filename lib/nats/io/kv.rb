@@ -257,6 +257,13 @@ module NATS
     LAST_STREAM_SEQ_HDR = "Nats-Last-Stream"
     CONSUMER_STALLED_HDR = "Nats-Consumer-Stalled"
 
+    # Pending queue limits applied to the KV watch subscription so the
+    # read loop can buffer large catchup bursts without falling over the
+    # default slow-consumer threshold. Callers can override with
+    # :pending_msgs_limit / :pending_bytes_limit watch params.
+    WATCH_PENDING_MSGS_LIMIT = 1_048_576          # 1M messages
+    WATCH_PENDING_BYTES_LIMIT = 1024 * 1024 * 1024 # 1 GiB
+
     # watch will be signaled when a key that matches the keys
     # pattern is updated.
     # The first update after starting the watch is nil in case
@@ -294,7 +301,18 @@ module NATS
       }
 
       # watch_updates callback.
-      sub = @js.subscribe(subject, config: ordered) do |msg|
+      #
+      # Size the subscription's pending queue generously. During initial
+      # catchup the server can deliver entries much faster than the Ruby
+      # callback can drain them into the watcher's _updates queue; with
+      # the default limit (65,536) a large bucket will hit the slow
+      # consumer threshold and messages would be dropped, including the
+      # FlowControl control messages that keep the ordered push consumer
+      # flowing. A larger limit lets the server's FlowControl be the
+      # throttle rather than our slow-consumer error.
+      sub = @js.subscribe(subject, config: ordered,
+        pending_msgs_limit: params[:pending_msgs_limit] || WATCH_PENDING_MSGS_LIMIT,
+        pending_bytes_limit: params[:pending_bytes_limit] || WATCH_PENDING_BYTES_LIMIT) do |msg|
         synchronize do
           if !init_setup_done
             init_setup.wait(@js.opts[:timeout])

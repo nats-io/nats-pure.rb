@@ -117,6 +117,10 @@ module NATS
     STATUS_HDR = "Status"
     DESC_HDR = "Description"
     NATS_HDR_LINE_SIZE = NATS_HDR_LINE.bytesize
+    # Prefix of a NATS header with a 100 status line (Idle Heartbeat,
+    # FlowControl Request). These are control-plane signals and must
+    # never be dropped by the slow-consumer check in process_msg.
+    STATUS_MSG_PREFIX_100 = "NATS/1.0 100".freeze
 
     SUB_OP = "SUB"
     EMPTY_MSG = ""
@@ -1038,8 +1042,15 @@ module NATS
         elsif sub.pending_queue
           # Async subscribers use a sized queue for processing
           # and should be able to consume messages in parallel.
-          if (sub.pending_queue.size >= sub.pending_msgs_limit) \
-            || (sub.pending_size >= sub.pending_bytes_limit)
+          #
+          # NATS 100-series status messages (Idle Heartbeat, FlowControl
+          # Request) are control-plane signals from the server and must
+          # never be dropped: a dropped FlowControl ack leaves the push
+          # consumer stalled with no way to recover. Always dispatch them
+          # even when the pending queue is at its limit.
+          is_control = header && header.start_with?(STATUS_MSG_PREFIX_100)
+          if !is_control && ((sub.pending_queue.size >= sub.pending_msgs_limit) \
+            || (sub.pending_size >= sub.pending_bytes_limit))
             err = NATS::IO::SlowConsumer.new("nats: slow consumer, messages dropped")
           else
             hdr = process_hdr(header)
