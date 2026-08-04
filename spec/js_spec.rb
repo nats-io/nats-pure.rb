@@ -608,6 +608,66 @@ describe "JetStream" do
       expect(cinfo.config.inactive_threshold).to eql(2)
       expect(cinfo.config.mem_storage).to eql(true)
     end
+
+    it "should not raise when multiple threads call fetch(1) concurrently on the same subscription" do
+      nc = NATS.connect(@s.uri)
+      js = nc.jetstream
+      js.add_stream(name: "concurrent-fetch", subjects: ["concurrent-fetch"])
+      sub = js.pull_subscribe("concurrent-fetch", "concurrent-fetch", stream: "concurrent-fetch")
+
+      errors = Queue.new
+      threads = 6.times.map do
+        Thread.new do
+          20.times do
+            sub.fetch(1, timeout: 0.1)
+          rescue NATS::Timeout
+            # Expected, stream is empty.
+          rescue => e
+            errors << e
+          end
+        end
+      end
+      threads.each(&:join)
+
+      expect(errors.size).to eql(0)
+    end
+
+    it "delivers every published message exactly once to concurrent fetch(1) callers" do
+      nc = NATS.connect(@s.uri)
+      js = nc.jetstream
+      js.add_stream(name: "concurrent-delivery", subjects: ["concurrent-delivery"])
+      sub = js.pull_subscribe("concurrent-delivery", "concurrent-delivery", stream: "concurrent-delivery")
+
+      total = 200
+      total.times { |n| js.publish("concurrent-delivery", "msg-#{n}") }
+
+      received = Queue.new
+      errors = Queue.new
+      threads = 6.times.map do
+        Thread.new do
+          loop do
+            msgs = sub.fetch(1, timeout: 0.2)
+            msgs.each do |msg|
+              received << msg.data
+              msg.ack
+            end
+          rescue NATS::Timeout
+            break if received.size >= total
+          rescue => e
+            errors << e
+            break
+          end
+        end
+      end
+      threads.each { |t| t.join(10) }
+
+      all = []
+      all << received.pop until received.empty?
+
+      expect(errors.size).to eql(0)
+      expect(all.size).to eql(total)
+      expect(all.uniq.size).to eql(total)
+    end
   end
 
   describe "Push Subscribe" do
