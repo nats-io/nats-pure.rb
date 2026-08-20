@@ -15,6 +15,7 @@ jobs:
   rspec:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    continue-on-error: ${{ matrix.continue-on-error || false }}
     env:
       BUNDLE_JOBS: 4
       BUNDLE_RETRY: 3
