@@ -141,7 +141,9 @@ describe "KeyValue" do
       mirror_direct: false
     )
     # Since v2.11 the server injects its own metadata (_nats.ver etc.),
-    # whose values change with every server version.
+    # whose values change with every server version — assert presence
+    # without pinning the values.
+    expect(si.config.metadata).to include(:"_nats.ver")
     config.metadata = si.config.metadata
     expect(config).to eql(si.config)
 

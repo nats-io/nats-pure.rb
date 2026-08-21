@@ -2032,7 +2032,9 @@ module NATS
         sock
       rescue IOError => e
         # JRuby raises a plain IOError for a refused connection.
-        raise Errno::ECONNREFUSED if e.message.include?("Connection refused")
+        if (RUBY_ENGINE == "jruby") && e.message.include?("Connection refused")
+          raise Errno::ECONNREFUSED
+        end
         raise
       end
     end

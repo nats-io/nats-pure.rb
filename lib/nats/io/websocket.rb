@@ -47,6 +47,13 @@ module NATS
       end
 
       def read(max_bytes = MAX_SOCKET_READ_BYTES, deadline = nil)
+        # Return bytes already decoded by read_line first, otherwise
+        # anything decoded beyond the last consumed line would be lost
+        # when the connect handshake hands over to the read loop.
+        if @line_buf && !@line_buf.empty?
+          return @line_buf.slice!(0, @line_buf.bytesize)
+        end
+
         data = super
         @frame << data
         [].tap do |parts|

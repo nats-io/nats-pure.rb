@@ -24,6 +24,10 @@ require "timeout" if ENV["CI"]
 
 RSpec.configure do |config|
   if ENV["CI"]
+    # Guard the --only-failures rerun: without this, a first run that
+    # failed outside examples reruns 0 examples and exits green.
+    config.fail_if_no_examples = true
+
     # A hung example otherwise stalls the job until the workflow
     # timeout, which surfaces as an unexplained cancellation. Fail it
     # instead, with the backtrace of the blocked call.
