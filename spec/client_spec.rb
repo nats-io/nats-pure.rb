@@ -600,7 +600,8 @@ describe "Client - Specification" do
         requester.close
         responder.close
 
-        expect(Thread.list & nats_threads).to be_empty
+        # On JRuby an already dead thread can briefly linger in Thread.list.
+        expect((Thread.list & nats_threads).select(&:alive?)).to be_empty
       end
     end
 

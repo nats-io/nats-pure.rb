@@ -2030,6 +2030,10 @@ module NATS
         end
 
         sock
+      rescue IOError => e
+        # JRuby raises a plain IOError for a refused connection.
+        raise Errno::ECONNREFUSED if e.message.include?("Connection refused")
+        raise
       end
     end
   end

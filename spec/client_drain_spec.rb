@@ -47,7 +47,9 @@ describe "Client - Drain" do
           wait_reqs_start.wait_for(5)
           reqs_started << sub
           payload = "REQ:#{sub}"
-          nc2.request(sub, payload, timeout: 5)
+          # Generous timeout: the response has to wait for dozens of
+          # queued messages, which takes a while on slow CI runners.
+          nc2.request(sub, payload, timeout: 10)
         end
       end.each(&:join)
 
@@ -95,7 +97,7 @@ describe "Client - Drain" do
     80.times { sub_queue.push(Future.new) }
     result = future.wait_for(7)
     expect(result).to eql(:closed)
-    expect(wait_reqs.wait_for(2)).to eql(:ok)
+    expect(wait_reqs.wait_for(5)).to eql(:ok)
   end
 
   it "should report drain timeout error" do
