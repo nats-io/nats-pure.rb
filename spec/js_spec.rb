@@ -900,12 +900,9 @@ describe "JetStream" do
       js = nc.jetstream(domain: "estre")
       info = js.account_info
 
-      # v2.11 starts to include API levels.
-      api_hash = if ENV["NATS_SERVER_VERSION"] == "main"
-        {total: 5, errors: 0, level: 1}
-      else
-        {total: 5, errors: 0}
-      end
+      # v2.11 starts to include API levels, and the level grows with
+      # every server release, so don't pin it.
+      api_hash = a_hash_including({total: 5, errors: 0})
 
       expected = a_hash_including({
         type: "io.nats.jetstream.api.v1.account_info_response",

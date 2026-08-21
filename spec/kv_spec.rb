@@ -140,14 +140,9 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false
     )
-    # v2.11 changes
-    if ENV["NATS_SERVER_VERSION"] == "main"
-      config.metadata = {
-        "_nats.level": "1",
-        "_nats.ver": "2.11.0-dev",
-        "_nats.req.level": "0"
-      }
-    end
+    # Since v2.11 the server injects its own metadata (_nats.ver etc.),
+    # whose values change with every server version.
+    config.metadata = si.config.metadata
     expect(config).to eql(si.config)
 
     # Nothing from start
