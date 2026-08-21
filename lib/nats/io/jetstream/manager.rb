@@ -231,7 +231,7 @@ module NATS
 
         data = req.to_json
         if params[:direct]
-          if params[:subject] && !(params[:seq])
+          if params[:subject] && !params[:seq]
             # last_by_subject type request requires no payload.
             data = ""
             req_subject = "#{@prefix}.DIRECT.GET.#{stream_name}.#{params[:subject]}"

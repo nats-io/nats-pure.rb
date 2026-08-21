@@ -184,7 +184,8 @@ describe "JetStream" do
         sub = js.subscribe(["foo.one.1"], config: {name: "foo"})
         info = sub.consumer_info
         expect(info.name).to eql("foo")
-        expect(info.num_pending).to eql(1)
+        # The message may have been delivered already (push consumer).
+        expect(info.num_pending + info.num_ack_pending).to eql(1)
         msg = sub.next_msg
         expect(msg.subject).to eql("foo.one.1")
       end.to_not raise_error

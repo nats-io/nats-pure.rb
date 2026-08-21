@@ -155,6 +155,12 @@ module NATS
           enqueue_processing(executor)
         end
       end
+    rescue Concurrent::RejectedExecutionError
+      # The executor is being shut down (the connection is closing,
+      # draining or reconnecting). Release the permit so the
+      # subscription can process messages again after a reconnect;
+      # the message stays in pending_queue.
+      concurrency_semaphore.release
     end
   end
 end

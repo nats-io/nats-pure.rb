@@ -49,21 +49,26 @@ module NATS
       def read(max_bytes = MAX_SOCKET_READ_BYTES, deadline = nil)
         data = super
         @frame << data
-        result = []
-        while (msg = @frame.next)
-          result << msg
-        end
-        result.join
+        [].tap do |parts|
+          while (msg = @frame.next)
+            payload = msg.respond_to?(:data) ? msg.data : msg
+            parts << payload if payload
+          end
+        end.join
       end
 
       def read_line(deadline = nil)
-        data = super
-        @frame << data
-        result = []
-        while (msg = @frame.next)
-          result << msg
+        @line_buf ||= +""
+        loop do
+          if (idx = @line_buf =~ /\r?\n/)
+            return @line_buf.slice!(0, idx + Regexp.last_match(0).length)
+          end
+
+          # Pull more data from the wire (already decoded from WS frames by `read`).
+          data = read(MAX_SOCKET_READ_BYTES, deadline)
+          return nil unless data
+          @line_buf << data
         end
-        result.join
       end
 
       def write(data, deadline = nil)

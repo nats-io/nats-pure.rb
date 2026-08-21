@@ -20,7 +20,19 @@ require "timecop"
 
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].sort.each { |f| require f }
 
+require "timeout" if ENV["CI"]
+
 RSpec.configure do |config|
+  if ENV["CI"]
+    # A hung example otherwise stalls the job until the workflow
+    # timeout, which surfaces as an unexplained cancellation. Fail it
+    # instead, with the backtrace of the blocked call.
+    config.around do |example|
+      Timeout.timeout(180, nil, "example timed out: #{example.full_description}") do
+        example.run
+      end
+    end
+  end
   config.mock_with :rspec do |mocks|
     mocks.verify_partial_doubles = true
   end

@@ -295,6 +295,7 @@ describe "Client - Errors" do
           # Wait for a client to connect and linger
           @fake_nats_server.accept
         rescue IOError # ignore client disconnects
+          break if @fake_nats_server.closed?
         end
       end
     end
@@ -367,6 +368,7 @@ describe "Client - Errors" do
           client.puts %(INFO {"version":"1.3.0 foo bar","max_payload": 1048576}\r\n)
           client.puts "PONG\r\n"
         rescue IOError # ignore client disconnects
+          break if @fake_nats_server.closed?
         end
       end
     end
@@ -419,6 +421,7 @@ describe "Client - Errors" do
             client.close
           end
         rescue IOError # ignore client disconnects
+          break if @fake_nats_server.closed?
         end
       end
     end

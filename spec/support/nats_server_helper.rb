@@ -5,9 +5,6 @@ require "socket"
 class NatsServerControl
   BIN_PATH = File.expand_path(File.join(__dir__, "../../scripts/nats-server"))
 
-  attr_reader :was_running
-  alias_method :was_running?, :was_running
-
   class << self
     def init_with_config(config_file)
       config = File.open(config_file) { |f| YAML.safe_load(f) }
@@ -42,9 +39,13 @@ class NatsServerControl
 
   attr_reader :uri
 
+  # Suffix the pid file with the server port: specs pass the same
+  # literal pid file for every server, so concurrent servers (e.g. the
+  # KV reconnect spec) clobber each other's pid file and teardown then
+  # kills the wrong server, leaking the other one on its port forever.
   def initialize(uri = "nats://127.0.0.1:4222", pid_file = "/tmp/test-nats.pid", flags = nil, config_file = nil)
     @uri = uri.is_a?(URI) ? uri : URI.parse(uri)
-    @pid_file = pid_file
+    @pid_file = "#{pid_file}.#{@uri.port}"
     @flags = flags
     @config_file = config_file
   end
@@ -65,8 +66,11 @@ class NatsServerControl
 
   def start_server(wait_for_server = true)
     if server_running? @uri
-      @was_running = true
-      return 0
+      # Adopting a foreign server (a leaked one from an earlier example,
+      # a local Docker NATS, ...) makes specs fail in confusing ways —
+      # fail loudly instead.
+      raise "Port #{@uri.port} is already taken by another server; " \
+        "stop it before running the specs"
     end
     @pid = nil
 
@@ -92,11 +96,27 @@ class NatsServerControl
 
   def kill_server
     if FileTest.exist? @pid_file
-      `kill -TERM #{server_pid} 2> /dev/null`
+      pid = server_pid
+      `kill -TERM #{pid} 2> /dev/null`
       `rm #{@pid_file} 2> /dev/null`
-      sleep(0.2)
+      # Wait until the process actually exits and releases its port;
+      # otherwise start_server in the next example adopts the dying
+      # server (see server_running? check) along with its old streams.
+      waited = 0.0
+      while process_alive?(pid) && waited < 5
+        sleep(0.1)
+        waited += 0.1
+      end
+      `kill -KILL #{pid} 2> /dev/null` if process_alive?(pid)
       @pid = nil
     end
+  end
+
+  def process_alive?(pid)
+    Process.getpgid(pid)
+    true
+  rescue Errno::ESRCH
+    false
   end
 
   def restart
