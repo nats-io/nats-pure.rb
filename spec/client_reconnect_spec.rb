@@ -302,6 +302,9 @@ describe "Client - Reconnect" do
           # Wait for a client to connect
           @fake_nats_server.accept
         rescue IOError
+          # On JRuby a killed thread stuck in this loop would keep
+          # raising forever and prevent the process from exiting.
+          break if @fake_nats_server.closed?
         end
       end
     end

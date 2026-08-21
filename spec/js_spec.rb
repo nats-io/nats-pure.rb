@@ -214,7 +214,7 @@ describe "JetStream" do
       expect(msg.data).to eql("hello: 2")
       sleep 0.5
 
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
         num_waiting: 0,
@@ -254,7 +254,7 @@ describe "JetStream" do
       end.to raise_error(NATS::JetStream::Error)
 
       # Nothing pending.
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
         consumer_seq: 10,
@@ -266,7 +266,7 @@ describe "JetStream" do
       11.upto(15) { |n| js.publish("test", "hello: #{n}") }
       nc.flush
 
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
         consumer_seq: 10,
@@ -287,7 +287,7 @@ describe "JetStream" do
         i += 1
       end
 
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
         consumer_seq: 15,
@@ -302,7 +302,7 @@ describe "JetStream" do
       sleep 0.5
       expect(sub.pending_queue.size).to eql(0)
 
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info[:delivered]).to include({
         consumer_seq: 15,
@@ -325,7 +325,7 @@ describe "JetStream" do
         sub.fetch(1, timeout: 1)
       end.to raise_error(NATS::IO::Timeout)
 
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
         num_waiting: 0,
@@ -345,7 +345,7 @@ describe "JetStream" do
       end.to raise_error(NATS::IO::Timeout)
 
       # Requests that have timed out so far will linger.
-      resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)
       expect(info).to include({
         num_waiting: 0,
@@ -375,7 +375,7 @@ describe "JetStream" do
 
       # NOTE: After +2.7.1 info also resets the expired requests.
       #
-      # resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+      # resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       # info = JSON.parse(resp.data, symbolize_names: true)
       # expect(info[:num_waiting]).to be_between(1, 3)
       #
@@ -385,7 +385,7 @@ describe "JetStream" do
         expect do
           sub.fetch(1, timeout: 0.5)
         end.to raise_error(NATS::IO::Timeout)
-        # resp = nc.request("$JS.API.CONSUMER.INFO.test.test")
+        # resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
         # info = JSON.parse(resp.data, symbolize_names: true)
         # expect(info[:num_waiting]).to be_between(1, 3)
       end
