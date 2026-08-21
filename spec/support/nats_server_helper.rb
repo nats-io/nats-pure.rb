@@ -5,9 +5,6 @@ require "socket"
 class NatsServerControl
   BIN_PATH = File.expand_path(File.join(__dir__, "../../scripts/nats-server"))
 
-  attr_reader :was_running
-  alias_method :was_running?, :was_running
-
   class << self
     def init_with_config(config_file)
       config = File.open(config_file) { |f| YAML.safe_load(f) }
@@ -69,8 +66,11 @@ class NatsServerControl
 
   def start_server(wait_for_server = true)
     if server_running? @uri
-      @was_running = true
-      return 0
+      # Adopting a foreign server (a leaked one from an earlier example,
+      # a local Docker NATS, ...) makes specs fail in confusing ways —
+      # fail loudly instead.
+      raise "Port #{@uri.port} is already taken by another server; " \
+        "stop it before running the specs"
     end
     @pid = nil
 
