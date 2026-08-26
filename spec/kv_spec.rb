@@ -545,6 +545,32 @@ describe "KeyValue" do
     nc.close
   end
 
+  it "should not lose a received watch entry even if updates call exceeds timeout" do
+    # Regression test for a subtle loss mode:
+    # KeyWatcher#updates used to raise NATS::Timeout after pop returned,
+    # which could discard an already received entry under small timeouts.
+    watcher = NATS::KeyWatcher.new(double("js"))
+
+    timeout = 0.001
+    entry = Object.new
+
+    queue = Class.new do
+      def initialize(delay:, value:)
+        @delay = delay
+        @value = value
+      end
+
+      def pop(timeout:)
+        sleep(@delay)
+        @value
+      end
+    end.new(delay: timeout * 2, value: entry)
+
+    watcher._updates = queue
+
+    expect(watcher.updates(timeout: timeout)).to eq(entry)
+  end
+
   it "should support history" do
     skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
 

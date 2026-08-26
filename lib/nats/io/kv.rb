@@ -493,10 +493,15 @@ module NATS
 
     def updates(params = {})
       params[:timeout] ||= 5
-      result = nil
-      MonotonicTime.with_nats_timeout(params[:timeout]) do
-        result = @_updates.pop(timeout: params[:timeout])
-      end
+      timeout = params[:timeout].to_f
+
+      # Importantly: if pop returns an entry, do NOT raise even if the call took
+      # longer than timeout. Otherwise callers can lose already-received updates.
+      start_time = MonotonicTime.now
+      result = @_updates.pop(timeout: timeout)
+      duration = MonotonicTime.now - start_time
+
+      raise NATS::Timeout.new("nats: timeout") if result.nil? && duration > timeout
 
       result
     end
