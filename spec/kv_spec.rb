@@ -655,6 +655,10 @@ describe "KeyValue" do
     keys = kv.keys.to_a
     expect(keys.size).to eql(2) # last_per_subject
 
+    # Filtered keys
+    keys = kv.keys({}, "a").to_a
+    expect(keys.size).to eql(1)
+
     # Using a block with each
     keys = []
     kv.keys.each do |entry|
