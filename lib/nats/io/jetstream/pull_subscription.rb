@@ -57,7 +57,7 @@ module NATS
         end
 
         t = MonotonicTime.now
-        timeout = params[:timeout] ||= 5
+        timeout = params[:timeout] ? Float(params[:timeout]) : 5.0
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
           batch: batch
