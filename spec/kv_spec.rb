@@ -792,4 +792,67 @@ describe "KeyValue" do
       FileUtils.remove_entry(tmpdir)
     end
   end
+
+  it "should reconnect watches on server restart with empty bucket" do
+    tmpdir = Dir.mktmpdir("ruby-jetstream-empty-bucket")
+    @s2 = NatsServerControl.new("nats://127.0.0.1:4632", "/tmp/test-nats-empty.pid", "-js -sd=#{tmpdir}")
+    @s2.start_server(true)
+    s = @s2
+
+    nc = NATS.connect(s.uri)
+    errors = []
+    nc.on_error do |e|
+      errors << e
+    end
+    js = nc.jetstream
+
+    kv = js.create_key_value("EMPTY_TEST")
+
+    # Use short idle_heartbeat to speed up the test (hb_task runs every 2s)
+    w = kv.watchall(idle_heartbeat: 1)
+
+    initial_entry = w.updates(timeout: 2)
+    expect(initial_entry).to be_nil
+
+    # Key condition: watcher._sseq == 0 triggers the bug without the fix
+    expect(w._sseq).to eql(0)
+
+    Thread.new do
+      sleep 0.5
+      s.kill_server
+      sleep 1
+      @s2.start_server(true)
+    end
+
+    # Wait for hb_task to detect ConsumerNotFound and recreate consumer
+    sleep 5
+
+    # Without the fix, hb_task would fail with err_code=10094 when trying
+    # to create consumer with deliver_policy=by_start_sequence and opt_start_seq=0
+    bad_request_errors = errors.select do |e|
+      e.is_a?(NATS::JetStream::Error::BadRequest) && e.err_code == 10094
+    end
+    expect(bad_request_errors).to be_empty
+
+    # Verify watcher still works after reconnection
+    nc2 = NATS.connect(s.uri)
+    js2 = nc2.jetstream
+    kv2 = js2.key_value("EMPTY_TEST")
+    kv2.put("test_key", "test_value")
+
+    entry = w.updates(timeout: 3)
+    expect(entry).not_to be_nil
+    expect(entry.key).to eql("test_key")
+    expect(entry.value).to eql("test_value")
+
+    w.stop
+    nc.close
+    nc2.close
+
+    begin
+      @s2.kill_server
+    ensure
+      FileUtils.remove_entry(tmpdir)
+    end
+  end
 end
