@@ -95,14 +95,18 @@ module NATS
           n = tokens.count
 
           if n < Ack::V1TokenCounts || ((n > Ack::V1TokenCounts) && (n < Ack::V2TokenCounts))
-            raise NotJSMessage.new("nats: not a jetstream message")
+            raise JetStream::Error::NotJSMessage.new("nats: not a jetstream message")
           elsif tokens[0] != Ack::Prefix0 || tokens[1] != Ack::Prefix1
-            raise NotJSMessage.new("nats: not a jetstream message")
+            raise JetStream::Error::NotJSMessage.new("nats: not a jetstream message")
           elsif n == Ack::V1TokenCounts
             tokens.insert(Ack::Domain, Ack::Empty)
             tokens.insert(Ack::AccHash, Ack::Empty)
           elsif tokens[Ack::Domain] == Ack::NoDomainName
             tokens[Ack::Domain] = Ack::Empty
+          end
+
+          unless Ack::NumericTokens.all? { |i| Ack::Digits.match?(tokens[i]) }
+            raise JetStream::Error::NotJSMessage.new("nats: not a jetstream message")
           end
 
           Metadata.new(tokens)

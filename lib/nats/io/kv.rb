@@ -327,15 +327,9 @@ module NATS
         meta = msg.metadata
         watcher.synchronize { watcher._active = true }
         # Track the sequences
-        #
-        # $JS.ACK.KV_TEST.CKRGrWpf.1.10.10.1739859923871837000.0
-        #
-        tokens = msg.reply.split(".")
-        sseq = tokens[5]
-        dseq = tokens[6]
         watcher.synchronize do
-          watcher._dseq = dseq.to_i + 1
-          watcher._sseq = sseq.to_i
+          watcher._dseq = meta.sequence.consumer + 1
+          watcher._sseq = meta.sequence.stream
         end
 
         # Keys() handling
