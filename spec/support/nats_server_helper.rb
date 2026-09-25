@@ -97,6 +97,13 @@ class NatsServerControl
   def kill_server
     if FileTest.exist? @pid_file
       pid = server_pid
+      if pid <= 0
+        # An empty or half-written pid file: signalling pid 0 would hit
+        # our own process group.
+        File.delete(@pid_file)
+        @pid = nil
+        return
+      end
       `kill -TERM #{pid} 2> /dev/null`
       `rm #{@pid_file} 2> /dev/null`
       # Wait until the process actually exits and releases its port;
