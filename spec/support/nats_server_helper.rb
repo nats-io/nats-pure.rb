@@ -96,11 +96,11 @@ class NatsServerControl
 
   def kill_server
     if FileTest.exist? @pid_file
-      pid = server_pid
+      pid = @pid = wait_for_pid
       if pid <= 0
-        # An empty or half-written pid file: signalling pid 0 would hit
+        # The pid file never got a valid pid: signalling pid 0 would hit
         # our own process group.
-        File.delete(@pid_file)
+        FileUtils.rm_f(@pid_file)
         @pid = nil
         return
       end
@@ -116,6 +116,20 @@ class NatsServerControl
       end
       `kill -KILL #{pid} 2> /dev/null` if process_alive?(pid)
       @pid = nil
+    end
+  end
+
+  # A server that was just started may not have written its pid yet;
+  # give it a moment rather than leaving it running on its port.
+  def wait_for_pid(timeout = 1)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      pid = @pid.to_i.positive? ? @pid : File.read(@pid_file).chomp.to_i
+      return pid if pid.positive?
+      return 0 if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      sleep 0.05
+    rescue Errno::ENOENT
+      return 0
     end
   end
 

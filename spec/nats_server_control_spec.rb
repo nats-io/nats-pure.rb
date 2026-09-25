@@ -18,6 +18,26 @@ describe NatsServerControl do
       expect(File.exist?(suffixed_pid_file)).to be(false)
     end
 
+    it "kills a server whose pid file is filled in after kill_server starts" do
+      pid = Process.spawn("sleep", "30")
+      reaper = Thread.new { Process.wait2(pid).last }
+      File.write(suffixed_pid_file, "")
+      Thread.new do
+        sleep 0.3
+        File.write(suffixed_pid_file, pid.to_s)
+      end
+
+      control.kill_server
+
+      status = reaper.join(5)&.value
+      expect(status&.termsig).to eql(Signal.list["TERM"])
+    ensure
+      begin
+        Process.kill("KILL", pid)
+      rescue Errno::ESRCH
+      end
+    end
+
     it "does not send signals when the pid file contains garbage" do
       File.write(suffixed_pid_file, "not-a-pid")
 
