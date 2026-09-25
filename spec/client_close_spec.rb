@@ -44,4 +44,48 @@ describe "Client#close" do
       expect(nc.closed?).to be(true)
     end
   end
+
+  # The race above needs Ruby 3.4 to show up reliably. These pin the
+  # behaviour that prevents it on every Ruby: background threads are
+  # asked to stop and joined, never killed.
+  describe "stopping the background threads" do
+    let(:killed) { [] }
+
+    before do
+      %i[exit kill terminate].each do |m|
+        allow_any_instance_of(Thread).to receive(m).and_wrap_original do |original, *args|
+          killed << original.receiver.name if original.receiver.name.to_s.start_with?("nats:")
+          original.call(*args)
+        end
+      end
+    end
+
+    def background_threads(nc)
+      %i[@read_loop_thread @flusher_thread @ping_interval_thread].map { |iv| nc.instance_variable_get(iv) }
+    end
+
+    it "joins them on close instead of killing them" do
+      nc = NATS.connect(@s.uri)
+      threads = background_threads(nc)
+
+      nc.close
+
+      expect(killed).to be_empty
+      expect(threads.map(&:alive?)).to eql([false, false, false])
+    end
+
+    it "joins the old ones on reconnect instead of killing them" do
+      nc = NATS.connect(@s.uri, reconnect_time_wait: 0.1)
+      threads = background_threads(nc)
+
+      nc.force_reconnect
+      wait_until(description: "the reconnect") { nc.connected? && nc.stats[:reconnects] == 1 }
+
+      expect(killed).to be_empty
+      expect(threads.map(&:alive?)).to eql([false, false, false])
+      expect(background_threads(nc).map(&:alive?)).to eql([true, true, true])
+    ensure
+      nc&.close
+    end
+  end
 end
