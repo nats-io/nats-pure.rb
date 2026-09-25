@@ -394,9 +394,9 @@ describe "KeyValue" do
     nc.close
   end
 
-  major, minor, _ = RUBY_VERSION.split(".")
+  watch_unsupported = Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
   it "should support watch" do
-    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
+    skip "watch requires ruby >= 3.2" if watch_unsupported
 
     nc = NATS.connect(@s.uri)
     js = nc.jetstream
@@ -546,7 +546,7 @@ describe "KeyValue" do
   end
 
   it "should support history" do
-    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
+    skip "watch requires ruby >= 3.2" if watch_unsupported
 
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|
@@ -627,7 +627,7 @@ describe "KeyValue" do
   end
 
   it "should support keys" do
-    skip "watch requires ruby >= 3.2" if (major >= "3") && (minor < "2")
+    skip "watch requires ruby >= 3.2" if watch_unsupported
 
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|

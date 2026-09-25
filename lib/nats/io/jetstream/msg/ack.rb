@@ -48,10 +48,10 @@ module NATS
         #
         V1TokenCounts = 9
 
-        # Subject with domain:
-        # $JS.ACK.<domain>.<account hash>.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>.<a token with a random value>
+        # Subject with domain, 11 or more tokens; the server may append more (ADR-15):
+        # $JS.ACK.<domain>.<account hash>.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>
         #
-        V2TokenCounts = 12
+        V2TokenCounts = 11
 
         SequencePair = Struct.new(:stream, :consumer)
 
