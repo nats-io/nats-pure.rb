@@ -16,7 +16,8 @@ describe "Client - Delayed Connection" do
     it "should raise error on connect" do
       expect do
         nc = NATS::Client.new
-        nc.connect(servers: [server.uri])
+        # Otherwise the initial connect retries for ~20s before raising.
+        nc.connect(servers: [server.uri], max_reconnect_attempts: 0, reconnect_time_wait: 0)
         nc.close
       end.to raise_error(Errno::ECONNREFUSED)
     end
