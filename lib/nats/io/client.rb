@@ -221,6 +221,10 @@ module NATS
       # Track whether connect has been already been called.
       @connect_called = false
 
+      # Bumped by every close, so that a reconnect started earlier can tell
+      # that the connection was closed meanwhile.
+      @close_generation = 0
+
       # New style request/response implementation.
       @resp_sub = nil
       @resp_map = nil
@@ -1337,6 +1341,8 @@ module NATS
 
       # TODO: Reconnecting pending buffer?
 
+      generation = @close_generation
+
       # Do reconnect under a different thread than the one
       # in which we got the error.
       Thread.new do
@@ -1345,7 +1351,7 @@ module NATS
 
         @subscription_executor.shutdown
 
-        attempt_reconnect
+        attempt_reconnect(generation)
       rescue NATS::IO::NoServersError => e
         @last_err = e
         close
@@ -1501,8 +1507,11 @@ module NATS
       end
     end
 
-    # Reconnect logic, this is done while holding the lock.
-    def attempt_reconnect
+    # Reconnect logic. generation is @close_generation from when the
+    # reconnect started; a close since then cancels the reconnect.
+    def attempt_reconnect(generation)
+      return if closed_since?(generation)
+
       @disconnect_cb&.call(@last_err)
 
       # Clear sticky error
@@ -1511,6 +1520,8 @@ module NATS
       # Do reconnect
       srv = nil
       begin
+        return if closed_since?(generation)
+
         srv = select_next_server
 
         # Set hostname to use for TLS hostname verification
@@ -1552,35 +1563,47 @@ module NATS
         retry
       end
 
-      # Clear pending flush calls and reset state before restarting loops
-      @flush_queue.clear
-      @pings_outstanding = 0
-      @pongs_received = 0
+      # Under the lock, so that a concurrent close either cancels this or
+      # finds the new connection in place and closes it.
+      synchronize do
+        if @close_generation != generation
+          @io.close
+          @io = nil
+          return
+        end
 
-      # Replay all subscriptions
-      @subs.each_pair do |sid, sub|
-        @io.write("SUB #{sub.subject} #{sub.queue} #{sid}#{CR_LF}")
+        # Clear pending flush calls and reset state before restarting loops
+        @flush_queue.clear
+        @pings_outstanding = 0
+        @pongs_received = 0
+
+        # Replay all subscriptions
+        @subs.each_pair do |sid, sub|
+          @io.write("SUB #{sub.subject} #{sub.queue} #{sid}#{CR_LF}")
+        end
+
+        # Flush anything which was left pending, in case of errors during flush
+        # then we should raise error then retry the reconnect logic
+        cmds = []
+        cmds << @pending_queue.pop until @pending_queue.empty?
+        @io.write(cmds.join) unless cmds.empty?
+        @status = CONNECTED
+        @pending_size = 0
+
+        # Reset parser state here to avoid unknown protocol errors
+        # on reconnect...
+        @parser.reset!
+
+        # Now connected to NATS, and we can restart parser loop, flusher
+        # and ping interval
+        start_threads!
       end
 
-      # Flush anything which was left pending, in case of errors during flush
-      # then we should raise error then retry the reconnect logic
-      cmds = []
-      cmds << @pending_queue.pop until @pending_queue.empty?
-      @io.write(cmds.join) unless cmds.empty?
-      @status = CONNECTED
-      @pending_size = 0
-
-      # Reset parser state here to avoid unknown protocol errors
-      # on reconnect...
-      @parser.reset!
-
-      # Now connected to NATS, and we can restart parser loop, flusher
-      # and ping interval
-      start_threads!
-
-      # Dispatch the reconnected callback while holding lock
-      # which we should have already
       @reconnect_cb&.call
+    end
+
+    def closed_since?(generation)
+      synchronize { @close_generation != generation }
     end
 
     def close_connection(conn_status, do_cbs = true)
@@ -1590,6 +1613,7 @@ module NATS
           @status = conn_status
           return
         end
+        @close_generation += 1
       end
 
       stop_threads!

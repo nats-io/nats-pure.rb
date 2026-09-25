@@ -87,5 +87,19 @@ describe "Client#close" do
     ensure
       nc&.close
     end
+
+    it "does not reconnect after close" do
+      20.times do |i|
+        nc = NATS.connect(@s.uri, reconnect_time_wait: 0.01)
+        # The -ERR starts a reconnect; close while it is under way.
+        nc.subscribe("invalid.")
+        wait_until(description: "the reconnect to start") { nc.reconnecting? || nc.stats[:reconnects] > 0 }
+        nc.close
+
+        sleep 0.2 # give a reconnect that ignored the close time to finish
+        expect(nc.status).to eql(NATS::IO::CLOSED), "attempt #{i + 1}: client came back after close"
+        expect(background_threads(nc).map(&:alive?)).to eql([false, false, false])
+      end
+    end
   end
 end
