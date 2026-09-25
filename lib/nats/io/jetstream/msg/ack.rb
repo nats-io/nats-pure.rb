@@ -43,6 +43,10 @@ module NATS
         Timestamp = 9
         NumPending = 10
 
+        # Positions of fields that must be unsigned integers (ADR-15).
+        NumericTokens = [NumDelivered, StreamSeq, ConsumerSeq, Timestamp, NumPending].freeze
+        Digits = /\A\d+\z/
+
         # Subject without domain:
         # $JS.ACK.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>
         #

@@ -105,6 +105,10 @@ module NATS
             tokens[Ack::Domain] = Ack::Empty
           end
 
+          unless Ack::NumericTokens.all? { |i| Ack::Digits.match?(tokens[i]) }
+            raise JetStream::Error::NotJSMessage.new("nats: not a jetstream message")
+          end
+
           Metadata.new(tokens)
         end
       end
