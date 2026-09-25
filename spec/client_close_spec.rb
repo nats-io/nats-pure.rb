@@ -101,5 +101,18 @@ describe "Client#close" do
         expect(background_threads(nc).map(&:alive?)).to eql([false, false, false])
       end
     end
+
+    it "completes a close started by the read loop itself" do
+      closes = 0
+      nc = NATS.connect(@s.uri, reconnect: false)
+      nc.on_close { closes += 1 }
+
+      # Without reconnecting, the -ERR makes the read loop call close.
+      nc.subscribe("invalid.")
+
+      wait_until(description: "the client to close") { nc.closed? }
+      expect(closes).to eql(1)
+      expect(killed).to be_empty
+    end
   end
 end

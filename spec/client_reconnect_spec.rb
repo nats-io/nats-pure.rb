@@ -157,17 +157,17 @@ describe "Client - Reconnect" do
     nats.publish("foo", "hello")
     @s.kill_server
 
-    10.times do
-      nats.publish("foo", "hello")
-      sleep 0.01
-    end
-
+    # Without reconnecting, losing the connection closes the client, as
+    # in nats.go. (It used to stay DISCONNECTED: close, called from the
+    # read loop, killed the read loop part way through.)
     eventually do
-      expect(nats.last_error).to be_a(Errno::ECONNRESET)
-      expect(nats.status).to eql(NATS::IO::DISCONNECTED)
+      expect(nats.status).to eql(NATS::IO::CLOSED)
+      expect(closes).to eql(1)
     end
-
-    nats.close
+    expect(nats.last_error).to be_a(Errno::ECONNRESET)
+    expect(disconnects).to eql(1)
+    expect(reconnects).to eql(0)
+    expect { nats.publish("foo", "hello") }.to raise_error(NATS::IO::ConnectionClosedError)
   end
 
   it "should give up connecting if no servers available" do
