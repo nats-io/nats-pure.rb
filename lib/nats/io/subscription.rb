@@ -148,7 +148,8 @@ module NATS
         msg = pending_queue.pop(true)
         process(msg)
       rescue ThreadError # queue is empty
-        concurrency_semaphore.release
+        # No release here: the ensure below releases the permit; a second
+        # release would grow the semaphore beyond processing_concurrency.
       ensure
         concurrency_semaphore.release
         [concurrency_semaphore.available_permits, pending_queue.size].min.times do
