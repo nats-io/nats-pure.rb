@@ -221,6 +221,10 @@ module NATS
       # Track whether connect has been already been called.
       @connect_called = false
 
+      # Bumped by every close, so that a reconnect started earlier can tell
+      # that the connection was closed meanwhile.
+      @close_generation = 0
+
       # New style request/response implementation.
       @resp_sub = nil
       @resp_map = nil
@@ -1293,6 +1297,11 @@ module NATS
     # Handles errors from reading, parsing the protocol or stale connection.
     # the lock should not be held entering this function.
     def process_op_error(e)
+      # A background thread being stopped by close or a reconnect sees
+      # errors from that; it must not start another close or reconnect,
+      # which would wait for the thread that is stopping it.
+      return if stopping?
+
       should_bail = synchronize do
         connecting? || closed? || reconnecting?
       end
@@ -1320,23 +1329,29 @@ module NATS
 
     def initiate_reconnect
       @status = RECONNECTING
-      @io&.close
+      old_io = @io
       @io = nil
 
+      # Wake a read loop blocked on the socket by shutting it down, and
+      # close the socket only once the loop has stopped: on JRuby a close
+      # right after the shutdown can leave the read blocked for good.
+      if @read_loop_thread&.alive? && @read_loop_thread != Thread.current
+        old_io&.shutdown_read
+      end
+
       # TODO: Reconnecting pending buffer?
+
+      generation = @close_generation
 
       # Do reconnect under a different thread than the one
       # in which we got the error.
       Thread.new do
-        # Abort currently running reads in case they're around
-        # FIXME: There might be more graceful way here...
-        @read_loop_thread.exit if @read_loop_thread.alive?
-        @flusher_thread.exit if @flusher_thread.alive?
-        @ping_interval_thread.exit if @ping_interval_thread.alive?
+        stop_threads!
+        old_io&.close
 
         @subscription_executor.shutdown
 
-        attempt_reconnect
+        attempt_reconnect(generation)
       rescue NATS::IO::NoServersError => e
         @last_err = e
         close
@@ -1346,6 +1361,8 @@ module NATS
     # Gathers data from the socket and sends it to the parser.
     def read_loop
       loop do
+        return if stopping?
+
         should_bail = synchronize do
           # FIXME: In case of reconnect as well?
           @status == CLOSED or @status == RECONNECTING
@@ -1361,6 +1378,9 @@ module NATS
         # FIXME: We do not really need a timeout here...
         retry
       rescue => e
+        # Asked to stop: the error comes from the socket being shut down.
+        return if stopping?
+
         # In case of reading/parser errors, trigger
         # reconnection logic in case desired.
         process_op_error(e)
@@ -1373,6 +1393,7 @@ module NATS
       loop do
         # Blocks waiting for the flusher to be kicked...
         @flush_queue.pop
+        return if stopping?
 
         should_bail = synchronize do
           (@status != CONNECTED && !draining?) || @status == CONNECTING
@@ -1411,9 +1432,9 @@ module NATS
       end
     end
 
-    def ping_interval_loop
+    def ping_interval_loop(stop)
       loop do
-        sleep @options[:ping_interval]
+        return if stop.wait(@options[:ping_interval])
 
         # Skip ping interval until connected
         next if !connected?
@@ -1486,8 +1507,11 @@ module NATS
       end
     end
 
-    # Reconnect logic, this is done while holding the lock.
-    def attempt_reconnect
+    # Reconnect logic. generation is @close_generation from when the
+    # reconnect started; a close since then cancels the reconnect.
+    def attempt_reconnect(generation)
+      return if closed_since?(generation)
+
       @disconnect_cb&.call(@last_err)
 
       # Clear sticky error
@@ -1496,6 +1520,8 @@ module NATS
       # Do reconnect
       srv = nil
       begin
+        return if closed_since?(generation)
+
         srv = select_next_server
 
         # Set hostname to use for TLS hostname verification
@@ -1537,35 +1563,47 @@ module NATS
         retry
       end
 
-      # Clear pending flush calls and reset state before restarting loops
-      @flush_queue.clear
-      @pings_outstanding = 0
-      @pongs_received = 0
+      # Under the lock, so that a concurrent close either cancels this or
+      # finds the new connection in place and closes it.
+      synchronize do
+        if @close_generation != generation
+          @io.close
+          @io = nil
+          return
+        end
 
-      # Replay all subscriptions
-      @subs.each_pair do |sid, sub|
-        @io.write("SUB #{sub.subject} #{sub.queue} #{sid}#{CR_LF}")
+        # Clear pending flush calls and reset state before restarting loops
+        @flush_queue.clear
+        @pings_outstanding = 0
+        @pongs_received = 0
+
+        # Replay all subscriptions
+        @subs.each_pair do |sid, sub|
+          @io.write("SUB #{sub.subject} #{sub.queue} #{sid}#{CR_LF}")
+        end
+
+        # Flush anything which was left pending, in case of errors during flush
+        # then we should raise error then retry the reconnect logic
+        cmds = []
+        cmds << @pending_queue.pop until @pending_queue.empty?
+        @io.write(cmds.join) unless cmds.empty?
+        @status = CONNECTED
+        @pending_size = 0
+
+        # Reset parser state here to avoid unknown protocol errors
+        # on reconnect...
+        @parser.reset!
+
+        # Now connected to NATS, and we can restart parser loop, flusher
+        # and ping interval
+        start_threads!
       end
 
-      # Flush anything which was left pending, in case of errors during flush
-      # then we should raise error then retry the reconnect logic
-      cmds = []
-      cmds << @pending_queue.pop until @pending_queue.empty?
-      @io.write(cmds.join) unless cmds.empty?
-      @status = CONNECTED
-      @pending_size = 0
-
-      # Reset parser state here to avoid unknown protocol errors
-      # on reconnect...
-      @parser.reset!
-
-      # Now connected to NATS, and we can restart parser loop, flusher
-      # and ping interval
-      start_threads!
-
-      # Dispatch the reconnected callback while holding lock
-      # which we should have already
       @reconnect_cb&.call
+    end
+
+    def closed_since?(generation)
+      synchronize { @close_generation != generation }
     end
 
     def close_connection(conn_status, do_cbs = true)
@@ -1575,25 +1613,10 @@ module NATS
           @status = conn_status
           return
         end
+        @close_generation += 1
       end
 
-      # Kick the flusher so it bails due to closed state
-      @flush_queue << :fallout if @flush_queue
-      Thread.pass
-
-      # FIXME: More graceful way of handling the following?
-      # Ensure ping interval and flusher are not running anymore
-      if @ping_interval_thread&.alive?
-        @ping_interval_thread.exit
-      end
-
-      if @flusher_thread&.alive?
-        @flusher_thread.exit
-      end
-
-      if @read_loop_thread&.alive?
-        @read_loop_thread.exit
-      end
+      stop_threads!
 
       @subscription_executor&.shutdown
       @subscription_executor&.wait_for_termination(options[:close_timeout])
@@ -1642,21 +1665,58 @@ module NATS
       end
     end
 
+    # Asks the read loop, flusher and ping threads to stop, wakes them from
+    # wherever they block, and waits for them to finish.
+    #
+    # They are never killed: Thread#exit on a thread that is waiting for
+    # the client lock can swallow the lock's wakeup, so that the next
+    # thread waiting for the lock sleeps forever on an unlocked lock (#183).
+    def stop_threads!(timeout = NATS::IO::THREADS_STOP_TIMEOUT)
+      threads = [@read_loop_thread, @flusher_thread, @ping_interval_thread].compact
+      threads.each { |t| t[:nats_stop]&.stop! } # also wakes the ping thread
+
+      begin
+        @flush_queue&.push(:fallout, true)
+      rescue ThreadError
+        # Queue is full, so the flusher is awake already.
+      end
+      # Wake the read loop if it is blocked on the socket. Only while it
+      # runs: shutdown acts on the socket itself, which a forked child
+      # (whose threads are gone) shares with the parent.
+      if @read_loop_thread&.alive? && @read_loop_thread != Thread.current
+        @io&.shutdown_read
+      end
+
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      threads.each do |t|
+        next if t == Thread.current
+
+        t.join([deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC), 0].max)
+      end
+    end
+
+    def stopping?
+      Thread.current[:nats_stop]&.stopped?
+    end
+
+    def start_thread(name, stop, &block)
+      thread = Thread.new(&block)
+      thread[:nats_stop] = stop
+      thread.name = name
+      thread.abort_on_exception = true
+      thread
+    end
+
     def start_threads!
       # Reading loop for gathering data
-      @read_loop_thread = Thread.new { read_loop }
-      @read_loop_thread.name = "nats:read_loop"
-      @read_loop_thread.abort_on_exception = true
+      @read_loop_thread = start_thread("nats:read_loop", NATS::IO::StopSignal.new) { read_loop }
 
       # Flusher loop for sending commands
-      @flusher_thread = Thread.new { flusher_loop }
-      @flusher_thread.name = "nats:flusher_loop"
-      @flusher_thread.abort_on_exception = true
+      @flusher_thread = start_thread("nats:flusher_loop", NATS::IO::StopSignal.new) { flusher_loop }
 
       # Ping interval handling for keeping alive the connection
-      @ping_interval_thread = Thread.new { ping_interval_loop }
-      @ping_interval_thread.name = "nats:ping_loop"
-      @ping_interval_thread.abort_on_exception = true
+      ping_stop = NATS::IO::StopSignal.new
+      @ping_interval_thread = start_thread("nats:ping_loop", ping_stop) { ping_interval_loop(ping_stop) }
 
       # Subscription handling thread pool
       @subscription_executor = Concurrent::ThreadPoolExecutor.new(
@@ -1889,6 +1949,44 @@ module NATS
     DEFAULT_DRAIN_TIMEOUT = 30
     DEFAULT_CLOSE_TIMEOUT = 30
 
+    # How long to wait for the read loop, flusher and ping threads to
+    # stop on close or reconnect.
+    THREADS_STOP_TIMEOUT = 5
+
+    # Asks a background thread to stop, and lets it sleep until then.
+    class StopSignal
+      def initialize
+        @mutex = Mutex.new
+        @cond = ConditionVariable.new
+        @stopped = false
+      end
+
+      def stop!
+        @mutex.synchronize do
+          @stopped = true
+          @cond.broadcast
+        end
+      end
+
+      def stopped?
+        @stopped
+      end
+
+      # Sleeps up to timeout seconds; returns whether stop! was called.
+      def wait(timeout)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+        @mutex.synchronize do
+          until @stopped
+            left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            break if left <= 0
+
+            @cond.wait(@mutex, left)
+          end
+          @stopped
+        end
+      end
+    end
+
     # Default Pending Limits
     DEFAULT_SUB_PENDING_MSGS_LIMIT = 65536
     DEFAULT_SUB_PENDING_BYTES_LIMIT = 65536 * 1024
@@ -2002,6 +2100,15 @@ module NATS
 
       def close
         @socket.close
+      end
+
+      # Makes a read blocked on the socket in another thread return,
+      # while writes keep working.
+      def shutdown_read
+        io = @socket.respond_to?(:to_io) ? @socket.to_io : @socket
+        io.shutdown(::Socket::SHUT_RD)
+      rescue IOError, SystemCallError
+        # Already closed or not connected.
       end
 
       def closed?
