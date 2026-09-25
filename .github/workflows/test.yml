@@ -45,7 +45,7 @@ jobs:
       # Timing-sensitive specs occasionally fail; rerun only the failed
       # examples in a fresh process so per-example server state is clean.
       run: |
-        bundle exec rspec --force-color || bundle exec rspec --force-color --only-failures
+        bundle exec rspec --force-color --profile 20 || bundle exec rspec --force-color --only-failures
 
   rspec-rails:
     runs-on: ubuntu-latest
