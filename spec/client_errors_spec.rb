@@ -123,7 +123,10 @@ describe "Client - Errors" do
       nil
     end
 
-    wait_until(description: "all messages to be handled") { msgs.count == 4 && errors.count == 1 }
+    eventually do
+      expect(msgs.count).to eql(4)
+      expect(errors.count).to eql(1)
+    end
 
     nats.close
     wait_until(description: "the client to close") { closes == 1 }
@@ -201,6 +204,9 @@ describe "Client - Errors" do
     expect(disconnects.first).to be_a(NATS::IO::SlowConsumer)
     expect(closes).to eql(1)
     expect(nats.closed?).to eql(true)
+  ensure
+    # Never leave the handler thread blocked if the spec failed early.
+    gate&.push(:go)
   end
 
   it "should handle subscriptions with slow consumers as async errors when over pending bytes limit" do
@@ -260,6 +266,9 @@ describe "Client - Errors" do
     expect(disconnects.first).to be_a(NATS::IO::SlowConsumer)
     expect(closes).to eql(1)
     expect(nats.closed?).to eql(true)
+  ensure
+    # Never leave the handler thread blocked if the spec failed early.
+    gate&.push(:go)
   end
 
   context "against a server which is idle" do

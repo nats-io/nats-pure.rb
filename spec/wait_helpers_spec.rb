@@ -11,16 +11,18 @@ describe WaitHelpers do
 
   describe "#wait_until" do
     it "returns the block's value without sleeping when it is already truthy" do
-      result = nil
-      expect(elapsed { result = wait_until { :done } }).to be < 0.005
-      expect(result).to eql(:done)
+      calls = 0
+      expect(wait_until { (calls += 1) && :done }).to eql(:done)
+      expect(calls).to eql(1)
     end
 
     it "notices a condition that turns true within a few milliseconds" do
       ready_at = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 0.02
       took = elapsed { wait_until { Process.clock_gettime(Process::CLOCK_MONOTONIC) >= ready_at } }
 
-      expect(took).to be < 0.1
+      # Generous for slow runners; a 250ms fixed poll would still pass
+      # this, the backoff test below is what pins the schedule.
+      expect(took).to be < 0.5
     end
 
     it "keeps waiting for a slow condition up to the timeout" do
