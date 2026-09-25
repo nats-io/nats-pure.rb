@@ -14,9 +14,6 @@ describe "Client - Errors" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
-    mon = Monitor.new
-    done = mon.new_cond
-
     errors = []
     nats.on_error do |e|
       errors << e
@@ -30,23 +27,18 @@ describe "Client - Errors" do
     closes = 0
     nats.on_close do
       closes += 1
-      mon.synchronize { done.signal }
     end
 
     # Trigger invalid subject server error which the client
     # detects so that it will disconnect
     nats.subscribe("hello.")
 
-    # FIXME: This can fail due to timeout because
-    # disconnection may have already occurred.
-    begin
-      nats.flush(1)
-    rescue
-      nil
-    end
+    # The server answers with -ERR, which the client reports as an
+    # async error.
+    wait_until(description: "the server error") { errors.any? }
 
     nats.close
-    mon.synchronize { done.wait(3) }
+    wait_until(description: "the client to close") { closes == 1 }
     expect(errors.count).to eql(1)
     expect(errors.first).to be_a(NATS::IO::ServerError)
     expect(disconnects.count).to eql(1)
@@ -56,9 +48,6 @@ describe "Client - Errors" do
   end
 
   it "should handle unknown errors in the protocol" do
-    mon = Monitor.new
-    done = mon.new_cond
-
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
@@ -75,17 +64,12 @@ describe "Client - Errors" do
     closes = 0
     nats.on_close do
       closes += 1
-      mon.synchronize do
-        done.signal
-      end
     end
 
     # Modify state from internal parser
     parser = nats.instance_variable_get("@parser")
     parser.parse("ASDF\r\n")
-    mon.synchronize do
-      done.wait(1)
-    end
+    wait_until(description: "the client to close") { closes == 1 }
     expect(errors.count).to eql(1)
     expect(errors.first).to be_a(NATS::IO::ServerError)
     expect(errors.first.to_s).to include("Unknown protocol")
@@ -98,9 +82,6 @@ describe "Client - Errors" do
   it "should handle as async errors uncaught exceptions from callbacks" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
-
-    mon = Monitor.new
-    done = mon.new_cond
 
     errors = []
     nats.on_error do |e|
@@ -115,7 +96,6 @@ describe "Client - Errors" do
     closes = 0
     nats.on_close do
       closes += 1
-      mon.synchronize { done.signal }
     end
 
     # Trigger invalid subject server error which the client
@@ -143,11 +123,13 @@ describe "Client - Errors" do
       nil
     end
 
-    # Wait for messages to be received
-    sleep 2
+    eventually do
+      expect(msgs.count).to eql(4)
+      expect(errors.count).to eql(1)
+    end
 
     nats.close
-    mon.synchronize { done.wait(3) }
+    wait_until(description: "the client to close") { closes == 1 }
 
     expect(msgs.count).to eql(4)
     expect(errors.count).to eql(1)
@@ -162,9 +144,6 @@ describe "Client - Errors" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
 
-    mon = Monitor.new
-    done = mon.new_cond
-
     errors = []
     nats.on_error do |nc, e, sub|
       errors << e
@@ -178,13 +157,16 @@ describe "Client - Errors" do
     closes = 0
     nats.on_close do
       closes += 1
-      mon.synchronize { done.signal }
     end
 
+    # Block the handler on the 5th message until the test has seen the
+    # slow consumer error, so the pending queue overflows regardless of
+    # machine speed.
+    gate = Queue.new
     msgs = []
-    nats.subscribe("hello", pending_msgs_limit: 5) do |msg|
+    sub = nats.subscribe("hello", pending_msgs_limit: 5) do |msg|
       msgs << msg.data
-      sleep 1 if msgs.count == 5
+      gate.pop if msgs.count == 5
     end
 
     20.times do |n|
@@ -196,8 +178,10 @@ describe "Client - Errors" do
       nil
     end
 
-    # Wait a bit for subscriber to recover
-    sleep 2
+    wait_until(description: "a slow consumer error") { errors.any? }
+    gate << :go
+    wait_until(description: "the subscriber to drain") { sub.pending_queue.empty? }
+
     3.times do |n|
       nats.publish("hello", "ok-#{n}")
     end
@@ -206,12 +190,10 @@ describe "Client - Errors" do
     rescue
       nil
     end
-
-    # Wait a bit to receive final messages
-    sleep 0.5
+    wait_until(description: "the final messages") { 3.times.all? { |n| msgs.include?("ok-#{n}") } }
 
     nats.close
-    mon.synchronize { done.wait(3) }
+    wait_until(description: "the client to close") { closes == 1 }
 
     # Should have dropped some messages but include the last few
     3.times do |n|
@@ -222,14 +204,14 @@ describe "Client - Errors" do
     expect(disconnects.first).to be_a(NATS::IO::SlowConsumer)
     expect(closes).to eql(1)
     expect(nats.closed?).to eql(true)
+  ensure
+    # Never leave the handler thread blocked if the spec failed early.
+    gate&.push(:go)
   end
 
   it "should handle subscriptions with slow consumers as async errors when over pending bytes limit" do
     nats = NATS::IO::Client.new
     nats.connect(reconnect: false)
-
-    mon = Monitor.new
-    done = mon.new_cond
 
     errors = []
     nats.on_error do |e|
@@ -244,13 +226,13 @@ describe "Client - Errors" do
     closes = 0
     nats.on_close do
       closes += 1
-      mon.synchronize { done.signal }
     end
 
+    gate = Queue.new
     data = ""
-    nats.subscribe("hello", pending_bytes_limit: 10) do |msg|
+    sub = nats.subscribe("hello", pending_bytes_limit: 10) do |msg|
       data += msg.data
-      sleep 2 if data.size == 10
+      gate.pop if data.size == 10
     end
 
     20.times do
@@ -261,7 +243,9 @@ describe "Client - Errors" do
     rescue
       nil
     end
-    sleep 2
+    wait_until(description: "a slow consumer error") { errors.any? }
+    gate << :go
+    wait_until(description: "the subscriber to drain") { sub.pending_queue.empty? }
 
     3.times do |n|
       nats.publish("hello", "B")
@@ -271,12 +255,10 @@ describe "Client - Errors" do
     rescue
       nil
     end
-
-    # Wait a bit to receive final messages
-    sleep 0.5
+    wait_until(description: "the final messages") { data.end_with?("BBB") }
 
     nats.close
-    mon.synchronize { done.wait(3) }
+    wait_until(description: "the client to close") { closes == 1 }
 
     # Should have dropped a few messages
     expect(errors.first).to be_a(NATS::IO::SlowConsumer)
@@ -284,6 +266,9 @@ describe "Client - Errors" do
     expect(disconnects.first).to be_a(NATS::IO::SlowConsumer)
     expect(closes).to eql(1)
     expect(nats.closed?).to eql(true)
+  ensure
+    # Never leave the handler thread blocked if the spec failed early.
+    gate&.push(:go)
   end
 
   context "against a server which is idle" do
@@ -312,8 +297,6 @@ describe "Client - Errors" do
       disconnects = []
 
       nats = NATS::IO::Client.new
-      mon = Monitor.new
-      done = mon.new_cond
 
       nats.on_error do |e|
         errors << e
@@ -329,15 +312,14 @@ describe "Client - Errors" do
 
       nats.on_close do
         closes += 1
-        mon.synchronize { done.signal }
       end
 
       expect do
         nats.connect({
           servers: ["nats://127.0.0.1:4555"],
           max_reconnect_attempts: 1,
-          reconnect_time_wait: 1,
-          connect_timeout: 1
+          reconnect_time_wait: 0.1,
+          connect_timeout: 0.2
         })
       end.to raise_error(NATS::IO::SocketTimeoutError)
 
@@ -382,15 +364,14 @@ describe "Client - Errors" do
       errors = []
 
       nc = NATS::IO::Client.new
-      mon = Monitor.new
-      done = mon.new_cond
+      closed = false
 
       nc.on_error do |e|
         errors << e
       end
 
       nc.on_close do
-        mon.synchronize { done.signal }
+        closed = true
       end
 
       expect do
@@ -402,7 +383,7 @@ describe "Client - Errors" do
       end.to_not raise_error
 
       nc.close
-      mon.synchronize { done.wait(3) }
+      wait_until(description: "the client to close") { closed }
       puts errors
     end
   end
@@ -435,15 +416,14 @@ describe "Client - Errors" do
       errors = []
 
       nc = NATS::IO::Client.new
-      mon = Monitor.new
-      done = mon.new_cond
+      closed = false
 
       nc.on_error do |e|
         errors << e
       end
 
       nc.on_close do
-        mon.synchronize { done.signal }
+        closed = true
       end
 
       expect do
@@ -455,7 +435,7 @@ describe "Client - Errors" do
       end.to raise_error(NATS::IO::ConnectError)
 
       nc.close
-      mon.synchronize { done.wait(3) }
+      wait_until(description: "the client to close") { closed }
       expect(errors.count).to eql(1)
       expect(errors.first).to be_a(NATS::IO::ConnectError)
     end

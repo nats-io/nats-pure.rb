@@ -106,7 +106,8 @@ describe "JetStream" do
       expect(info.config.max_waiting).to eql(30)
       expect(info.num_pending).to eql(1)
 
-      msgs = sub.fetch(3)
+      # Only one message matches; a larger batch would wait out the timeout.
+      msgs = sub.fetch(1)
       msgs.each do |msg|
         msg.ack
       end
@@ -212,7 +213,7 @@ describe "JetStream" do
       msg = msgs.first
       msg.ack
       expect(msg.data).to eql("hello: 2")
-      sleep 0.5
+      wait_until(description: "the ack to be processed") { sub.consumer_info.num_ack_pending == 0 }
 
       resp = nc.request("$JS.API.CONSUMER.INFO.test.test", timeout: 2)
       info = JSON.parse(resp.data, symbolize_names: true)

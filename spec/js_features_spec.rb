@@ -33,7 +33,9 @@ describe "JetStream" do
         })
         # For ephemerals, have to use nil for both subject and durable options
         sub = js.pull_subscribe(nil, nil, name: "my-ephemeral", stream: "MULTI_FILTER")
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(4)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -52,7 +54,9 @@ describe "JetStream" do
         })
         # To bind without creating have to use nil for both subject and durable options.
         sub = js.pull_subscribe(nil, nil, name: "my-durable", stream: "MULTI_FILTER")
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(1)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -69,7 +73,9 @@ describe "JetStream" do
         expect(info.config.max_waiting).to eql(512)
         expect(info.num_pending).to eql(3)
 
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(3)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -88,7 +94,9 @@ describe "JetStream" do
         expect(info.config.max_waiting).to eql(128)
         expect(info.num_pending).to eql(1)
 
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(1)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -102,7 +110,9 @@ describe "JetStream" do
         info = sub.consumer_info
         expect(info.num_pending).to eql(3)
 
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(3)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -118,7 +128,9 @@ describe "JetStream" do
         info = sub.consumer_info
         expect(info.num_pending).to eql(3)
 
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(3)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
@@ -134,7 +146,9 @@ describe "JetStream" do
         info = sub.consumer_info
         expect(info.num_pending).to eql(3)
 
-        msgs = sub.fetch(5)
+        msgs = sub.fetch(3)
+        # Nothing else may match the filter.
+        expect(sub.consumer_info.num_pending).to eql(0)
         msgs.each do |msg|
           msg.ack
         end
