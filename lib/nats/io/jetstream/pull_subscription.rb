@@ -57,6 +57,16 @@ module NATS
         end
 
         t = MonotonicTime.now
+        # `start_time` is only otherwise assigned in the `batch > 1` branch below, but the final
+        # "did we time out" check after the case statement reads it unconditionally. For batch ==
+        # 1, that leaves `start_time` nil there, normally masked because that branch has its own
+        # earlier timeout check. It surfaces when two threads call #fetch concurrently on the same
+        # subscription: @pending_queue/wait_for_msgs_cond are shared per-subscription, so #dispatch's
+        # `wait_for_msgs_cond.signal` can wake a thread whose own request wasn't the one satisfied.
+        # That thread finds nothing left in the queue, skips its own timeout check, and falls into
+        # the tail check with `start_time == nil`, raising `TypeError: nil can't be coerced into
+        # Float` instead of the intended timeout/empty result.
+        start_time = t
         timeout = params[:timeout] ||= 5
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
