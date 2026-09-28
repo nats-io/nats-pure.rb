@@ -84,8 +84,7 @@ module NATS
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
           batch: batch,
-          **params.slice(:group, :min_pending, :min_ack_pending, :priority),
-          id: synchronize { @pin_id }
+          **params.slice(:group, :min_pending, :min_ack_pending, :priority)
         }
 
         msgs = []
@@ -99,30 +98,13 @@ module NATS
 
           # Check if there is any pending message in the queue that is
           # ready to be consumed.
-          synchronize do
-            unless @pending_queue.empty?
-              msg = pop_pending
-              # Check for a no msgs response status.
-              if JS.is_status_msg(msg)
-                case msg.header["Status"]
-                when JS::Status::NoMsgs
-                  nil
-                when JS::Status::RequestTimeout
-                  # Skip
-                else
-                  raise JS.from_msg(msg)
-                end
-              else
-                msgs << msg
-              end
-            end
-          end
+          take_pending(msgs, batch)
 
           # Make lingering request with expiration.
           next_req[:expires] = expires
           if msgs.empty?
             # Make publish request and wait for response.
-            @nc.publish(@jsi.nms, JS.next_req_to_json(next_req), @subject)
+            pull(next_req)
 
             # Wait for result of fetch or timeout.
             synchronize { wait_for_msgs_cond.wait(timeout) }
@@ -153,37 +135,12 @@ module NATS
           ####################################################
 
           # Check if there already enough in the pending buffer.
-          synchronize do
-            if batch <= @pending_queue.size
-              batch.times do
-                msg = pop_pending
+          return msgs if take_pending(msgs, batch)
 
-                # Check for a no msgs response status.
-                if JS.is_status_msg(msg)
-                  case msg.header[JS::Header::Status]
-                  when JS::Status::NoMsgs, JS::Status::RequestTimeout
-                    # Skip these
-                    next
-                  when JS::Status::PinIdMismatch
-                    # The messages before it came while pinned.
-                    return msgs unless msgs.empty?
-
-                    raise JS.from_msg(msg)
-                  else
-                    raise JS.from_msg(msg)
-                  end
-                else
-                  msgs << msg
-                end
-              end
-
-              return msgs
-            end
-          end
-
-          # Make publish request and wait any response.
+          # Make publish request for the rest and wait any response.
+          next_req[:batch] = batch - msgs.size
           next_req[:no_wait] = true
-          @nc.publish(@jsi.nms, JS.next_req_to_json(next_req), @subject)
+          pull(next_req)
 
           # Not receiving even one is a timeout.
           start_time = MonotonicTime.now
@@ -204,10 +161,13 @@ module NATS
               next_req[:expires] = expires
               next_req.delete(:no_wait)
 
-              @nc.publish(@jsi.nms, JS.next_req_to_json(next_req), @subject)
+              pull(next_req)
             when JS::Status::RequestTimeout
               raise NATS::Timeout.new("nats: fetch request timeout")
             else
+              # An error ends the fetch, with the messages taken before it.
+              return msgs unless msgs.empty?
+
               raise JS.from_msg(msg)
             end
           else
@@ -256,12 +216,10 @@ module NATS
                         raise NATS::Timeout.new("nats: fetch timeout")
                       end
                     end
-                  when JS::Status::PinIdMismatch
-                    # The messages before it came while pinned.
+                  else
+                    # An error ends the fetch, with the messages taken before it.
                     return msgs unless msgs.empty?
 
-                    raise JS.from_msg(msg)
-                  else
                     raise JS.from_msg(msg)
                   end
 
@@ -292,6 +250,40 @@ module NATS
       end
 
       private
+
+      # take_pending takes up to batch messages delivered before a fetch
+      # pulls, skipping the statuses that ended earlier pulls: they are no
+      # reply to the fetch's own. Returns whether the fetch is over, as it
+      # has its batch, or took messages before an error.
+      def take_pending(msgs, batch)
+        synchronize do
+          while msgs.size < batch && (msg = pop_pending)
+            if !JS.is_status_msg(msg)
+              msgs << msg
+            elsif !pull_ended?(msg)
+              # An error ends the fetch, with the messages taken before it.
+              return true unless msgs.empty?
+
+              raise JS.from_msg(msg)
+            end
+          end
+          msgs.size == batch
+        end
+      end
+
+      # pull_ended? tells whether a status only says that a pull ended:
+      # 404 No Messages, or 408, as the pull expired or other pulls wait
+      # for more messages than are pending. Other statuses are errors.
+      def pull_ended?(msg)
+        [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(msg.header[JS::Header::Status])
+      end
+
+      # pull asks the server for messages, sending the pin id of the
+      # subscription, if it is pinned, as the messages it took last say.
+      def pull(next_req)
+        next_req[:id] = synchronize { @pin_id }
+        @nc.publish(@jsi.nms, JS.next_req_to_json(next_req), @subject)
+      end
 
       # pop_pending takes the next message delivered to the subscription,
       # if there is one: the connection delivers under the same lock, so

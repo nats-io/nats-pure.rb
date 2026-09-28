@@ -298,6 +298,40 @@ describe "JetStream" do
       sub.mon_exit if sub&.mon_owned?
     end
 
+    it "should not take statuses left over from earlier pulls for the reply to its own" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+
+      [1, 2].each do |batch|
+        # The 408 that ends a pull can come after the fetch that sent it gave up.
+        2.times do
+          nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1, expires: 10_000_000}.to_json, sub.subject)
+        end
+        wait_until { sub.pending_queue.size == 2 }
+        data = Array.new(batch) { |i| "#{batch}.#{i}" }
+        data.each { |d| js.publish("test", d) }
+
+        expect(sub.fetch(batch).map(&:data)).to eql(data)
+      end
+    end
+
+    it "should return the messages it took when the server refuses its pull" do
+      js = nc.jetstream
+      js.add_consumer("test", durable_name: "one", max_waiting: 1)
+      sub = js.pull_subscribe("test", "one", stream: "test")
+      other = js.pull_subscribe("test", "one", stream: "test")
+      js.publish("test", "left")
+      # Left by an earlier pull.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.one", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+      # The only pull the consumer lets wait.
+      other_fetch = Thread.new { other.fetch(1, timeout: 1) }
+      eventually { expect(js.consumer_info("test", "one").num_waiting).to eql(1) }
+
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(["left"])
+      expect { other_fetch.value }.to raise_error(NATS::Timeout)
+    end
+
     it "should find the pull subscription by subject" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream

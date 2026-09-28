@@ -12,6 +12,12 @@ module NATS
 
       private
 
+      def take_pending: (Array[NATS::Msg], Integer) -> bool
+
+      def pull_ended?: (NATS::Msg) -> bool
+
+      def pull: (Hash[Symbol, untyped]) -> void
+
       def pop_pending: () -> NATS::Msg?
     end
   end

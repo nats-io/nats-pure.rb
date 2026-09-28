@@ -1084,6 +1084,65 @@ describe "JetStream" do
             expect(msgs.map(&:data)).to eql(["third"])
             expect(pin_ids(msgs)).not_to eql([pin_id])
           end
+
+          it "raises PinIdMismatch only once, however many messages the next fetch asks for" do
+            create_consumer
+            js.publish("prio", "first")
+            pin_id = pin_ids(sub.fetch(1, group: "A")).first
+            leftover_pull(pin_id, 1)
+            js.unpin_consumer("PRIO", "c", "A")
+            js.publish("prio", "second")
+            wait_until { sub.pending_queue.size == 1 }
+            other = js.pull_subscribe("prio", "c", stream: "PRIO")
+            expect(other.fetch(1, group: "A").map(&:data)).to eql(["second"])
+
+            expect { sub.fetch(2, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+            # No longer pinned, the subscription now waits on standby.
+            expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+          end
+
+          it "returns the messages the next fetch took when its own pull is turned away" do
+            create_consumer
+            js.publish("prio", "first")
+            pin_id = pin_ids(sub.fetch(1, group: "A")).first
+            leftover_pull(pin_id, 1)
+            js.publish("prio", "left")
+            wait_until { sub.pending_queue.size == 1 }
+            js.unpin_consumer("PRIO", "c", "A")
+            other = js.pull_subscribe("prio", "c", stream: "PRIO")
+            js.publish("prio", "second")
+            expect(other.fetch(1, group: "A").map(&:data)).to eql(["second"])
+
+            # It pulls with the pin id of the message it took, which the
+            # server turns away (423), as another subscription is pinned.
+            msgs = sub.fetch(2, group: "A")
+            expect(msgs.map(&:data)).to eql(["left"])
+            expect(pin_ids(msgs)).to eql([pin_id])
+          end
+        end
+
+        it "counts the messages a pull left over got pinned with, and pulls the rest with their pin" do
+          create_consumer
+          js.publish("prio", "first")
+          pin_id = pin_ids(sub.fetch(1, group: "A")).first
+          js.unpin_consumer("PRIO", "c", "A")
+          # A pull without a pin id, left over from before the subscription
+          # was pinned, gets the group pinned to it again, with a new pin.
+          nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
+            {batch: 1, expires: 5_000_000_000, group: "A"}.to_json, sub.subject)
+          js.publish("prio", "second")
+          wait_until { sub.pending_queue.size == 1 }
+          js.publish("prio", "third")
+          requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
+          nc.flush
+
+          msgs = sub.fetch(2, group: "A")
+
+          expect(msgs.map(&:data)).to eql(["second", "third"])
+          expect(pin_ids(msgs)).to eql([pinned_client_id])
+          expect(pin_ids(msgs)).not_to eql([pin_id])
+          pull = JSON.parse(requests.next_msg.data, symbolize_names: true)
+          expect(pull.slice(:batch, :id)).to eql({batch: 1, id: pinned_client_id})
         end
 
         it "refuses to unpin a group the consumer does not have" do
