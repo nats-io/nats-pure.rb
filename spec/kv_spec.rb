@@ -794,4 +794,75 @@ describe "KeyValue" do
       FileUtils.remove_entry(tmpdir)
     end
   end
+
+  # Deletes the consumer of the watcher, as a server restart does, and waits
+  # for the watcher to notice the missing heartbeats and recreate it.
+  def recreate_consumer(js, w)
+    consumer = w._sub.jsi.consumer
+    js.delete_consumer(w._sub.jsi.stream, consumer)
+    wait_until(description: "the consumer to be recreated") { w._sub.jsi.consumer != consumer }
+  end
+
+  it "should only watch the keys when the consumer is recreated" do
+    skip "watch requires ruby >= 3.2" if watch_unsupported
+
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(bucket: "RECREATE")
+    kv.put("foo.a", "1")
+    kv.put("bar.a", "1")
+
+    w = kv.watch("foo.*", idle_heartbeat: 1)
+    expect(w.updates.key).to eql("foo.a")
+    expect(w.updates).to eql(nil)
+
+    recreate_consumer(js, w)
+    kv.put("bar.b", "2")
+    kv.put("foo.b", "2")
+
+    keys = []
+    keys << w.updates.key until keys.last == "foo.b"
+    expect(keys).to all(start_with("foo."))
+
+    w.stop
+    nc.close
+  end
+
+  it "should not repeat the last entry when the consumer is recreated" do
+    skip "watch requires ruby >= 3.2" if watch_unsupported
+
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(bucket: "RECREATE")
+    kv.put("foo", "1")
+
+    w = kv.watch("foo", idle_heartbeat: 1)
+    expect(w.updates.revision).to eql(1)
+    expect(w.updates).to eql(nil)
+
+    recreate_consumer(js, w)
+    kv.put("foo", "2")
+    expect(w.updates.revision).to eql(2)
+
+    w.stop
+    nc.close
+  end
+
+  it "should recreate the consumer of a watcher with no entries yet" do
+    skip "watch requires ruby >= 3.2" if watch_unsupported
+
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(bucket: "RECREATE")
+
+    w = kv.watch("foo", idle_heartbeat: 1)
+    expect(w.updates).to eql(nil)
+
+    recreate_consumer(js, w)
+    kv.put("foo", "1")
+    expect(w.updates.revision).to eql(1)
+
+    w.stop
+    nc.close
+  end
 end

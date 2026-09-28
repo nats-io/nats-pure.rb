@@ -379,6 +379,9 @@ module NATS
       begin
         cinfo = sub.consumer_info
         stream_name = cinfo.stream_name
+        # Snapshot the keys filter too: subscribe set it on the consumer,
+        # not on ordered, and a recreated consumer needs it.
+        filter = cinfo.config.to_h.slice(:filter_subject, :filter_subjects)
 
         synchronize do
           init_setup_done = true
@@ -417,9 +420,11 @@ module NATS
           current
         }
         if !active
-          ccreq = ordered.dup
+          ccreq = ordered.merge(filter)
           ccreq[:deliver_policy] = "by_start_sequence"
-          ccreq[:opt_start_seq] = watcher._sseq
+          # Resume after the last entry. With none yet, that is the start of
+          # the stream, so earlier revisions of the keys are replayed too.
+          ccreq[:opt_start_seq] = watcher._sseq + 1
           ccreq[:deliver_subject] = deliver_subject
           ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
           ccreq[:inactive_threshold] = ordered[:inactive_threshold]

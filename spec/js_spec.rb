@@ -55,6 +55,53 @@ describe "JetStream" do
 
       nc.close
     end
+
+    it "should return the counter value in the pub ack" do
+      nc = NATS.connect(@s.uri)
+      nc.request("$JS.API.STREAM.CREATE.CTR", {name: "CTR", subjects: ["ctr"], allow_msg_counter: true}.to_json)
+      js = nc.jetstream
+
+      ack = js.publish("ctr", header: {"Nats-Incr" => "+1"})
+      expect(ack.seq).to eql(1)
+      expect(ack.val).to eql("1")
+
+      ack = js.publish("ctr", header: {"Nats-Incr" => "+2"})
+      expect(ack.seq).to eql(2)
+      expect(ack.val).to eql("3")
+
+      nc.close
+    end
+
+    it "should return the batch id and size in the pub ack of an atomic batch commit" do
+      nc = NATS.connect(@s.uri)
+      nc.request("$JS.API.STREAM.CREATE.ATOMIC", {name: "ATOMIC", subjects: ["atomic"], allow_atomic: true}.to_json)
+      js = nc.jetstream
+
+      js.publish("atomic", "not batched")
+      ack = js.publish("atomic", "batched", header: {
+        "Nats-Batch-Id" => "b1", "Nats-Batch-Sequence" => "1", "Nats-Batch-Commit" => "1"
+      })
+      expect(ack.seq).to eql(2)
+      expect(ack.batch).to eql("b1")
+      expect(ack.count).to eql(1)
+
+      nc.close
+    end
+  end
+
+  describe "PubAck" do
+    it "should ignore fields it does not know" do
+      ack = NATS::JetStream::PubAck.new(JSON.parse('{"stream":"foo","seq":1,"future":true}', symbolize_names: true))
+      expect(ack.stream).to eql("foo")
+      expect(ack.seq).to eql(1)
+    end
+
+    it "should leave the hash it is given unchanged" do
+      fields = {stream: "foo", seq: 1, future: true}.freeze
+
+      expect(NATS::JetStream::PubAck.new(fields).seq).to eql(1)
+      expect(fields).to eql({stream: "foo", seq: 1, future: true})
+    end
   end
 
   describe "Pull Subscribe" do
@@ -126,6 +173,26 @@ describe "JetStream" do
       end
       info = sub.consumer_info
       expect(info.num_pending).to eql(0)
+    end
+
+    it "should pull subscribe with ack_policy none" do
+      js = nc.jetstream
+      js.publish("test", "1")
+
+      # The server omits ack_wait from consumers that do not ack.
+      sub = js.pull_subscribe("test", "psub-none", config: {ack_policy: "none"})
+      msgs = sub.fetch(1)
+      expect(msgs.map(&:data)).to eql(["1"])
+      info = sub.consumer_info
+      expect(info.config.ack_policy).to eql("none")
+      expect(info.config.ack_wait).to be_nil
+      expect(info.num_ack_pending).to eql(0)
+
+      # Binding to the existing consumer looks it up first.
+      js.publish("test", "2")
+      sub = js.pull_subscribe("test", "psub-none")
+      msgs = sub.fetch(1)
+      expect(msgs.map(&:data)).to eql(["2"])
     end
 
     it "should find the pull subscription by subject" do
@@ -806,6 +873,30 @@ describe "JetStream" do
 
       nc.close
     end
+
+    it "should create subscribers with ack_policy none" do
+      js = nc.jetstream
+      js.add_stream(name: "none", subjects: ["none"])
+      js.publish("none", "1")
+
+      # The server omits ack_wait from consumers that do not ack.
+      sub = js.subscribe("none", config: {ack_policy: "none"})
+      expect(sub.next_msg.data).to eql("1")
+      info = sub.consumer_info
+      expect(info.config.ack_policy).to eql("none")
+      expect(info.config.ack_wait).to be_nil
+      sub.unsubscribe
+
+      sub = js.subscribe("none", durable: "none-dur", config: {ack_policy: "none"})
+      expect(sub.next_msg.data).to eql("1")
+      sub.unsubscribe
+      wait_until { !js.consumer_info("none", "none-dur").push_bound }
+
+      # Binding to the existing durable looks it up first.
+      sub = js.subscribe("none", durable: "none-dur")
+      js.publish("none", "2")
+      expect(sub.next_msg.data).to eql("2")
+    end
   end
 
   describe "Domain" do
@@ -1309,6 +1400,26 @@ describe "JetStream" do
       # expect do
       #   nc.jsm.add_consumer(stream_name, consumer_config)
       # end.to raise_error NATS::JetStream::Error::ServerError
+    end
+
+    it "should support jsm.add_consumer with ack_policy none" do
+      stream_name = "ack-none"
+      nc.jsm.add_stream(name: stream_name, subjects: ["foo"])
+
+      # The server omits ack_wait from consumers that do not ack.
+      info = nc.jsm.add_consumer(stream_name, durable_name: "pull", ack_policy: "none")
+      expect(info.config.ack_policy).to eql("none")
+      expect(info.config.ack_wait).to be_nil
+      info = nc.jsm.consumer_info(stream_name, "pull")
+      expect(info.config.ack_wait).to be_nil
+
+      info = nc.jsm.add_consumer(stream_name, durable_name: "push", ack_policy: "none", deliver_subject: nc.new_inbox)
+      expect(info.config.ack_wait).to be_nil
+
+      # Consumers that ack still get the default ack_wait, in seconds.
+      info = nc.jsm.add_consumer(stream_name, durable_name: "explicit", ack_policy: "explicit")
+      expect(info.config.ack_wait).to eq(30)
+      nc.close
     end
 
     it "should support jsm.delete_consumer" do
