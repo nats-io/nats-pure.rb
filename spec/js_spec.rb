@@ -315,6 +315,31 @@ describe "JetStream" do
       end
     end
 
+    it "should take the reply that came before it waits for it" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      # As when the fetching thread is preempted right after it pulls: the
+      # reply is there before the fetch waits for it.
+      replies = 0
+      replied = -> { wait_until { sub.pending_queue.size >= replies } }
+      nc.singleton_class.prepend(Module.new do
+        define_method(:publish) do |subject, *args, **opts|
+          super(subject, *args, **opts).tap { replied.call if subject.start_with?("$JS.API.CONSUMER.MSG.NEXT") }
+        end
+      end)
+
+      replies = 1
+      js.publish("test", "1")
+      expect(sub.fetch(1, timeout: 1).map(&:data)).to eql(["1"])
+
+      replies = 3
+      data = %w[2 3 4]
+      data.each { |d| js.publish("test", d) }
+      started = NATS::MonotonicTime.now
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(data)
+      expect(NATS::MonotonicTime.since(started)).to be < 0.5
+    end
+
     it "should wait for its message past the end of an earlier pull" do
       js = nc.jetstream
       sub = js.pull_subscribe("test", "psub")

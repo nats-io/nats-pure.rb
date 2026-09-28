@@ -16,6 +16,8 @@ module NATS
 
       def pull_ended?: (NATS::Msg) -> bool
 
+      def wait_pending: (Float) -> NATS::Msg?
+
       def pull: (Hash[Symbol, untyped]) -> void
 
       def pop_pending: () -> NATS::Msg?

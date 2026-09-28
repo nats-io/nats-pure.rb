@@ -79,162 +79,48 @@ module NATS
           raise ArgumentError.new("nats: #{min} should be an integer of at least 1")
         end
 
-        t = MonotonicTime.now
         timeout = params[:timeout] ||= 5
-        expires = (timeout * 1_000_000_000) - 100_000
+        deadline = MonotonicTime.now + timeout
+        msgs = []
+        # Take what was delivered before this fetch first.
+        return msgs if take_pending(msgs, batch)
+
+        # A fetch of one message pulls and waits for it. A fetch of more
+        # first asks for the messages that are pending, without waiting.
+        no_wait = batch > 1
         next_req = {
-          batch: batch,
+          batch: batch - msgs.size,
           **params.slice(:group, :min_pending, :min_ack_pending, :priority)
         }
-
-        msgs = []
-        case
-        when batch < 1
-          raise ::NATS::JetStream::Error.new("nats: invalid batch size")
-        when batch == 1
-          ####################################################
-          # Fetch (1)                                        #
-          ####################################################
-
-          # Check if there is any pending message in the queue that is
-          # ready to be consumed.
-          take_pending(msgs, batch)
-
-          # Make lingering request with expiration.
-          next_req[:expires] = expires
-          if msgs.empty?
-            # Make publish request and wait for response.
-            pull(next_req)
-
-            # Wait for result of fetch or timeout. Another thread fetching
-            # from the subscription can take the message that wakes this
-            # one up, and a status that ends a pull, this fetch's or an
-            # earlier one's, brings no message: like nats.go, wait on.
-            loop do
-              remaining = timeout - MonotonicTime.since(t)
-              raise ::NATS::Timeout.new("nats: fetch timeout") if remaining <= 0
-
-              synchronize { wait_for_msgs_cond.wait(remaining) }
-              msg = pop_pending
-              next if msg.nil?
-              if JS.is_status_msg(msg)
-                next if pull_ended?(msg)
-
-                raise JS.from_msg(msg)
-              end
-              raise ::NATS::Timeout.new("nats: fetch timeout") if MonotonicTime.since(t) > timeout
-
-              break msgs << msg
-            end
-          end
-        when batch > 1
-          ####################################################
-          # Fetch (n)                                        #
-          ####################################################
-
-          # Check if there already enough in the pending buffer.
-          return msgs if take_pending(msgs, batch)
-
-          # Make publish request for the rest and wait any response.
-          next_req[:batch] = batch - msgs.size
+        if no_wait
           next_req[:no_wait] = true
-          pull(next_req)
-
-          # Not receiving even one is a timeout.
-          start_time = MonotonicTime.now
-          msg = nil
-
-          synchronize do
-            wait_for_msgs_cond.wait(timeout)
-
-            msg = pop_pending
-          end
-
-          # Check if the first message was a response saying that
-          # there are no messages.
-          if !msg.nil? && JS.is_status_msg(msg)
-            case msg.header[JS::Header::Status]
-            when JS::Status::NoMsgs, JS::Status::RequestTimeout
-              # No messages now, or other pulls wait for more than are
-              # pending (408 Requests Pending), as nats.go does.
-              # Make another request that does wait.
-              next_req[:expires] = expires
-              next_req.delete(:no_wait)
-
-              pull(next_req)
-            else
-              # An error ends the fetch, with the messages taken before it.
-              return msgs unless msgs.empty?
-
-              raise JS.from_msg(msg)
-            end
-          else
-            msgs << msg unless msg.nil?
-          end
-
-          # Check if have not received yet a single message.
-          duration = MonotonicTime.since(start_time)
-
-          if msgs.empty? && (duration > timeout)
-            raise NATS::Timeout.new("nats: fetch timeout")
-          end
-
-          needed = batch - msgs.count
-          while (needed > 0) && (MonotonicTime.since(start_time) < timeout)
-            duration = MonotonicTime.since(start_time)
-
-            # Wait for the rest of the messages.
-            synchronize do
-              # Wait until there is a message delivered.
-              if @pending_queue.empty?
-                deadline = timeout - duration
-                MonotonicTime.now
-
-                wait_for_msgs_cond.wait(deadline) if deadline > 0
-
-                duration = MonotonicTime.since(start_time)
-                if msgs.empty? && @pending_queue.empty? && (duration > timeout)
-                  raise NATS::Timeout.new("nats: fetch timeout")
-                end
-              end
-
-              unless @pending_queue.empty?
-                msg = pop_pending
-
-                if JS.is_status_msg(msg)
-                  case msg.header[JS::Header::Status]
-                  when JS::Status::NoMsgs, JS::Status::RequestTimeout
-                    duration = MonotonicTime.since(start_time)
-
-                    if duration > timeout
-                      # Only received a subset of the messages.
-                      if !msgs.empty?
-                        return msgs
-                      else
-                        raise NATS::Timeout.new("nats: fetch timeout")
-                      end
-                    end
-                  else
-                    # An error ends the fetch, with the messages taken before it.
-                    return msgs unless msgs.empty?
-
-                    raise JS.from_msg(msg)
-                  end
-
-                else
-                  # Add to the set of messages that will be returned.
-                  msgs << msg
-                  needed -= 1
-                end
-              end
-            end # :end: synchronize
-          end
+        else
+          next_req[:expires] = (timeout * 1_000_000_000) - 100_000
         end
+        pull(next_req)
 
-        # Check if timed out waiting for messages.
-        if msgs.empty? && (MonotonicTime.since(start_time) > timeout)
-          raise NATS::Timeout.new("nats: fetch timeout")
+        while msgs.size < batch && (msg = wait_pending(deadline))
+          if !JS.is_status_msg(msg)
+            msgs << msg
+            no_wait = false
+          elsif no_wait && pull_ended?(msg)
+            # No messages pending, or other pulls wait for more than are
+            # pending (408 Requests Pending), as nats.go does: pull again,
+            # and wait.
+            no_wait = false
+            next_req.delete(:no_wait)
+            next_req[:expires] = (timeout * 1_000_000_000) - 100_000
+            pull(next_req)
+          elsif !pull_ended?(msg)
+            # An error ends the fetch, with the messages taken before it.
+            return msgs unless msgs.empty?
+
+            raise JS.from_msg(msg)
+          end
+          # Otherwise a pull ended, this fetch's or an earlier one's: like
+          # nats.go, wait on for messages until the timeout.
         end
+        raise ::NATS::Timeout.new("nats: fetch timeout") if msgs.empty?
 
         msgs
       end
@@ -274,6 +160,23 @@ module NATS
       # for more messages than are pending. Other statuses are errors.
       def pull_ended?(msg)
         [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(msg.header[JS::Header::Status])
+      end
+
+      # wait_pending takes the next message delivered to the subscription,
+      # waiting for one until the deadline, if there is none yet; nil when
+      # none came. Other fetches can take the message it was woken up for.
+      def wait_pending(deadline)
+        synchronize do
+          loop do
+            msg = pop_pending
+            return msg if msg
+
+            remaining = deadline - MonotonicTime.now
+            return if remaining <= 0
+
+            wait_for_msgs_cond.wait(remaining)
+          end
+        end
       end
 
       # pull asks the server for messages, sending the pin id of the
