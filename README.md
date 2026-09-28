@@ -118,6 +118,31 @@ js.create_consumer("orders", config)
 # An update replaces the whole config, so send all of it again.
 # Fails with NATS::JetStream::Error::ConsumerDoesNotExist if there is no "billing".
 js.update_consumer("orders", config.merge(max_ack_pending: 200))
+
+# Deliver nothing for an hour, or until resumed.
+js.pause_consumer("orders", "billing", Time.now + 3600)
+js.resume_consumer("orders", "billing")
+```
+
+Pull consumers can serve priority groups. With the `"pinned_client"` policy,
+the server delivers to one subscription at a time, and to another once it
+stops pulling for `priority_timeout` seconds. A fetch pulls as it starts,
+and can then wait for its whole timeout, 5 seconds by default, without
+pulling again: keep the timeout, plus the time between fetches, below
+`priority_timeout`, or the subscription can lose its pin:
+
+```ruby
+js.create_consumer("orders", durable_name: "shipping", filter_subject: "orders.paid",
+  priority_policy: "pinned_client", priority_groups: ["workers"], priority_timeout: 60)
+
+psub = js.pull_subscribe("orders.paid", "shipping", stream: "orders")
+begin
+  psub.fetch(5, group: "workers").each(&:ack)
+rescue NATS::JetStream::Error::PinIdMismatch
+  # This subscription is no longer pinned; the next fetch may be pinned again.
+rescue NATS::IO::Timeout
+  # Nothing to do, or another subscription is pinned.
+end
 ```
 
 ## Service API
