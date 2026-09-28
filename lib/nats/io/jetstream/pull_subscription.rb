@@ -156,14 +156,14 @@ module NATS
           # there are no messages.
           if !msg.nil? && JS.is_status_msg(msg)
             case msg.header[JS::Header::Status]
-            when JS::Status::NoMsgs
+            when JS::Status::NoMsgs, JS::Status::RequestTimeout
+              # No messages now, or other pulls wait for more than are
+              # pending (408 Requests Pending), as nats.go does.
               # Make another request that does wait.
               next_req[:expires] = expires
               next_req.delete(:no_wait)
 
               pull(next_req)
-            when JS::Status::RequestTimeout
-              raise NATS::Timeout.new("nats: fetch request timeout")
             else
               # An error ends the fetch, with the messages taken before it.
               return msgs unless msgs.empty?

@@ -1312,5 +1312,65 @@ describe "JetStream" do
         end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10218) }
       end
     end
+
+    # A fetch of more than one message first asks for the messages that
+    # are pending, without waiting. The server turns such a pull away,
+    # with 408 Requests Pending, when other pulls wait for more messages
+    # than are pending.
+    describe "fetching while other pulls wait for more messages than are pending" do
+      let(:sub) { js.pull_subscribe("waiting", "c", stream: "WAITING") }
+      let(:other) { js.pull_subscribe("waiting", "c", stream: "WAITING") }
+
+      before { js.add_stream(name: "WAITING", subjects: ["waiting"]) }
+
+      def num_waiting
+        js.consumer_info("WAITING", "c").num_waiting
+      end
+
+      def publish(count)
+        count.times { |i| js.publish("waiting", i.to_s) }
+      end
+
+      it "waits for the messages" do
+        js.create_consumer("WAITING", durable_name: "c")
+        other_fetch = Thread.new { other.fetch(10, timeout: 1) }
+        eventually { expect(num_waiting).to eql(1) }
+        # Paused, the consumer keeps its messages pending.
+        js.pause_consumer("WAITING", "c", Time.now + 60)
+        publish(5)
+
+        fetch = Thread.new { sub.fetch(3, timeout: 5) }
+        expect { other_fetch.value }.to raise_error(NATS::Timeout)
+        expect(fetch).to be_alive
+        eventually { expect(num_waiting).to eql(1) }
+        js.resume_consumer("WAITING", "c")
+        # The server delivers again once it has a new message.
+        js.publish("waiting", "5")
+
+        expect(fetch.value.map(&:data)).to eql(%w[0 1 2])
+      end
+
+      it "waits for the messages of a pinned subscription while another one is on standby" do
+        js.create_consumer("WAITING", durable_name: "c", priority_policy: "pinned_client", priority_groups: ["A"])
+        js.publish("waiting", "pin")
+        sub.fetch(1, group: "A")
+        other_fetch = Thread.new { other.fetch(10, group: "A", timeout: 1.5) }
+        eventually { expect(num_waiting).to eql(1) }
+        publish(5)
+
+        expect(sub.fetch(3, group: "A").map(&:data)).to eql(%w[0 1 2])
+        expect { other_fetch.value }.to raise_error(NATS::Timeout)
+      end
+
+      it "waits for the messages while pulls with a higher overflow minimum wait" do
+        js.create_consumer("WAITING", durable_name: "c", priority_policy: "overflow", priority_groups: ["A"])
+        other_fetch = Thread.new { other.fetch(10, group: "A", min_pending: 100, timeout: 1.5) }
+        eventually { expect(num_waiting).to eql(1) }
+        publish(5)
+
+        expect(sub.fetch(3, group: "A").map(&:data)).to eql(%w[0 1 2])
+        expect { other_fetch.value }.to raise_error(NATS::Timeout)
+      end
+    end
   end
 end
