@@ -332,6 +332,56 @@ describe "JetStream" do
       expect { other_fetch.value }.to raise_error(NATS::Timeout)
     end
 
+    # Threads fetching from one subscription share its messages, and wake
+    # up for each other's (#181).
+    it "should only time out when threads fetch one message at a time from an empty consumer" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+
+      errors = Queue.new
+      Array.new(6) do
+        Thread.new do
+          20.times do
+            sub.fetch(1, timeout: 0.1)
+          rescue NATS::Timeout
+            # No messages.
+          rescue => e
+            errors << e
+          end
+        end
+      end.each(&:join)
+
+      expect(Array.new(errors.size) { errors.pop }).to eql([])
+    end
+
+    it "should deliver each message once to threads fetching one message at a time" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      data = Array.new(200) { |i| i.to_s }
+      data.each { |d| js.publish("test", d) }
+
+      received = Queue.new
+      errors = Queue.new
+      Array.new(6) do
+        Thread.new do
+          loop do
+            sub.fetch(1, timeout: 0.2).each do |msg|
+              received << msg.data
+              msg.ack
+            end
+          rescue NATS::Timeout
+            break if received.size >= data.size
+          rescue => e
+            errors << e
+            break
+          end
+        end
+      end.each { |thread| thread.join(10) }
+
+      expect(Array.new(errors.size) { errors.pop }).to eql([])
+      expect(Array.new(received.size) { received.pop }.sort_by(&:to_i)).to eql(data)
+    end
+
     it "should find the pull subscription by subject" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream

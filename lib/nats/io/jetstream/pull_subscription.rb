@@ -106,16 +106,17 @@ module NATS
             # Make publish request and wait for response.
             pull(next_req)
 
-            # Wait for result of fetch or timeout.
-            synchronize { wait_for_msgs_cond.wait(timeout) }
-
-            msg = pop_pending
-            msgs << msg if msg
-
-            duration = MonotonicTime.since(t)
-            if duration > timeout
+            # Wait for result of fetch or timeout. Another thread fetching
+            # from the subscription can take the message that wakes this one.
+            msg = nil
+            while msg.nil? && (remaining = timeout - MonotonicTime.since(t)) > 0
+              synchronize { wait_for_msgs_cond.wait(remaining) }
+              msg = pop_pending
+            end
+            if msg.nil? || MonotonicTime.since(t) > timeout
               raise ::NATS::Timeout.new("nats: fetch timeout")
             end
+            msgs << msg
 
             # Should have received at least a message at this point,
             # if that is not the case then error already.
