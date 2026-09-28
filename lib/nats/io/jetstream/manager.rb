@@ -224,6 +224,38 @@ module NATS
         true
       end
 
+      # reset_consumer resets the delivery state of a consumer, as if it had
+      # been created again to start from a stream sequence: by default the
+      # one after its ack floor, so that it redelivers the messages that
+      # await acks. Only a consumer that delivers all messages, or from a
+      # start sequence or time, can be given a sequence, and not one before
+      # its start. Requires nats-server v2.14.0: an older server, like a
+      # stream or consumer that does not exist, lets the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Integer] :seq Stream sequence to deliver from; 0, like
+      #   none, for the one after the ack floor.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerResetResponse]
+      # @raise [ArgumentError] When seq is not an integer of 0 or more.
+      # @raise [JetStream::Error::ConsumerInvalidReset] When the consumer cannot be reset to seq.
+      # @raise [NATS::Timeout] When the stream or consumer does not exist, or the server
+      #   cannot reset consumers.
+      def reset_consumer(stream, consumer, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+        seq = params[:seq]
+        if !seq.nil? && !(seq.is_a?(Integer) && seq >= 0)
+          raise ArgumentError.new("nats: seq should be an integer of 0 or more")
+        end
+
+        req_subject = "#{@prefix}.CONSUMER.RESET.#{stream}.#{consumer}"
+        req = {seq: seq}.compact
+        result = api_request(req_subject, req.to_json, params.except(:seq))
+        JetStream::API::ConsumerResetResponse.new(result)
+      end
+
       # find_stream_name_by_subject does a lookup for the stream to which
       # the subject belongs.
       # @param subject [String] The subject that belongs to a stream.

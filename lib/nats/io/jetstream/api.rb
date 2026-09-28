@@ -223,6 +223,24 @@ module NATS
         end
       end
 
+      # ConsumerResetResponse is the result of resetting a consumer
+      # (requires nats-server v2.14.0).
+      #
+      # @!attribute info
+      #   @return [ConsumerInfo] The consumer after the reset.
+      # @!attribute reset_seq
+      #   @return [Integer] Stream sequence the consumer delivers from. The next
+      #     message it delivers can come later, as the first one from there that
+      #     matches its filter.
+      ConsumerResetResponse = Struct.new(:info, :reset_seq,
+        keyword_init: true) do
+        def initialize(opts = {})
+          reset_seq = opts[:reset_seq]
+          super(info: ConsumerInfo.new(opts), reset_seq: reset_seq)
+          freeze
+        end
+      end
+
       # StreamConfig represents the configuration of a stream from JetStream.
       #
       # @!attribute type

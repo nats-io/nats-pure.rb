@@ -101,6 +101,8 @@ module NATS
               ::NATS::JetStream::Error::ConsumerAlreadyExists.new(err)
             when 10149
               ::NATS::JetStream::Error::ConsumerDoesNotExist.new(err)
+            when 10204
+              ::NATS::JetStream::Error::ConsumerInvalidReset.new(err)
             else
               ::NATS::JetStream::Error::BadRequest.new(err)
             end

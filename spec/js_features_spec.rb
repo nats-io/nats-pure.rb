@@ -1137,5 +1137,99 @@ describe "JetStream" do
         end
       end
     end
+
+    # Requires nats-server v2.14.0.
+    describe "resetting consumers" do
+      before do
+        js.add_stream(name: "RESET", subjects: ["reset"])
+        10.times { |i| js.publish("reset", i.to_s) }
+      end
+
+      def next_stream_seq(sub)
+        sub.fetch(1).first.metadata.sequence.to_a
+      end
+
+      it "redelivers from the message after the ack floor" do
+        js.create_consumer("RESET", durable_name: "c")
+        sub = js.pull_subscribe("reset", "c", stream: "RESET")
+        sub.fetch(4).first(2).each(&:ack_sync)
+
+        resp = js.reset_consumer("RESET", "c")
+
+        expect(resp.reset_seq).to eql(3)
+        expect(resp.info).to be_a(NATS::JetStream::API::ConsumerInfo)
+        expect(resp.info.name).to eql("c")
+        expect(resp.info.num_ack_pending).to eql(0)
+        expect(resp.info.num_pending).to eql(8)
+        expect(resp.info.config).to eql(js.consumer_info("RESET", "c").config)
+        expect(resp).to be_frozen
+        # The consumer sequence starts again at 1.
+        expect(next_stream_seq(sub)).to eql([3, 1])
+      end
+
+      it "resets to the given stream sequence" do
+        js.create_consumer("RESET", durable_name: "c")
+        sub = js.pull_subscribe("reset", "c", stream: "RESET")
+        params = {seq: 7}
+
+        resp = js.reset_consumer("RESET", "c", params)
+
+        expect(resp.reset_seq).to eql(7)
+        expect(resp.info.num_pending).to eql(4)
+        expect(next_stream_seq(sub)).to eql([7, 1])
+        expect(params).to eql({seq: 7})
+      end
+
+      it "refuses to reset a consumer to before its start sequence" do
+        js.create_consumer("RESET", durable_name: "c", deliver_policy: "by_start_sequence", opt_start_seq: 5)
+
+        expect do
+          js.reset_consumer("RESET", "c", seq: 4)
+        end.to raise_error(NATS::JetStream::Error::ConsumerInvalidReset) { |e|
+          expect(e).to be_a(NATS::JetStream::Error::BadRequest)
+          expect(e.err_code).to eql(10204)
+        }
+        expect(js.reset_consumer("RESET", "c", seq: 5).reset_seq).to eql(5)
+      end
+
+      it "refuses to reset a consumer to before its start time" do
+        js.create_consumer("RESET", durable_name: "c", deliver_policy: "by_start_time",
+          opt_start_time: Time.now.utc.iso8601(9))
+        2.times { |i| js.publish("reset", "late #{i}") }
+
+        expect do
+          js.reset_consumer("RESET", "c", seq: 10)
+        end.to raise_error(NATS::JetStream::Error::ConsumerInvalidReset) { |e| expect(e.err_code).to eql(10204) }
+        expect(js.reset_consumer("RESET", "c", seq: 11).reset_seq).to eql(11)
+      end
+
+      it "requires the sequence to be an integer of 0 or more" do
+        js.create_consumer("RESET", durable_name: "c")
+
+        [-1, 1.5, "3"].each do |seq|
+          expect { js.reset_consumer("RESET", "c", seq: seq) }.to raise_error(ArgumentError, /seq/)
+        end
+        # As without a sequence, 0 resets the consumer to its ack floor.
+        expect(js.reset_consumer("RESET", "c", seq: 0).reset_seq).to eql(1)
+      end
+
+      it "resets a consumer that starts with new messages only to its ack floor" do
+        js.create_consumer("RESET", durable_name: "c", deliver_policy: "new")
+
+        expect do
+          js.reset_consumer("RESET", "c", seq: 1)
+        end.to raise_error(NATS::JetStream::Error::ConsumerInvalidReset)
+        expect(js.reset_consumer("RESET", "c").reset_seq).to eql(11)
+      end
+
+      it "times out for a consumer that does not exist" do
+        expect { js.reset_consumer("RESET", "missing", timeout: 0.5) }.to raise_error(NATS::Timeout)
+      end
+
+      it "requires a stream and a consumer name" do
+        expect { js.reset_consumer(nil, "c") }.to raise_error(NATS::JetStream::Error::InvalidStreamName)
+        expect { js.reset_consumer("RESET", "") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
+      end
+    end
   end
 end

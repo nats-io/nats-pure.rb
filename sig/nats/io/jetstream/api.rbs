@@ -20,6 +20,9 @@ module NATS
       class ConsumerPauseResponse < Struct[bool | Time | Integer]
       end
 
+      class ConsumerResetResponse < Struct[NATS::JetStream::API::ConsumerInfo | Integer]
+      end
+
       class StreamConfig < Struct[String | Hash[Symbol, untyped] | NATS::JetStream::API::StreamState | bool | Integer]
         def to_json: (*Hash[untyped, untyped]) -> String
       end

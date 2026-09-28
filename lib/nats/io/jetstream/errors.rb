@@ -124,6 +124,11 @@ module NATS
       # it as a bad request, so unlike ConsumerNotFound it is not NotFound.
       class ConsumerDoesNotExist < BadRequest; end
 
+      # When reset_consumer is given a sequence that the consumer cannot be
+      # reset to: one before its start, or any for a consumer that does
+      # not deliver all messages or from a start sequence or time.
+      class ConsumerInvalidReset < BadRequest; end
+
       # When a fetch from a consumer with the pinned_client priority policy
       # finds the subscription no longer pinned, as its pin expired or it
       # was unpinned. The subscription forgets its pin, so that its next

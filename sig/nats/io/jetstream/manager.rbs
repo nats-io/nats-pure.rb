@@ -25,6 +25,8 @@ module NATS
 
       def unpin_consumer: (String, String, String, ?Hash[Symbol, untyped]) -> bool
 
+      def reset_consumer: (String, String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerResetResponse
+
       def find_stream_name_by_subject: (String, ?Hash[Symbol, untyped]) -> String
 
       def get_msg: (String, ?Hash[Symbol, untyped]) -> JetStream::API::RawStreamMsg
