@@ -74,7 +74,7 @@ module NATS
           opts[:created] = Time.parse(opts[:created])
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
-          opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS
+          opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS if opts[:config][:ack_wait]
           opts[:config][:inactive_threshold] = opts[:config][:inactive_threshold] / ::NATS::NANOSECONDS if opts[:config][:inactive_threshold]
           opts[:config][:idle_heartbeat] = opts[:config][:idle_heartbeat] / ::NATS::NANOSECONDS if opts[:config][:idle_heartbeat]
           opts[:config] = ConsumerConfig.new(opts[:config])
@@ -96,7 +96,8 @@ module NATS
       # @!attribute ack_policy
       #   @return [String]
       # @!attribute ack_wait
-      #   @return [Integer]
+      #   Seconds; nil when the server omits it, as for consumers that do not ack.
+      #   @return [Integer, nil]
       # @!attribute max_deliver
       #   @return [Integer]
       # @!attribute replay_policy
