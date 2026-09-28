@@ -95,7 +95,7 @@ module NATS
         if no_wait
           next_req[:no_wait] = true
         else
-          next_req[:expires] = (timeout * 1_000_000_000) - 100_000
+          next_req[:expires] = pull_expires(deadline)
         end
         pull(next_req)
 
@@ -103,13 +103,11 @@ module NATS
           if !JS.is_status_msg(msg)
             msgs << msg
             no_wait = false
-          elsif no_wait && pull_ended?(msg)
-            # No messages pending, or other pulls wait for more than are
-            # pending (408 Requests Pending), as nats.go does: pull again,
-            # and wait.
+          elsif no_wait && nothing_pending?(msg)
+            # As nats.go does, pull again, and wait until the timeout.
             no_wait = false
             next_req.delete(:no_wait)
-            next_req[:expires] = (timeout * 1_000_000_000) - 100_000
+            next_req[:expires] = pull_expires(deadline)
             pull(next_req)
           elsif !pull_ended?(msg)
             # An error ends the fetch, with the messages taken before it.
@@ -160,6 +158,22 @@ module NATS
       # for more messages than are pending. Other statuses are errors.
       def pull_ended?(msg)
         [JS::Status::NoMsgs, JS::Status::RequestTimeout].include?(msg.header[JS::Header::Status])
+      end
+
+      # nothing_pending? tells whether a status says that a pull that does
+      # not wait got nothing: no messages are pending (404), or other pulls
+      # wait for more than are pending (408 Requests Pending). Other 408s
+      # end pulls that expired, such as those of earlier fetches.
+      def nothing_pending?(msg)
+        status, desc = msg.header.values_at(JS::Header::Status, JS::Header::Desc)
+        status == JS::Status::NoMsgs || (status == JS::Status::RequestTimeout && desc == "Requests Pending")
+      end
+
+      # pull_expires is how long a pull may wait, in nanoseconds: until a
+      # little before the fetch gives up, so that the fetch sees it end.
+      # Never 0, with which the pull would wait for good.
+      def pull_expires(deadline)
+        [((deadline - MonotonicTime.now) * 1_000_000_000).to_i - 100_000, 1].max
       end
 
       # wait_pending takes the next message delivered to the subscription,

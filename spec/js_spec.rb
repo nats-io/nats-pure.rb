@@ -340,6 +340,55 @@ describe "JetStream" do
       expect(NATS::MonotonicTime.since(started)).to be < 0.5
     end
 
+    describe "when an earlier pull ends before its first pull is answered" do
+      let(:js) { nc.jetstream }
+      let(:sub) { js.pull_subscribe("test", "psub") }
+      let(:pulls) { nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub") }
+
+      # Holds back the first pull of the fetch, which does not wait, until
+      # the 408 that ends a pull of another consumer, sent to the same
+      # subscription as if left over from an earlier fetch, is there.
+      def fetch_after_earlier_pull_ends(batch, timeout)
+        js.add_consumer("test", durable_name: "later", deliver_policy: "new")
+        sub
+        pulls
+        nc.flush
+        held = false
+        ended = -> { wait_until { sub.pending_queue.size == 1 } }
+        nc.singleton_class.prepend(Module.new do
+          define_method(:publish) do |subject, data = "", *args, **opts|
+            if !held && data.include?("no_wait")
+              held = true
+              ended.call
+            end
+            super(subject, data, *args, **opts)
+          end
+        end)
+        nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.later", {batch: 1, expires: 100_000_000}.to_json, sub.subject)
+        sub.fetch(batch, timeout: timeout)
+      end
+
+      def pulls_sent
+        nc.flush
+        Array.new(pulls.pending_queue.size) { JSON.parse(pulls.next_msg.data, symbolize_names: true) }
+      end
+
+      it "should not take that end for its pull being turned away" do
+        data = Array.new(5) { |i| i.to_s }
+        data.each { |d| js.publish("test", d) }
+
+        expect(fetch_after_earlier_pull_ends(5, 2).map(&:data)).to eql(data)
+        expect(pulls_sent).to eql([{batch: 5, no_wait: true}])
+      end
+
+      it "should not pull again for longer than it has left" do
+        expect { fetch_after_earlier_pull_ends(5, 1) }.to raise_error(NATS::Timeout)
+        pull = pulls_sent.last
+        expect(pull[:no_wait]).to be_nil
+        expect(pull[:expires]).to be <= 900_000_000
+      end
+    end
+
     it "should wait for its message past the end of an earlier pull" do
       js = nc.jetstream
       sub = js.pull_subscribe("test", "psub")
