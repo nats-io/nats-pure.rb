@@ -928,6 +928,23 @@ describe "KeyValue" do
       w.stop
     end
 
+    it "keeps watching several keys when the consumer is recreated" do
+      skip "watch requires ruby >= 3.2" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
+
+      kv = js.create_key_value(bucket: "MULTI_RECREATE")
+      kv.put("a.1", "1")
+      w = kv.watch(["a.*", "c.*"], idle_heartbeat: 1)
+      expect(w.updates.key).to eql("a.1")
+      expect(w.updates).to eql(nil)
+
+      recreate_consumer(js, w)
+      kv.put("b.1", "2")
+      kv.put("c.1", "3")
+
+      expect(w.updates.key).to eql("c.1")
+      w.stop
+    end
+
     it "watches every key when given no keys" do
       skip "watch requires ruby >= 3.2" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
 
