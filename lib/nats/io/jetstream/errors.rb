@@ -123,6 +123,18 @@ module NATS
       # When update_consumer finds no consumer to update. The server reports
       # it as a bad request, so unlike ConsumerNotFound it is not NotFound.
       class ConsumerDoesNotExist < BadRequest; end
+
+      # When a fetch from a consumer with the pinned_client priority policy
+      # finds the subscription no longer pinned, as its pin expired or it
+      # was unpinned. The subscription forgets its pin, so that its next
+      # fetch can be pinned again.
+      # This condition is represented with a message that has 423 status code header.
+      class PinIdMismatch < APIError
+        def initialize(params = {})
+          super
+          @code ||= 423
+        end
+      end
     end
   end
 end

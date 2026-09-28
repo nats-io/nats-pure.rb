@@ -55,6 +55,9 @@ module NATS
 
       class ConsumerDoesNotExist < NATS::JetStream::Error::BadRequest
       end
+
+      class PinIdMismatch < NATS::JetStream::Error::APIError
+      end
     end
   end
 end

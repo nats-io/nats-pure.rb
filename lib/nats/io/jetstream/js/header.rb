@@ -29,6 +29,7 @@ module NATS
         ExpectedLastMsgID = "Nats-Expected-Last-Msg-Id"
         LastConsumerSeq = "Nats-Last-Consumer"
         LastStreamSeq = "Nats-Last-Stream"
+        PinId = "Nats-Pin-Id"
 
         # rubocop:enable Naming/ConstantName
       end

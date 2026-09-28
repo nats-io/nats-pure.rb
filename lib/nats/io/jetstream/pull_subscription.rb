@@ -59,6 +59,13 @@ module NATS
       #   minimums, either will do.
       # @return [Array<NATS::Msg>]
       # @raise [ArgumentError] When a minimum is not an integer of at least 1.
+      # @raise [NATS::JetStream::Error::PinIdMismatch] With the pinned_client priority
+      #   policy, when the fetch got no messages as the subscription is no longer
+      #   pinned: its pin expired or it was unpinned. The next fetch can be pinned
+      #   again. A subscription that does not pull for the priority_timeout of the
+      #   consumer loses its pin. A fetch pulls as it starts, but can then wait for
+      #   its whole timeout without pulling again, so keep the fetch timeout, plus
+      #   the time between fetches, below the priority_timeout.
       def fetch(batch = 1, params = {})
         if batch < 1
           raise ::NATS::JetStream::Error.new("nats: invalid batch size")
@@ -75,7 +82,8 @@ module NATS
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
           batch: batch,
-          **params.slice(:group, :min_pending, :min_ack_pending)
+          **params.slice(:group, :min_pending, :min_ack_pending),
+          id: synchronize { @pin_id }
         }
 
         msgs = []
@@ -91,8 +99,7 @@ module NATS
           # ready to be consumed.
           synchronize do
             unless @pending_queue.empty?
-              msg = @pending_queue.pop
-              @pending_size -= msg.data.size
+              msg = pop_pending
               # Check for a no msgs response status.
               if JS.is_status_msg(msg)
                 case msg.header["Status"]
@@ -118,12 +125,8 @@ module NATS
             # Wait for result of fetch or timeout.
             synchronize { wait_for_msgs_cond.wait(timeout) }
 
-            unless @pending_queue.empty?
-              msg = @pending_queue.pop
-              @pending_size -= msg.data.size
-
-              msgs << msg
-            end
+            msg = pop_pending
+            msgs << msg if msg
 
             duration = MonotonicTime.since(t)
             if duration > timeout
@@ -151,8 +154,7 @@ module NATS
           synchronize do
             if batch <= @pending_queue.size
               batch.times do
-                msg = @pending_queue.pop
-                @pending_size -= msg.data.size
+                msg = pop_pending
 
                 # Check for a no msgs response status.
                 if JS.is_status_msg(msg)
@@ -160,6 +162,11 @@ module NATS
                   when JS::Status::NoMsgs, JS::Status::RequestTimeout
                     # Skip these
                     next
+                  when JS::Status::PinIdMismatch
+                    # The messages before it came while pinned.
+                    return msgs unless msgs.empty?
+
+                    raise JS.from_msg(msg)
                   else
                     raise JS.from_msg(msg)
                   end
@@ -183,10 +190,7 @@ module NATS
           synchronize do
             wait_for_msgs_cond.wait(timeout)
 
-            unless @pending_queue.empty?
-              msg = @pending_queue.pop
-              @pending_size -= msg.data.size
-            end
+            msg = pop_pending
           end
 
           # Check if the first message was a response saying that
@@ -235,8 +239,7 @@ module NATS
               end
 
               unless @pending_queue.empty?
-                msg = @pending_queue.pop
-                @pending_size -= msg.data.size
+                msg = pop_pending
 
                 if JS.is_status_msg(msg)
                   case msg.header[JS::Header::Status]
@@ -251,6 +254,11 @@ module NATS
                         raise NATS::Timeout.new("nats: fetch timeout")
                       end
                     end
+                  when JS::Status::PinIdMismatch
+                    # The messages before it came while pinned.
+                    return msgs unless msgs.empty?
+
+                    raise JS.from_msg(msg)
                   else
                     raise JS.from_msg(msg)
                   end
@@ -279,6 +287,30 @@ module NATS
       # @return [JetStream::API::ConsumerInfo] The latest ConsumerInfo of the consumer.
       def consumer_info(params = {})
         @jsi.js.consumer_info(@jsi.stream, @jsi.consumer, params)
+      end
+
+      private
+
+      # pop_pending takes the next message delivered to the subscription,
+      # if there is one: the connection delivers under the same lock, so
+      # waiting for one here would stop it.
+      # With the pinned_client priority policy, every message delivered to
+      # a pinned subscription carries its pin id, which it sends with its
+      # pulls, until a 423 status says that it is no longer pinned.
+      def pop_pending
+        synchronize do
+          return if @pending_queue.empty?
+
+          msg = @pending_queue.pop
+          @pending_size -= msg.data.size
+          header = msg.header || {}
+          if header[JS::Header::Status] == JS::Status::PinIdMismatch
+            @pin_id = nil
+          elsif header[JS::Header::PinId]
+            @pin_id = header[JS::Header::PinId]
+          end
+          msg
+        end
       end
     end
     private_constant :PullSubscription

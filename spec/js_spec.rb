@@ -260,6 +260,42 @@ describe "JetStream" do
       expect(msgs.map(&:data)).to eql(["2"])
     end
 
+    it "should not hold up the connection when a fetch finds no message to take" do
+      js = nc.jetstream
+      js.publish("test", "1")
+      sub = js.pull_subscribe("test", "psub")
+      # As when a fetch saw a pending message that a concurrent fetch
+      # took first. The connection delivers to the subscription under its
+      # lock, so taking from an empty queue must not wait holding it.
+      taker = Thread.new { sub.send(:pop_pending) }
+      taker.join(0.1)
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+
+      expect { nc.flush(1) }.not_to raise_error
+      expect(sub.fetch(1).map(&:data)).to eql(["1"])
+    ensure
+      taker&.kill
+    end
+
+    it "should check for a message and take it under one lock" do
+      js = nc.jetstream
+      js.publish("test", "1")
+      sub = js.pull_subscribe("test", "psub")
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+      # Otherwise a concurrent fetch can take the message between the
+      # check and the take, which then waits for the next one.
+      sub.mon_enter
+      taker = Thread.new { sub.send(:pop_pending) }
+
+      expect(taker.join(0.1)).to be_nil
+      expect(sub.pending_queue.size).to eql(1)
+      sub.mon_exit
+      expect(taker.value.data).to eql("1")
+    ensure
+      sub.mon_exit if sub&.mon_owned?
+    end
+
     it "should find the pull subscription by subject" do
       nc = NATS.connect(@s.uri)
       js = nc.jetstream

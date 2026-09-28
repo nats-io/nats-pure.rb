@@ -33,7 +33,7 @@ module NATS
           req[:expires] = next_req[:expires].to_i if next_req[:expires]
           req[:no_wait] = next_req[:no_wait] if next_req[:no_wait]
           # Priority groups (requires nats-server v2.11.0).
-          req.merge!(next_req.slice(:group, :min_pending, :min_ack_pending).compact)
+          req.merge!(next_req.slice(:group, :min_pending, :min_ack_pending, :id).compact)
           req.to_json
         end
 
@@ -72,6 +72,8 @@ module NATS
           check_503_error(msg)
           code = msg.header[JS::Header::Status]
           desc = msg.header[JS::Header::Desc]
+          return ::NATS::JetStream::Error::PinIdMismatch.new({description: desc}) if code == Status::PinIdMismatch
+
           ::NATS::JetStream::API::Error.new({code: code, description: desc})
         end
 

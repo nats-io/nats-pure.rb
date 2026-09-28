@@ -908,6 +908,201 @@ describe "JetStream" do
           }
         end
       end
+
+      describe "with the pinned_client policy" do
+        let(:sub) { js.pull_subscribe("prio", "c", stream: "PRIO") }
+
+        def create_consumer(config = {})
+          js.create_consumer("PRIO", {durable_name: "c",
+                                      priority_policy: "pinned_client", priority_groups: ["A"]}.merge(config))
+        end
+
+        def pin_ids(msgs)
+          msgs.map { |msg| msg.header["Nats-Pin-Id"] }.uniq
+        end
+
+        def pinned_client_id
+          js.consumer_info("PRIO", "c").priority_groups.first.pinned_client_id
+        end
+
+        it "pins the first subscription to pull, while the others wait" do
+          create_consumer
+          publish(10)
+
+          msgs = sub.fetch(3, group: "A")
+          expect(msgs.map(&:data)).to eql(["0", "1", "2"])
+          pin_id = pin_ids(msgs).first
+          expect(pin_ids(msgs)).to eql([pin_id]).and(eql([pinned_client_id]))
+          expect(js.consumer_info("PRIO", "c").priority_groups.first.pinned_ts).to be_within(60).of(Time.now)
+
+          other = js.pull_subscribe("prio", "c", stream: "PRIO")
+          expect { other.fetch(3, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+
+          msgs = sub.fetch(3, group: "A")
+          expect(msgs.map(&:data)).to eql(["3", "4", "5"])
+          expect(pin_ids(msgs)).to eql([pin_id])
+        end
+
+        it "sends its pin id with every pull request of a fetch" do
+          create_consumer
+          publish(1)
+          pin_id = pin_ids(sub.fetch(1, group: "A")).first
+          requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
+          nc.flush
+
+          expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+
+          pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
+          expect(pulls.map { |pull| pull.slice(:no_wait, :group, :id) }).to eql([
+            {no_wait: true, group: "A", id: pin_id},
+            {group: "A", id: pin_id}
+          ])
+        end
+
+        it "raises PinIdMismatch once the pin expired, then pins the subscription again" do
+          create_consumer(priority_timeout: 1)
+          publish(10)
+          pin_id = pin_ids(sub.fetch(2, group: "A")).first
+
+          # Wait out the pin, which lasts a second without pulls.
+          sleep 1.5
+          expect { sub.fetch(2, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch) { |e|
+            expect(e).to be_a(NATS::JetStream::API::Error)
+            expect(e.code).to eql(423)
+          }
+
+          msgs = sub.fetch(2, group: "A")
+          expect(msgs.map(&:data)).to eql(["2", "3"])
+          expect(pin_ids(msgs)).to eql([pinned_client_id])
+          expect(pin_ids(msgs)).not_to eql([pin_id])
+        end
+
+        it "keeps its pin after fetches that timed out" do
+          create_consumer
+          js.publish("prio", "first")
+          pin_id = pin_ids(sub.fetch(1, group: "A")).first
+          [2, 1].each do |batch|
+            expect { sub.fetch(batch, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+          end
+          other = js.pull_subscribe("prio", "c", stream: "PRIO")
+          other_fetch = Thread.new { other.fetch(1, group: "A", timeout: 1) }
+          eventually { expect(js.consumer_info("PRIO", "c").num_waiting).to eql(1) }
+          js.publish("prio", "second")
+
+          msgs = sub.fetch(1, group: "A", timeout: 2)
+          expect(msgs.map(&:data)).to eql(["second"])
+          expect(pin_ids(msgs)).to eql([pin_id])
+          expect { other_fetch.value }.to raise_error(NATS::Timeout)
+        end
+
+        it "unpins a group" do
+          create_consumer
+          publish(10)
+          pin_id = pin_ids(sub.fetch(1, group: "A")).first
+
+          expect(js.unpin_consumer("PRIO", "c", "A")).to be(true)
+          expect(js.consumer_info("PRIO", "c").priority_groups)
+            .to eql([NATS::JetStream::API::PriorityGroupState.new(group: "A")])
+
+          expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+          msgs = sub.fetch(1, group: "A")
+          expect(msgs.map(&:data)).to eql(["1"])
+          expect(pin_ids(msgs)).to eql([pinned_client_id])
+          expect(pin_ids(msgs)).not_to eql([pin_id])
+        end
+
+        it "returns the messages a fetch got before the subscription was unpinned" do
+          create_consumer
+          js.publish("prio", "first")
+          pin_id = pin_ids(sub.fetch(1, group: "A")).first
+          fetch = Thread.new { sub.fetch(5, group: "A", timeout: 5) }
+          eventually { expect(js.consumer_info("PRIO", "c").num_waiting).to eql(1) }
+
+          js.publish("prio", "second")
+          js.publish("prio", "third")
+          eventually { expect(js.consumer_info("PRIO", "c").num_ack_pending).to eql(3) }
+          js.unpin_consumer("PRIO", "c", "A")
+          # The server turns the waiting pull away once it has a message for it.
+          js.publish("prio", "fourth")
+
+          # The fetch ends there, long before its timeout.
+          expect(fetch.join(2.5)).to be(fetch)
+          msgs = fetch.value
+          expect(msgs.map(&:data)).to eql(["second", "third"])
+          expect(pin_ids(msgs)).to eql([pin_id])
+
+          msgs = sub.fetch(1, group: "A")
+          expect(msgs.map(&:data)).to eql(["fourth"])
+          expect(pin_ids(msgs)).not_to eql([pin_id])
+        end
+
+        describe "when a pull left over from an earlier fetch is turned away" do
+          # Such a pull is answered after its fetch ended, into the
+          # subscription, as when the fetch timed out a little before it.
+          def leftover_pull(pin_id, batch)
+            nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
+              {batch: batch, expires: 5_000_000_000, group: "A", id: pin_id}.to_json, sub.subject)
+          end
+
+          it "raises PinIdMismatch on the next fetch, which then pins the subscription again" do
+            create_consumer
+            js.publish("prio", "first")
+            pin_id = pin_ids(sub.fetch(1, group: "A")).first
+
+            leftover_pull(pin_id, 1)
+            js.unpin_consumer("PRIO", "c", "A")
+            js.publish("prio", "second")
+            wait_until { sub.pending_queue.size == 1 }
+            requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
+            nc.flush
+
+            expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+            msgs = sub.fetch(1, group: "A")
+            expect(msgs.map(&:data)).to eql(["second"])
+            expect(pin_ids(msgs)).not_to eql([pin_id])
+            # The fetch that raised did not pull, and the next one pulled
+            # without the stale pin id.
+            nc.flush
+            pulls = Array.new(requests.pending_queue.size) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
+            expect(pulls.map { |pull| pull.slice(:group, :id) }).to eql([{group: "A"}])
+          end
+
+          it "returns the messages the pull got before" do
+            create_consumer
+            js.publish("prio", "first")
+            pin_id = pin_ids(sub.fetch(1, group: "A")).first
+
+            leftover_pull(pin_id, 2)
+            js.publish("prio", "second")
+            wait_until { sub.pending_queue.size == 1 }
+            js.unpin_consumer("PRIO", "c", "A")
+            js.publish("prio", "third")
+            wait_until { sub.pending_queue.size == 2 }
+
+            expect(sub.fetch(2, group: "A").map(&:data)).to eql(["second"])
+            msgs = sub.fetch(1, group: "A")
+            expect(msgs.map(&:data)).to eql(["third"])
+            expect(pin_ids(msgs)).not_to eql([pin_id])
+          end
+        end
+
+        it "refuses to unpin a group the consumer does not have" do
+          create_consumer
+
+          expect { js.unpin_consumer("PRIO", "c", "B") }.to raise_error(NATS::JetStream::Error::BadRequest) { |e|
+            expect(e.err_code).to eql(10160)
+          }
+        end
+
+        it "raises ConsumerNotFound when unpinning a consumer that does not exist" do
+          expect { js.unpin_consumer("PRIO", "missing", "A") }.to raise_error(NATS::JetStream::Error::ConsumerNotFound)
+        end
+
+        it "requires a stream and a consumer name to unpin" do
+          expect { js.unpin_consumer("", "c", "A") }.to raise_error(NATS::JetStream::Error::InvalidStreamName)
+          expect { js.unpin_consumer("PRIO", nil, "A") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
+        end
+      end
     end
   end
 end

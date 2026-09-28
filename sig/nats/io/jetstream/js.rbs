@@ -12,7 +12,7 @@ module NATS
 
       def self.check_503_error: (NATS::Msg) -> void
 
-      def self.from_msg: (NATS::Msg) -> NATS::JetStream::API::Error
+      def self.from_msg: (NATS::Msg) -> (NATS::JetStream::API::Error | NATS::JetStream::Error::PinIdMismatch)
 
       def self.from_error: (Hash[Symbol, untyped]) -> (
           NATS::JetStream::Error::ServiceUnavailable |

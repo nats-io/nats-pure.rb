@@ -199,6 +199,31 @@ module NATS
         request_pause(stream, consumer, {}, params)
       end
 
+      # unpin_consumer unpins a priority group of a consumer with the
+      # pinned_client priority policy from its subscription, so that the
+      # next subscription to pull is pinned instead. The server tells the
+      # subscription that was pinned once it has a message for its pull, and
+      # its fetch then raises PinIdMismatch; without messages, the fetch
+      # times out. Requires nats-server v2.11.0.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param group [String] Name of the priority group.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [Boolean]
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [JetStream::Error::BadRequest] When the consumer has no such group.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def unpin_consumer(stream, consumer, group, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+
+        req_subject = "#{@prefix}.CONSUMER.UNPIN.#{stream}.#{consumer}"
+        api_request(req_subject, {group: group}.to_json, params)
+        true
+      end
+
       # find_stream_name_by_subject does a lookup for the stream to which
       # the subject belongs.
       # @param subject [String] The subject that belongs to a stream.
