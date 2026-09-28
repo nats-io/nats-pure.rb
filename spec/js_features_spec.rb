@@ -1231,5 +1231,27 @@ describe "JetStream" do
         expect { js.reset_consumer("RESET", "") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
       end
     end
+
+    # Requires nats-server v2.14.0.
+    describe "flow control ack policy" do
+      before { js.add_stream(name: "AFC", subjects: ["afc"]) }
+
+      it "creates push consumers acknowledged by flow control" do
+        created = js.create_consumer("AFC", durable_name: "c", ack_policy: "flow_control", deliver_subject: "afc.deliver")
+
+        # Such consumers have no ack wait, and the server turns on flow
+        # control and heartbeats for them.
+        [created, js.consumer_info("AFC", "c")].each do |info|
+          expect(info.config.to_h.slice(:ack_policy, :ack_wait, :flow_control, :idle_heartbeat))
+            .to eql({ack_policy: "flow_control", ack_wait: nil, flow_control: true, idle_heartbeat: 1})
+        end
+      end
+
+      it "refuses pull consumers" do
+        expect do
+          js.create_consumer("AFC", durable_name: "c", ack_policy: "flow_control")
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10218) }
+      end
+    end
   end
 end
