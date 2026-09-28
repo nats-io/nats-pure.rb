@@ -2,6 +2,13 @@
 
 ## main
 
+### Fixed
+
+- JetStream: `js.publish` raised `ArgumentError: unknown keywords` after the server had stored the message, when publishing to a stream with counters or committing an atomic batch, as the acks of nats-server 2.12 carry `val`, `batch` and `count`. `PubAck` now has these fields and ignores any it does not know, so fields added to acks later cannot break publish. (#192, #177, thanks @jnowakplacewise)
+- JetStream: `add_consumer`, `consumer_info`, `subscribe` and `pull_subscribe` raised `NoMethodError` for consumers that do not ack (`ack_policy: "none"`) created without an `ack_wait`, after the consumer had been created. The server omits `ack_wait` for them, and `config.ack_wait` is now `nil`. (#192)
+- KV: after its consumer was recreated, as after a server restart, a watcher yielded the entries of every key in the bucket instead of the watched keys. The recreated consumer now keeps the keys filter. (#192)
+- KV: after its consumer was recreated, a watcher yielded its last entry again, and a watcher with no entries yet, such as one on an empty bucket, never got its consumer back (`err_code` 10094) and stayed silent. The recreated consumer now starts after the last entry. (#192, #175, thanks @Xayc73)
+
 ## v2.6.0
 
 This release prepares nats-pure for nats-server 2.16, whose new JetStream
