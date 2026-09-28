@@ -1103,6 +1103,39 @@ describe "JetStream" do
           expect { js.unpin_consumer("PRIO", nil, "A") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
         end
       end
+
+      # Requires nats-server v2.12.0.
+      describe "with the prioritized policy" do
+        before do
+          info = js.create_consumer("PRIO", durable_name: "c", priority_policy: "prioritized", priority_groups: ["A"])
+          expect(info.config.priority_policy).to eql("prioritized")
+        end
+
+        def num_waiting
+          js.consumer_info("PRIO", "c").num_waiting
+        end
+
+        it "serves the pulls with the highest priority first" do
+          low, high = Array.new(2) { js.pull_subscribe("prio", "c", stream: "PRIO") }
+          low_fetch = Thread.new { low.fetch(5, group: "A", priority: 1, timeout: 5) }
+          eventually { expect(num_waiting).to eql(1) }
+          high_fetch = Thread.new { high.fetch(5, group: "A", priority: 0, timeout: 5) }
+          eventually { expect(num_waiting).to eql(2) }
+
+          publish(10)
+
+          expect(high_fetch.value.map(&:data)).to eql(%w[0 1 2 3 4])
+          expect(low_fetch.value.map(&:data)).to eql(%w[5 6 7 8 9])
+        end
+
+        it "refuses priorities above 9" do
+          sub = js.pull_subscribe("prio", "c", stream: "PRIO")
+
+          expect { sub.fetch(1, group: "A", priority: 10) }.to raise_error(NATS::JetStream::API::Error) { |e|
+            expect(e.description).to eql("Bad Request - Priority must be between 0 and 9")
+          }
+        end
+      end
     end
   end
 end

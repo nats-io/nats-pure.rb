@@ -153,7 +153,9 @@ describe "JetStream" do
     it "should carry the priority group settings that are given" do
       expect(next_req(batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5))
         .to eql({batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5})
-      expect(next_req(batch: 2, no_wait: true, group: nil, min_pending: nil))
+      expect(next_req(batch: 2, group: "A", id: "pin", priority: 0))
+        .to eql({batch: 2, group: "A", id: "pin", priority: 0})
+      expect(next_req(batch: 2, no_wait: true, group: nil, min_pending: nil, min_ack_pending: nil, id: nil, priority: nil))
         .to eql({batch: 2, no_wait: true})
     end
   end

@@ -57,6 +57,8 @@ module NATS
       # @option params [Integer] :min_ack_pending With the overflow priority policy, deliver
       #   only while at least this many messages await acks; at least 1. Given both
       #   minimums, either will do.
+      # @option params [Integer] :priority With the prioritized priority policy, the priority
+      #   of the pull, from 0, served first, to 9 (requires nats-server v2.12.0).
       # @return [Array<NATS::Msg>]
       # @raise [ArgumentError] When a minimum is not an integer of at least 1.
       # @raise [NATS::JetStream::Error::PinIdMismatch] With the pinned_client priority
@@ -82,7 +84,7 @@ module NATS
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
           batch: batch,
-          **params.slice(:group, :min_pending, :min_ack_pending),
+          **params.slice(:group, :min_pending, :min_ack_pending, :priority),
           id: synchronize { @pin_id }
         }
 
