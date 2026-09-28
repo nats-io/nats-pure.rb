@@ -107,27 +107,24 @@ module NATS
             pull(next_req)
 
             # Wait for result of fetch or timeout. Another thread fetching
-            # from the subscription can take the message that wakes this one.
-            msg = nil
-            while msg.nil? && (remaining = timeout - MonotonicTime.since(t)) > 0
+            # from the subscription can take the message that wakes this
+            # one up, and a status that ends a pull, this fetch's or an
+            # earlier one's, brings no message: like nats.go, wait on.
+            loop do
+              remaining = timeout - MonotonicTime.since(t)
+              raise ::NATS::Timeout.new("nats: fetch timeout") if remaining <= 0
+
               synchronize { wait_for_msgs_cond.wait(remaining) }
               msg = pop_pending
-            end
-            if msg.nil? || MonotonicTime.since(t) > timeout
-              raise ::NATS::Timeout.new("nats: fetch timeout")
-            end
-            msgs << msg
+              next if msg.nil?
+              if JS.is_status_msg(msg)
+                next if pull_ended?(msg)
 
-            # Should have received at least a message at this point,
-            # if that is not the case then error already.
-            if JS.is_status_msg(msgs.first)
-              msg = msgs.first
-              case msg.header[JS::Header::Status]
-              when JS::Status::RequestTimeout
-                raise NATS::Timeout.new("nats: fetch request timeout")
-              else
-                raise JS.from_msg(msgs.first)
+                raise JS.from_msg(msg)
               end
+              raise ::NATS::Timeout.new("nats: fetch timeout") if MonotonicTime.since(t) > timeout
+
+              break msgs << msg
             end
           end
         when batch > 1

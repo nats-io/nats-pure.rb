@@ -315,6 +315,21 @@ describe "JetStream" do
       end
     end
 
+    it "should wait for its message past the end of an earlier pull" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      pulls = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub")
+      nc.flush
+      # A pull left over from an earlier fetch, which ends while this one waits.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1, expires: 50_000_000}.to_json, sub.subject)
+      fetch = Thread.new { sub.fetch(1, timeout: 2) }
+      wait_until { pulls.pending_queue.size == 2 }
+      eventually { expect(js.consumer_info("test", "psub").num_waiting).to eql(1) }
+      js.publish("test", "1")
+
+      expect(fetch.value.map(&:data)).to eql(["1"])
+    end
+
     it "should return the messages it took when the server refuses its pull" do
       js = nc.jetstream
       js.add_consumer("test", durable_name: "one", max_waiting: 1)
