@@ -69,7 +69,19 @@ module NATS
     #   @return [Boolean] Indicates whether the published message is a duplicate.
     # @!attribute [domain] domain
     #   @return [String] JetStream Domain that processed the ack response.
-    PubAck = Struct.new(:stream, :seq, :duplicate, :domain, keyword_init: true)
+    # @!attribute [val] val
+    #   @return [String] Value of the counter after the increment, set when publishing to a stream with counters enabled, unless the message was a duplicate.
+    # @!attribute [batch] batch
+    #   @return [String] ID of the batch, set on the ack of an atomic batch commit.
+    # @!attribute [count] count
+    #   @return [Integer] Number of messages the batch stored, set on the ack of an atomic batch commit.
+    PubAck = Struct.new(:stream, :seq, :duplicate, :domain, :val, :batch, :count,
+      keyword_init: true) do
+      # Fields added by newer servers are ignored, so that they cannot break publish.
+      def initialize(opts = {})
+        super(**opts.slice(*members))
+      end
+    end
 
     # publish produces a message for JetStream.
     #

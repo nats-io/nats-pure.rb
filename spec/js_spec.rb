@@ -55,6 +55,53 @@ describe "JetStream" do
 
       nc.close
     end
+
+    it "should return the counter value in the pub ack" do
+      nc = NATS.connect(@s.uri)
+      nc.request("$JS.API.STREAM.CREATE.CTR", {name: "CTR", subjects: ["ctr"], allow_msg_counter: true}.to_json)
+      js = nc.jetstream
+
+      ack = js.publish("ctr", header: {"Nats-Incr" => "+1"})
+      expect(ack.seq).to eql(1)
+      expect(ack.val).to eql("1")
+
+      ack = js.publish("ctr", header: {"Nats-Incr" => "+2"})
+      expect(ack.seq).to eql(2)
+      expect(ack.val).to eql("3")
+
+      nc.close
+    end
+
+    it "should return the batch id and size in the pub ack of an atomic batch commit" do
+      nc = NATS.connect(@s.uri)
+      nc.request("$JS.API.STREAM.CREATE.ATOMIC", {name: "ATOMIC", subjects: ["atomic"], allow_atomic: true}.to_json)
+      js = nc.jetstream
+
+      js.publish("atomic", "not batched")
+      ack = js.publish("atomic", "batched", header: {
+        "Nats-Batch-Id" => "b1", "Nats-Batch-Sequence" => "1", "Nats-Batch-Commit" => "1"
+      })
+      expect(ack.seq).to eql(2)
+      expect(ack.batch).to eql("b1")
+      expect(ack.count).to eql(1)
+
+      nc.close
+    end
+  end
+
+  describe "PubAck" do
+    it "should ignore fields it does not know" do
+      ack = NATS::JetStream::PubAck.new(JSON.parse('{"stream":"foo","seq":1,"future":true}', symbolize_names: true))
+      expect(ack.stream).to eql("foo")
+      expect(ack.seq).to eql(1)
+    end
+
+    it "should leave the hash it is given unchanged" do
+      fields = {stream: "foo", seq: 1, future: true}.freeze
+
+      expect(NATS::JetStream::PubAck.new(fields).seq).to eql(1)
+      expect(fields).to eql({stream: "foo", seq: 1, future: true})
+    end
   end
 
   describe "Pull Subscribe" do
