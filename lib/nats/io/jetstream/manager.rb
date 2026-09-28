@@ -28,6 +28,21 @@ module NATS
     #
     #
     module Manager
+      # The defaults of the stream settings of nats-server 2.11 to 2.14,
+      # which are not sent, as nats.go does not send them either, so that
+      # servers that do not know the settings take configs that leave them
+      # at their defaults.
+      UNSENT_STREAM_DEFAULTS = {
+        allow_msg_ttl: [false],
+        subject_delete_marker_ttl: [0],
+        allow_msg_counter: [false],
+        allow_atomic: [false],
+        allow_msg_schedules: [false],
+        persist_mode: ["", "default"],
+        allow_batched: [false]
+      }.freeze
+      private_constant :UNSENT_STREAM_DEFAULTS
+
       # add_stream creates a stream with a given config.
       # @param config [JetStream::API::StreamConfig] Configuration of the stream to create.
       # @param params [Hash] Options to customize API request.
@@ -44,8 +59,7 @@ module NATS
         raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
         req_subject = "#{@prefix}.STREAM.CREATE.#{stream}"
 
-        cfg = config.to_h.compact
-        result = api_request(req_subject, cfg.to_json, params)
+        result = api_request(req_subject, stream_config_json(config), params)
         JetStream::API::StreamCreateResponse.new(result)
       end
 
@@ -77,8 +91,7 @@ module NATS
         raise ArgumentError.new(":name is required to create streams") unless stream
         raise ArgumentError.new("Spaces, tabs, period (.), greater than (>) or asterisk (*) are prohibited in stream names") if stream =~ /(\s|\.|>|\*)/
         req_subject = "#{@prefix}.STREAM.UPDATE.#{stream}"
-        cfg = config.to_h.compact
-        result = api_request(req_subject, cfg.to_json, params)
+        result = api_request(req_subject, stream_config_json(config), params)
         JetStream::API::StreamCreateResponse.new(result)
       end
 
@@ -342,6 +355,11 @@ module NATS
         raw_msg.data = msg.data
 
         raw_msg
+      end
+
+      # stream_config_json makes the request to create or update a stream.
+      def stream_config_json(config)
+        config.to_h.compact.reject { |key, value| UNSENT_STREAM_DEFAULTS[key]&.include?(value) }.to_json
       end
     end
   end

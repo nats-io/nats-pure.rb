@@ -140,6 +140,11 @@ module NATS
 
       # StreamConfig represents the configuration of a stream from JetStream.
       #
+      # Settings left nil are not sent, and neither are the settings of
+      # nats-server 2.11 to 2.14 left at their defaults, such as false.
+      # Servers since v2.12.0, and v2.11 ones in strict mode, refuse the
+      # settings that they do not know.
+      #
       # @!attribute type
       #   @return [String]
       # @!attribute config
@@ -194,6 +199,42 @@ module NATS
       #   of a stream, inactive_threshold is in nanoseconds
       #   (requires nats-server v2.10.0).
       #   @return [Hash]
+      # @!attribute allow_msg_ttl
+      #   Whether messages can be published with a TTL of their own
+      #   (requires nats-server v2.11.0). Once enabled, it cannot be
+      #   disabled, and before v2.11.2 it cannot be enabled by an update.
+      #   @return [Boolean]
+      # @!attribute subject_delete_marker_ttl
+      #   Nanoseconds to keep the marker that the server leaves when the last
+      #   message of a subject expires, at least a second (requires
+      #   nats-server v2.11.0). Before v2.11.2 it needs allow_msg_ttl. From
+      #   v2.11.2 on, setting it enables allow_msg_ttl and allow_rollup_hdrs,
+      #   and allows purges, so an update cannot set it on a stream that
+      #   denies them.
+      #   @return [Integer]
+      # @!attribute allow_msg_counter
+      #   Whether the stream holds counters, which cannot change later
+      #   (requires nats-server v2.12.0).
+      #   @return [Boolean]
+      # @!attribute allow_atomic
+      #   Whether messages can be published in atomic batches
+      #   (requires nats-server v2.12.0).
+      #   @return [Boolean]
+      # @!attribute allow_msg_schedules
+      #   Whether messages can schedule messages (requires nats-server
+      #   v2.12.0). Once enabled, it cannot be disabled. Setting it enables
+      #   allow_rollup_hdrs and allows purges, so an update cannot set it on
+      #   a stream that denies them.
+      #   @return [Boolean]
+      # @!attribute persist_mode
+      #   "async" to acknowledge messages before they are flushed to disk,
+      #   or "default"; the server reports the default as nil. It cannot
+      #   change later (requires nats-server v2.12.0).
+      #   @return [String, nil]
+      # @!attribute allow_batched
+      #   Whether messages can be published in fast batches
+      #   (requires nats-server v2.14.0).
+      #   @return [Boolean]
       StreamConfig = Struct.new(
         :name,
         :description,
@@ -225,6 +266,13 @@ module NATS
         :first_seq,
         :subject_transform,
         :consumer_limits,
+        :allow_msg_ttl,
+        :subject_delete_marker_ttl,
+        :allow_msg_counter,
+        :allow_atomic,
+        :allow_msg_schedules,
+        :persist_mode,
+        :allow_batched,
         keyword_init: true
       ) do
         def initialize(opts = {})

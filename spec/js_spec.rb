@@ -58,8 +58,8 @@ describe "JetStream" do
 
     it "should return the counter value in the pub ack" do
       nc = NATS.connect(@s.uri)
-      nc.request("$JS.API.STREAM.CREATE.CTR", {name: "CTR", subjects: ["ctr"], allow_msg_counter: true}.to_json)
       js = nc.jetstream
+      js.add_stream(name: "CTR", subjects: ["ctr"], allow_msg_counter: true)
 
       ack = js.publish("ctr", header: {"Nats-Incr" => "+1"})
       expect(ack.seq).to eql(1)
@@ -74,8 +74,8 @@ describe "JetStream" do
 
     it "should return the batch id and size in the pub ack of an atomic batch commit" do
       nc = NATS.connect(@s.uri)
-      nc.request("$JS.API.STREAM.CREATE.ATOMIC", {name: "ATOMIC", subjects: ["atomic"], allow_atomic: true}.to_json)
       js = nc.jetstream
+      js.add_stream(name: "ATOMIC", subjects: ["atomic"], allow_atomic: true)
 
       js.publish("atomic", "not batched")
       ack = js.publish("atomic", "batched", header: {
