@@ -626,4 +626,34 @@ describe "JetStream" do
       end
     end
   end
+
+  describe "NATS v2.11+ Features" do
+    before do
+      @tmpdir = Dir.mktmpdir("ruby-jetstream")
+      @s = NatsServerControl.new("nats://127.0.0.1:4852", "/tmp/test-nats.pid", "-js -sd=#{@tmpdir}")
+      @s.start_server(true)
+    end
+
+    after do
+      @s.kill_server
+      FileUtils.remove_entry(@tmpdir)
+    end
+
+    let(:nc) { NATS.connect(@s.uri) }
+    let(:js) { nc.jetstream }
+
+    after { nc.close }
+
+    describe "cluster info" do
+      # Clustered streams and consumers also report when their leader was
+      # elected, as cluster[:leader_since] (nats-server v2.12.0).
+      it "reports the leader of a stream on a standalone server, and no cluster for its consumers" do
+        js.add_stream(name: "STANDALONE", subjects: ["standalone"])
+        js.add_consumer("STANDALONE", durable_name: "c")
+
+        expect(js.stream_info("STANDALONE").cluster[:leader]).to be_a(String).and(satisfy { |leader| !leader.empty? })
+        expect(js.consumer_info("STANDALONE", "c").cluster).to be_nil
+      end
+    end
+  end
 end

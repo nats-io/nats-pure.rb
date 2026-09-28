@@ -104,6 +104,36 @@ describe "JetStream" do
     end
   end
 
+  describe "ConsumerInfo" do
+    # A consumer info response as the server sends it, with the given fields.
+    def consumer_info(fields = {})
+      NATS::JetStream::API::ConsumerInfo.new({
+        stream_name: "S", name: "C", created: "2026-01-01T00:00:00Z",
+        config: {durable_name: "C", ack_policy: "explicit"},
+        delivered: {consumer_seq: 0, stream_seq: 0},
+        ack_floor: {consumer_seq: 0, stream_seq: 0}
+      }.merge(fields))
+    end
+
+    it "should report the cluster of a clustered consumer" do
+      cluster = {name: "C1", leader: "n1", leader_since: "2026-01-01T00:00:00Z", replicas: [{name: "n2", current: true}]}
+
+      expect(consumer_info(cluster: cluster).cluster).to eql(cluster)
+      expect(consumer_info.cluster).to be_nil
+    end
+  end
+
+  describe "StreamInfo" do
+    it "should report the cluster of the stream" do
+      cluster = {name: "C1", leader: "n1", leader_since: "2026-01-01T00:00:00Z"}
+      info = NATS::JetStream::API::StreamInfo.new({
+        config: {name: "S"}, state: {messages: 0}, created: "2026-01-01T00:00:00Z", cluster: cluster
+      })
+
+      expect(info.cluster).to eql(cluster)
+    end
+  end
+
   describe "Pull Subscribe" do
     before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")

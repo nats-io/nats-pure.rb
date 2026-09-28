@@ -64,7 +64,12 @@ module NATS
       # @!attribute num_pending
       #   @return [Integer]
       # @!attribute cluster
-      #   @return [Hash]
+      #   The cluster of a clustered consumer, such as its leader, its
+      #   replicas and, as leader_since, when the leader was elected
+      #   (requires nats-server v2.12.0); nil on a standalone server. The
+      #   values are the server's: leader_since is a String, and the
+      #   active of the replicas is in nanoseconds.
+      #   @return [Hash, nil]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
@@ -82,7 +87,6 @@ module NATS
           opts[:config][:inactive_threshold] = opts[:config][:inactive_threshold] / ::NATS::NANOSECONDS if opts[:config][:inactive_threshold]
           opts[:config][:idle_heartbeat] = opts[:config][:idle_heartbeat] / ::NATS::NANOSECONDS if opts[:config][:idle_heartbeat]
           opts[:config] = ConsumerConfig.new(opts[:config])
-          opts.delete(:cluster)
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
@@ -255,11 +259,18 @@ module NATS
       #   State of each of the stream's sources, such as its lag and subject
       #   transforms, as Hashes.
       #   @return [Array<Hash>]
+      # @!attribute cluster
+      #   The cluster of the stream, such as its leader, its replicas and,
+      #   as leader_since, when the leader was elected (requires nats-server
+      #   v2.12.0). A standalone server reports only itself, as the leader.
+      #   The values are the server's: leader_since is a String, and the
+      #   active of the replicas is in nanoseconds.
+      #   @return [Hash]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
       StreamInfo = Struct.new(:type, :config, :created, :state, :domain,
-        :mirror, :sources, :ts,
+        :mirror, :sources, :cluster, :ts,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:config] = StreamConfig.new(opts[:config])
