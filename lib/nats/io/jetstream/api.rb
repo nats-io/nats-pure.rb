@@ -180,6 +180,10 @@ module NATS
       # @!attribute num_replicas
       #   @return [Integer]
       # @!attribute duplicate_window
+      #   Nanoseconds within which the stream stores a message only once for
+      #   each Header::MSG_ID. Unless set, it is 2 minutes, except that
+      #   mirrors, and since nats-server v2.14.0 streams with sources, get
+      #   none: the messages published to them are not deduplicated.
       #   @return [Integer]
       # @!attribute compression
       #   Storage compression of a file based stream, "s2" or "none"

@@ -102,6 +102,15 @@ loop do
 end
 ```
 
+Messages can expire on their own, in streams that allow it (nats-server 2.11):
+
+```ruby
+js.add_stream(name: "sessions", subjects: ["sessions.>"], allow_msg_ttl: true)
+
+# Removed after an hour. With ttl: :never, kept past the max_age of the stream.
+js.publish("sessions.42", "token", ttl: 3600)
+```
+
 Streams and consumers can also be managed directly:
 
 ```ruby

@@ -76,7 +76,11 @@ module NATS
         JetStream::API::StreamInfo.new(result)
       end
 
-      # update_stream edits an existed stream with a given config.
+      # update_stream edits an existed stream with a given config. The config
+      # replaces the stream's, so pass all of it, as from stream_info.
+      # Updating a mirror without its mirror setting makes it a stream of its
+      # own for good, no longer a mirror (nats-server v2.12.0; older servers
+      # refuse the update).
       # @param config [JetStream::API::StreamConfig] Configuration of the stream to create.
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.

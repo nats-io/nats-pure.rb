@@ -98,6 +98,10 @@ module NATS
     #   the stream. The stream needs allow_msg_ttl (requires nats-server v2.11.0).
     # @raise [NATS::Timeout] When it takes too long to receive an ack response.
     # @raise [ArgumentError] When an option is invalid, before the message is sent.
+    # @raise [NATS::JetStream::Error::APIError] When the stream refuses the
+    #   message, as a stream that does not allow TTLs refuses one with a TTL.
+    # @raise [NATS::JetStream::Error::NoStreamResponse] When no stream takes
+    #   the subject.
     # @return [PubAck] The pub ack response.
     def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
