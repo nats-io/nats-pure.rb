@@ -421,6 +421,27 @@ describe "JetStream" do
       expect { other_fetch.value }.to raise_error(NATS::Timeout)
     end
 
+    it "should return the messages it took at once when no more are pending" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      js.publish("test", "left")
+      # Left by an earlier pull.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+
+      started = NATS::MonotonicTime.now
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(["left"])
+      expect(NATS::MonotonicTime.since(started)).to be < 0.5
+    end
+
+    it "should never let a pull wait for good" do
+      sub = nc.jetstream.pull_subscribe("test", "psub")
+
+      # The server keeps a pull that expires in 0 until it gets a message.
+      expect(sub.send(:pull_expires, NATS::MonotonicTime.now)).to eql(1)
+      expect(sub.send(:pull_expires, NATS::MonotonicTime.now - 1)).to eql(1)
+    end
+
     # Threads fetching from one subscription share its messages, and wake
     # up for each other's (#181).
     it "should only time out when threads fetch one message at a time from an empty consumer" do
@@ -431,9 +452,12 @@ describe "JetStream" do
       Array.new(6) do
         Thread.new do
           20.times do
+            started = NATS::MonotonicTime.now
             sub.fetch(1, timeout: 0.1)
           rescue NATS::Timeout
-            # No messages.
+            # No messages, which it only says once its timeout is up.
+            elapsed = NATS::MonotonicTime.since(started)
+            errors << "timed out after #{elapsed}s" if elapsed < 0.1
           rescue => e
             errors << e
           end

@@ -104,7 +104,10 @@ module NATS
             msgs << msg
             no_wait = false
           elsif no_wait && nothing_pending?(msg)
-            # As nats.go does, pull again, and wait until the timeout.
+            # As nats.go does, return what it took before, or else pull
+            # again and wait until the timeout.
+            return msgs unless msgs.empty?
+
             no_wait = false
             next_req.delete(:no_wait)
             next_req[:expires] = pull_expires(deadline)
