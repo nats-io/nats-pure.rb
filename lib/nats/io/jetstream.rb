@@ -16,6 +16,7 @@
 require_relative "kv"
 require_relative "jetstream/api"
 require_relative "jetstream/errors"
+require_relative "jetstream/header"
 require_relative "jetstream/js"
 require_relative "jetstream/manager"
 require_relative "jetstream/msg"

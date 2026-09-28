@@ -79,13 +79,242 @@ describe "JetStream" do
 
       js.publish("atomic", "not batched")
       ack = js.publish("atomic", "batched", header: {
-        "Nats-Batch-Id" => "b1", "Nats-Batch-Sequence" => "1", "Nats-Batch-Commit" => "1"
+        NATS::JetStream::Header::BATCH_ID => "b1",
+        NATS::JetStream::Header::BATCH_SEQUENCE => "1",
+        NATS::JetStream::Header::BATCH_COMMIT => "1"
       })
       expect(ack.seq).to eql(2)
       expect(ack.batch).to eql("b1")
       expect(ack.count).to eql(1)
 
       nc.close
+    end
+
+    it "should commit an atomic batch without storing the commit message" do
+      nc = NATS.connect(@s.uri)
+      js = nc.jetstream
+      js.add_stream(name: "EOB", subjects: ["eob"], allow_atomic: true)
+
+      # Only the commit is acked: the other messages of a batch go without a reply.
+      nc.publish("eob", "first", header: {
+        NATS::JetStream::Header::BATCH_ID => "b1",
+        NATS::JetStream::Header::BATCH_SEQUENCE => "1"
+      })
+      ack = js.publish("eob", "", header: {
+        NATS::JetStream::Header::BATCH_ID => "b1",
+        NATS::JetStream::Header::BATCH_SEQUENCE => "2",
+        NATS::JetStream::Header::BATCH_COMMIT => "eob"
+      })
+      expect(ack.seq).to eql(1)
+      expect(ack.count).to eql(1)
+      expect(js.get_msg("EOB", seq: 1).data).to eql("first")
+      expect(js.stream_info("EOB").state.messages).to eql(1)
+
+      nc.close
+    end
+
+    describe "with the JetStream headers" do
+      let(:nc) { NATS.connect(@s.uri) }
+      let(:js) { nc.jetstream }
+
+      after { nc.close }
+
+      # The last message of a subject, or nil while there is none.
+      def last_msg(stream, subject)
+        js.get_last_msg(stream, subject)
+      rescue NATS::JetStream::Error::NotFound
+        nil
+      end
+
+      it "deduplicates and guards publishes" do
+        js.add_stream(name: "GUARDED", subjects: ["guarded"])
+
+        js.publish("guarded", "1", header: {NATS::JetStream::Header::MSG_ID => "one"})
+        expect(js.publish("guarded", "1", header: {NATS::JetStream::Header::MSG_ID => "one"}).duplicate).to be(true)
+
+        {
+          NATS::JetStream::Header::EXPECTED_STREAM => ["OTHER", 10060],
+          NATS::JetStream::Header::EXPECTED_LAST_SEQUENCE => ["5", 10071],
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE => ["5", 10071],
+          NATS::JetStream::Header::EXPECTED_LAST_MSG_ID => ["two", 10070]
+        }.each do |name, (value, err_code)|
+          expect do
+            js.publish("guarded", "2", header: {name => value})
+          end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(err_code) }
+        end
+
+        ack = js.publish("guarded", "2", header: {
+          NATS::JetStream::Header::EXPECTED_STREAM => "GUARDED",
+          NATS::JetStream::Header::EXPECTED_LAST_SEQUENCE => "1",
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE => "1",
+          NATS::JetStream::Header::EXPECTED_LAST_MSG_ID => "one"
+        })
+        expect(ack.seq).to eql(2)
+      end
+
+      it "guards a publish with the last sequence of another subject" do
+        js.add_stream(name: "LOCKS", subjects: ["locks.>"])
+        js.publish("locks.a", "a")
+        header = {
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE => "1",
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT => "locks.a"
+        }
+
+        expect(js.publish("locks.b", "b", header: header).seq).to eql(2)
+        js.publish("locks.a", "a")
+        expect do
+          js.publish("locks.b", "b", header: header)
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10071) }
+
+        # The subject needs the sequence to check.
+        expect do
+          js.publish("locks.b", "b", header: header.slice(NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT))
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10193) }
+      end
+
+      it "leaves a marker when the last message of a subject expires" do
+        js.add_stream(name: "MARKED", subjects: ["marked"],
+          max_age: ::NATS::NANOSECONDS, subject_delete_marker_ttl: 50 * ::NATS::NANOSECONDS)
+        js.publish("marked", "gone")
+
+        marker = wait_until { last_msg("MARKED", "marked")&.then { |msg| msg if msg.headers } }
+        expect(marker.headers).to include(
+          NATS::JetStream::Header::MARKER_REASON => "MaxAge",
+          NATS::JetStream::Header::MSG_TTL => "50s",
+          NATS::JetStream::Header::ROLLUP => "sub"
+        )
+      end
+
+      it "schedules a message" do
+        js.add_stream(name: "SCHEDULES", subjects: ["schedules.>", "targets.>", "sources.>"],
+          allow_msg_schedules: true, allow_msg_ttl: true)
+        js.publish("sources.a", "sampled")
+
+        # Due at once, so that it fires now.
+        js.publish("schedules.a", "own", header: {
+          NATS::JetStream::Header::SCHEDULE => "@at #{Time.now.utc.iso8601}",
+          NATS::JetStream::Header::SCHEDULE_TARGET => "targets.a",
+          NATS::JetStream::Header::SCHEDULE_SOURCE => "sources.a",
+          NATS::JetStream::Header::SCHEDULE_TTL => "60",
+          NATS::JetStream::Header::SCHEDULE_ROLLUP => "sub"
+        })
+
+        msg = wait_until { last_msg("SCHEDULES", "targets.a") }
+        expect(msg.data).to eql("sampled")
+        expect(msg.headers).to include(
+          NATS::JetStream::Header::SCHEDULER => "schedules.a",
+          NATS::JetStream::Header::SCHEDULE_NEXT => "purge",
+          NATS::JetStream::Header::MSG_TTL => "60",
+          NATS::JetStream::Header::ROLLUP => "sub"
+        )
+        # A schedule that fires once is removed.
+        eventually { expect(last_msg("SCHEDULES", "schedules.a")).to be_nil }
+      end
+
+      it "schedules a message in a time zone" do
+        js.add_stream(name: "SCHEDULES", subjects: ["schedules.>", "targets.>"], allow_msg_schedules: true)
+        schedule = lambda do |zone|
+          js.publish("schedules.a", "", header: {
+            NATS::JetStream::Header::SCHEDULE => "0 0 9 * * *",
+            NATS::JetStream::Header::SCHEDULE_TARGET => "targets.a",
+            NATS::JetStream::Header::SCHEDULE_TIME_ZONE => zone
+          })
+        end
+
+        seq = schedule.call("America/New_York").seq
+        expect(js.get_msg("SCHEDULES", seq: seq).headers)
+          .to include(NATS::JetStream::Header::SCHEDULE_TIME_ZONE => "America/New_York")
+        expect { schedule.call("Mars/Olympus") }
+          .to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10223) }
+      end
+
+      it "cancels a schedule" do
+        js.add_stream(name: "SCHEDULES", subjects: ["schedules.>", "targets.>"], allow_msg_schedules: true)
+        ack = js.publish("schedules.a", "", header: {
+          NATS::JetStream::Header::SCHEDULE => "@at #{(Time.now + 3600).utc.iso8601}",
+          NATS::JetStream::Header::SCHEDULE_TARGET => "targets.a"
+        })
+
+        # Only if the schedule is still the one published.
+        js.publish("schedules.cancel", "", header: {
+          NATS::JetStream::Header::SCHEDULE_NEXT => "purge",
+          NATS::JetStream::Header::SCHEDULER => "schedules.a",
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE => ack.seq.to_s,
+          NATS::JetStream::Header::EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT => "schedules.a"
+        })
+
+        expect(last_msg("SCHEDULES", "schedules.a")).to be_nil
+      end
+
+      it "tells where a message returned by a direct get was stored" do
+        js.add_stream(name: "DIRECT", subjects: ["direct.>"], allow_direct: true)
+        ack = js.publish("direct.a", "a")
+
+        headers = js.get_msg("DIRECT", seq: ack.seq, direct: true).headers
+        expect(headers).to include(
+          NATS::JetStream::Header::STREAM => "DIRECT",
+          NATS::JetStream::Header::SUBJECT => "direct.a",
+          NATS::JetStream::Header::SEQUENCE => ack.seq.to_s
+        )
+        expect(Time.iso8601(headers[NATS::JetStream::Header::TIME_STAMP])).to be_within(60).of(Time.now)
+      end
+
+      it "tells where a republished message was stored, and the last one of its subject" do
+        js.add_stream(name: "ORDERS", subjects: ["orders.>"], republish: {src: "orders.>", dest: "copies.>"})
+        copies = nc.subscribe("copies.>")
+        nc.flush
+
+        js.publish("orders.a", "first")
+        js.publish("orders.b", "other")
+        js.publish("orders.a", "second")
+
+        first, _, msg = 3.times.map { copies.next_msg(timeout: 5) }
+        expect(first.header).to include(NATS::JetStream::Header::LAST_SEQUENCE => "0")
+        expect(msg.data).to eql("second")
+        expect(msg.header).to include(
+          NATS::JetStream::Header::STREAM => "ORDERS",
+          NATS::JetStream::Header::SUBJECT => "orders.a",
+          NATS::JetStream::Header::SEQUENCE => "3",
+          NATS::JetStream::Header::LAST_SEQUENCE => "1"
+        )
+      end
+
+      it "tells which stream a sourced message came from" do
+        js.add_stream(name: "ORIGIN", subjects: ["origin"])
+        js.add_stream(name: "SOURCED", sources: [{name: "ORIGIN"}])
+
+        js.publish("origin", "a")
+
+        msg = wait_until { last_msg("SOURCED", "origin") }
+        expect(msg.headers[NATS::JetStream::Header::STREAM_SOURCE]).to start_with("ORIGIN 1 ")
+      end
+
+      it "refuses batches that need a higher API level, but stores plain messages with it" do
+        js.add_stream(name: "LEVELS", subjects: ["levels"], allow_atomic: true)
+        level = {NATS::JetStream::Header::REQUIRED_API_LEVEL => "1000"}
+
+        expect do
+          js.publish("levels", "", header: level.merge(
+            NATS::JetStream::Header::BATCH_ID => "b1",
+            NATS::JetStream::Header::BATCH_SEQUENCE => "1",
+            NATS::JetStream::Header::BATCH_COMMIT => "1"
+          ))
+        end.to raise_error(NATS::JetStream::API::Error) { |e| expect(e.err_code).to eql(10185) }
+        ack = js.publish("levels", "plain", header: level)
+        expect(js.get_msg("LEVELS", seq: ack.seq).headers).to include(level)
+      end
+
+      it "refuses API requests that need a higher API level" do
+        js.add_stream(name: "LEVEL", subjects: ["level"])
+
+        expect(js.stream_info("LEVEL", header: {NATS::JetStream::Header::REQUIRED_API_LEVEL => "1"}).config.name).to eql("LEVEL")
+        expect do
+          js.stream_info("LEVEL", header: {NATS::JetStream::Header::REQUIRED_API_LEVEL => "1000"})
+        end.to raise_error(NATS::JetStream::API::Error) { |e|
+          expect(e.code).to eql(412)
+          expect(e.err_code).to eql(10185)
+        }
+      end
     end
   end
 
