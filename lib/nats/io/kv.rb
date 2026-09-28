@@ -422,7 +422,9 @@ module NATS
         if !active
           ccreq = ordered.merge(filter)
           ccreq[:deliver_policy] = "by_start_sequence"
-          ccreq[:opt_start_seq] = watcher._sseq
+          # Resume after the last entry. With none yet, that is the start of
+          # the stream, so earlier revisions of the keys are replayed too.
+          ccreq[:opt_start_seq] = watcher._sseq + 1
           ccreq[:deliver_subject] = deliver_subject
           ccreq[:idle_heartbeat] = ordered[:idle_heartbeat]
           ccreq[:inactive_threshold] = ordered[:inactive_threshold]
