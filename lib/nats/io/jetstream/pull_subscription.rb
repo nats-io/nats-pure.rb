@@ -50,17 +50,32 @@ module NATS
       # @param batch [Fixnum] Number of messages to pull from the stream.
       # @param params [Hash] Options to customize the fetch request.
       # @option params [Float] :timeout Duration of the fetch request before it expires.
+      # @option params [String] :group Priority group to pull from, which the pulls
+      #   of a consumer with a priority policy must name (requires nats-server v2.11.0).
+      # @option params [Integer] :min_pending With the overflow priority policy, deliver
+      #   only while the consumer has at least this many messages pending; at least 1.
+      # @option params [Integer] :min_ack_pending With the overflow priority policy, deliver
+      #   only while at least this many messages await acks; at least 1. Given both
+      #   minimums, either will do.
       # @return [Array<NATS::Msg>]
+      # @raise [ArgumentError] When a minimum is not an integer of at least 1.
       def fetch(batch = 1, params = {})
         if batch < 1
           raise ::NATS::JetStream::Error.new("nats: invalid batch size")
+        end
+        [:min_pending, :min_ack_pending].each do |min|
+          value = params[min]
+          next if value.nil? || (value.is_a?(Integer) && value >= 1)
+
+          raise ArgumentError.new("nats: #{min} should be an integer of at least 1")
         end
 
         t = MonotonicTime.now
         timeout = params[:timeout] ||= 5
         expires = (timeout * 1_000_000_000) - 100_000
         next_req = {
-          batch: batch
+          batch: batch,
+          **params.slice(:group, :min_pending, :min_ack_pending)
         }
 
         msgs = []

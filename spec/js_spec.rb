@@ -121,6 +121,41 @@ describe "JetStream" do
       expect(consumer_info(cluster: cluster).cluster).to eql(cluster)
       expect(consumer_info.cluster).to be_nil
     end
+
+    it "should report the state of the priority groups" do
+      info = consumer_info(priority_groups: [
+        {group: "A", pinned_client_id: "pin", pinned_ts: "2026-01-02T03:04:05.5Z", future: true},
+        # The server sends Go's zero time for a group that is not pinned.
+        {group: "B", pinned_ts: "0001-01-01T00:00:00Z"}
+      ])
+
+      expect(info.priority_groups.map(&:to_h)).to eql([
+        {group: "A", pinned_client_id: "pin", pinned_ts: Time.utc(2026, 1, 2, 3, 4, 5.5)},
+        {group: "B", pinned_client_id: nil, pinned_ts: nil}
+      ])
+      expect(info.priority_groups).to all(be_a(NATS::JetStream::API::PriorityGroupState).and(be_frozen))
+      expect(consumer_info.priority_groups).to be_nil
+    end
+
+    it "should report the priority timeout in seconds" do
+      config = {durable_name: "C", priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 90_000_000_000}
+
+      expect(consumer_info(config: config).config.priority_timeout).to eql(90)
+      expect(consumer_info.config.priority_timeout).to be_nil
+    end
+  end
+
+  describe "pull requests" do
+    def next_req(fields)
+      JSON.parse(NATS::JetStream.const_get(:JS).next_req_to_json(fields), symbolize_names: true)
+    end
+
+    it "should carry the priority group settings that are given" do
+      expect(next_req(batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5))
+        .to eql({batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5})
+      expect(next_req(batch: 2, no_wait: true, group: nil, min_pending: nil))
+        .to eql({batch: 2, no_wait: true})
+    end
   end
 
   describe "StreamInfo" do

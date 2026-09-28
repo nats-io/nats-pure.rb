@@ -324,6 +324,10 @@ module NATS
           raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
           config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
         end
+        if config[:priority_timeout]
+          raise ArgumentError.new("nats: invalid priority timeout") unless config[:priority_timeout].is_a?(Integer)
+          config[:priority_timeout] = config[:priority_timeout] * ::NATS::NANOSECONDS
+        end
         config[:pause_until] = rfc3339(config[:pause_until])
 
         cfg = config.to_h.compact

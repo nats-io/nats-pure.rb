@@ -765,5 +765,149 @@ describe "JetStream" do
         expect { js.resume_consumer("PAUSE", "") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
       end
     end
+
+    describe "priority groups" do
+      before { js.add_stream(name: "PRIO", subjects: ["prio"]) }
+
+      def publish(count)
+        count.times { |i| js.publish("prio", i.to_s) }
+      end
+
+      it "creates consumers with priority groups" do
+        info = js.create_consumer("PRIO", durable_name: "overflow",
+          priority_policy: "overflow", priority_groups: ["A", "B"])
+
+        expect(info.config.priority_policy).to eql("overflow")
+        expect(info.config.priority_groups).to eql(["A", "B"])
+        # The server keeps the state of the first group only.
+        expect(info.priority_groups).to eql([NATS::JetStream::API::PriorityGroupState.new(group: "A")])
+
+        info = js.create_consumer("PRIO", durable_name: "pinned",
+          priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 30)
+        expect(info.config.priority_timeout).to eql(30)
+        expect(js.consumer_info("PRIO", "pinned").config.priority_timeout).to eql(30)
+
+        # Pinning defaults to two minutes.
+        info = js.create_consumer("PRIO", durable_name: "default",
+          priority_policy: "pinned_client", priority_groups: ["A"])
+        expect(info.config.priority_timeout).to eql(120)
+      end
+
+      it "refuses invalid priority group settings" do
+        {
+          10159 => {priority_policy: "overflow"},
+          10196 => {priority_groups: ["A"]},
+          10162 => {priority_policy: "overflow", priority_groups: ["not valid"]},
+          10197 => {priority_policy: "none", priority_timeout: 30},
+          10178 => {priority_policy: "overflow", priority_groups: ["A"], deliver_subject: "push"}
+        }.each do |err_code, config|
+          expect do
+            js.create_consumer("PRIO", config.merge(durable_name: "c"))
+          end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(err_code) }
+        end
+      end
+
+      it "requires the priority timeout in whole seconds" do
+        expect do
+          js.create_consumer("PRIO", durable_name: "c",
+            priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 1.5)
+        end.to raise_error(ArgumentError)
+      end
+
+      it "keeps the priority settings when a fetched config is sent back as an update" do
+        js.create_consumer("PRIO", durable_name: "c",
+          priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 30)
+
+        config = js.consumer_info("PRIO", "c").config
+        config.max_ack_pending = 10
+        info = js.update_consumer("PRIO", config)
+
+        expect(info.config.to_h.slice(:priority_policy, :priority_groups, :priority_timeout, :max_ack_pending))
+          .to eql({priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 30, max_ack_pending: 10})
+      end
+
+      it "requires the pulls of a consumer with a priority policy to name a group" do
+        js.create_consumer("PRIO", durable_name: "c", priority_policy: "overflow", priority_groups: ["A"])
+        publish(1)
+        sub = js.pull_subscribe("prio", "c", stream: "PRIO")
+
+        [1, 2].each do |batch|
+          expect { sub.fetch(batch) }.to raise_error(NATS::JetStream::API::Error) { |e|
+            expect(e.description).to eql("Bad Request - Priority Group missing")
+          }
+        end
+        expect { sub.fetch(1, group: "B") }.to raise_error(NATS::JetStream::API::Error) { |e|
+          expect(e.description).to eql("Bad Request - Invalid Priority Group")
+        }
+        expect(sub.fetch(1, group: "A").map(&:data)).to eql(["0"])
+      end
+
+      describe "with the overflow policy" do
+        let(:sub) { js.pull_subscribe("prio", "c", stream: "PRIO") }
+        # For the fetches that time out: the 408 that ends their pull can
+        # come after they gave up, and a later fetch of more than one
+        # message on the same subscription would take it for its own.
+        let(:idle) { js.pull_subscribe("prio", "c", stream: "PRIO") }
+
+        before do
+          js.create_consumer("PRIO", durable_name: "c", priority_policy: "overflow", priority_groups: ["A"])
+        end
+
+        # The server may keep the pull of a fetch that timed out a little
+        # longer than the fetch waited, and would deliver to it.
+        def wait_for_expired_pulls
+          eventually { expect(js.consumer_info("PRIO", "c").num_waiting).to eql(0) }
+        end
+
+        it "delivers only while at least min_pending messages are pending" do
+          publish(5)
+          expect { idle.fetch(2, group: "A", min_pending: 10, timeout: 0.5) }.to raise_error(NATS::Timeout)
+          wait_for_expired_pulls
+
+          publish(10)
+          expect(sub.fetch(2, group: "A", min_pending: 10).map(&:data)).to eql(["0", "1"])
+        end
+
+        it "delivers only while at least min_ack_pending messages await acks" do
+          publish(10)
+          sub.fetch(2, group: "A")
+          expect { idle.fetch(2, group: "A", min_ack_pending: 5, timeout: 0.5) }.to raise_error(NATS::Timeout)
+          wait_for_expired_pulls
+
+          sub.fetch(3, group: "A")
+          expect(sub.fetch(2, group: "A", min_ack_pending: 5).map(&:data)).to eql(["5", "6"])
+        end
+
+        it "sends the priority settings with every pull request of a fetch" do
+          requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
+          nc.flush
+
+          expect { sub.fetch(2, group: "A", min_pending: 10, min_ack_pending: 20, timeout: 0.5) }
+            .to raise_error(NATS::Timeout)
+
+          pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
+          expect(pulls.map { |pull| pull.slice(:no_wait, :group, :min_pending, :min_ack_pending) }).to eql([
+            {no_wait: true, group: "A", min_pending: 10, min_ack_pending: 20},
+            {group: "A", min_pending: 10, min_ack_pending: 20}
+          ])
+        end
+
+        it "requires the minimums to be positive integers" do
+          [0, 1.5, "3"].each do |min|
+            expect { sub.fetch(1, group: "A", min_pending: min) }.to raise_error(ArgumentError, /min_pending/)
+            expect { sub.fetch(1, group: "A", min_ack_pending: min) }.to raise_error(ArgumentError, /min_ack_pending/)
+          end
+        end
+
+        it "refuses minimums for consumers without the overflow policy" do
+          js.create_consumer("PRIO", durable_name: "pinned", priority_policy: "pinned_client", priority_groups: ["A"])
+          sub = js.pull_subscribe("prio", "pinned", stream: "PRIO")
+
+          expect { sub.fetch(1, group: "A", min_pending: 1) }.to raise_error(NATS::JetStream::API::Error) { |e|
+            expect(e.description).to eql("Bad Request - Not a Overflow Priority consumer")
+          }
+        end
+      end
+    end
   end
 end
