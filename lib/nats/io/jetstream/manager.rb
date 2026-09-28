@@ -125,7 +125,8 @@ module NATS
       # consumer_info lacks the settings this client does not know, and has
       # its durations rounded down to whole seconds. A consumer that does
       # not exist raises ConsumerDoesNotExist; the server decides which
-      # fields may change. Requires nats-server v2.10.0.
+      # fields may change, and keeps the pause of the consumer, which
+      # pause_consumer and resume_consumer change. Requires nats-server v2.10.0.
       # @param stream [String] Name of the stream.
       # @param config [JetStream::API::ConsumerConfig] New configuration of the consumer.
       # @param params [Hash] Options to customize API request.
@@ -163,6 +164,39 @@ module NATS
         req_subject = "#{@prefix}.CONSUMER.DELETE.#{stream}.#{consumer}"
         result = api_request(req_subject, "", params)
         result[:success]
+      end
+
+      # pause_consumer pauses a consumer, so that it delivers no messages
+      # until the given time. Requires nats-server v2.11.0: older servers
+      # let the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param pause_until [Time, String] When to resume, as a Time or as an RFC 3339 String.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerPauseResponse]
+      # @raise [ArgumentError] When pause_until is nil: resume_consumer resumes.
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def pause_consumer(stream, consumer, pause_until, params = {})
+        raise ArgumentError.new("nats: a time to pause until is required, resume_consumer resumes") if pause_until.nil?
+
+        request_pause(stream, consumer, {pause_until: rfc3339(pause_until)}, params)
+      end
+
+      # resume_consumer resumes a paused consumer. Requires nats-server
+      # v2.11.0: older servers let the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerPauseResponse]
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def resume_consumer(stream, consumer, params = {})
+        request_pause(stream, consumer, {}, params)
       end
 
       # find_stream_name_by_subject does a lookup for the stream to which
@@ -290,6 +324,7 @@ module NATS
           raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
           config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
         end
+        config[:pause_until] = rfc3339(config[:pause_until])
 
         cfg = config.to_h.compact
         req = {
@@ -301,6 +336,23 @@ module NATS
 
         result = api_request(req_subject, req.to_json, params)
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # request_pause sends a consumer pause request, which resumes the
+      # consumer when it has no pause time.
+      def request_pause(stream, consumer, req, params)
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+
+        req_subject = "#{@prefix}.CONSUMER.PAUSE.#{stream}.#{consumer}"
+        result = api_request(req_subject, req.to_json, params)
+        JetStream::API::ConsumerPauseResponse.new(result)
+      end
+
+      # rfc3339 formats a Time as the server expects it; a String is
+      # sent as is.
+      def rfc3339(time)
+        time.is_a?(Time) ? time.getutc.iso8601(9) : time
       end
 
       def api_request(req_subject, req = "", params = {})

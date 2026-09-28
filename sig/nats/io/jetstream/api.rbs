@@ -7,11 +7,14 @@ module NATS
       class SequenceInfo < Struct[Integer]
       end
 
-      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time]
+      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time | bool]
       end
 
-      class ConsumerConfig < Struct[String | Integer]
+      class ConsumerConfig < Struct[String | Integer | Time]
         def to_json: (*Hash[untyped, untyped]) -> String
+      end
+
+      class ConsumerPauseResponse < Struct[bool | Time | Integer]
       end
 
       class StreamConfig < Struct[String | Hash[Symbol, untyped] | NATS::JetStream::API::StreamState | bool | Integer]

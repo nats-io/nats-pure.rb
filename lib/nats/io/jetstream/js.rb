@@ -35,6 +35,15 @@ module NATS
           req.to_json
         end
 
+        # parse_time parses a time from the server, which sends Go's zero
+        # time for a time that is not set.
+        def parse_time(time)
+          return if time.nil?
+
+          time = ::Time.parse(time)
+          time unless time.year == 1
+        end
+
         def is_status_msg(msg)
           (!msg.nil? and (!msg.header.nil? and msg.header[Header::Status]))
         end

@@ -73,14 +73,23 @@ module NATS
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
+      # @!attribute paused
+      #   True while the consumer is paused (requires nats-server v2.11.0).
+      #   @return [Boolean, nil]
+      # @!attribute pause_remaining
+      #   Seconds until a paused consumer resumes, rounded down, so 0 in its
+      #   last second (requires nats-server v2.11.0).
+      #   @return [Integer, nil]
       ConsumerInfo = Struct.new(:type, :stream_name, :name, :created,
         :config, :delivered, :ack_floor,
         :num_ack_pending, :num_redelivered, :num_waiting,
         :num_pending, :cluster, :push_bound, :ts,
+        :paused, :pause_remaining,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:created] = Time.parse(opts[:created])
           opts[:ts] = Time.parse(opts[:ts]) if opts[:ts]
+          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
           opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS if opts[:config][:ack_wait]
@@ -114,6 +123,13 @@ module NATS
       #   @return [Integer]
       # @!attribute max_ack_pending
       #   @return [Integer]
+      # @!attribute pause_until
+      #   Time until which the consumer delivers no messages, as a Time or
+      #   as an RFC 3339 String; a fetched config has a String. The server
+      #   takes it only when it creates the consumer: updates keep the pause,
+      #   which pause_consumer and resume_consumer change. Requires
+      #   nats-server v2.11.0; older ones create the consumer unpaused.
+      #   @return [Time, String, nil]
       ConsumerConfig = Struct.new(:name, :durable_name, :description,
         :deliver_policy, :opt_start_seq, :opt_start_time,
         :ack_policy, :ack_wait, :max_deliver, :backoff,
@@ -133,12 +149,37 @@ module NATS
         :mem_storage,
         # NATS v2.10 features
         :metadata, :filter_subjects, :max_bytes,
+        # NATS v2.11 features
+        :pause_until,
         keyword_init: true) do
         def initialize(opts = {})
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
+        end
+      end
+
+      # ConsumerPauseResponse is the result of pausing or resuming a consumer
+      # (requires nats-server v2.11.0).
+      #
+      # @!attribute paused
+      #   @return [Boolean] Whether the consumer is paused.
+      # @!attribute pause_until
+      #   @return [Time, nil] When the consumer resumes; nil once resumed. A time
+      #     in the past does not pause the consumer, and paused is then false.
+      # @!attribute pause_remaining
+      #   @return [Integer, nil] Seconds until the consumer resumes, rounded down,
+      #     so 0 in its last second; nil when it is not paused.
+      ConsumerPauseResponse = Struct.new(:paused, :pause_until, :pause_remaining,
+        keyword_init: true) do
+        def initialize(opts = {})
+          opts[:pause_until] = JS.parse_time(opts[:pause_until])
+          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
+          rem = opts.keys - members
+          opts.delete_if { |k| rem.include?(k) }
+          super
+          freeze
         end
       end
 

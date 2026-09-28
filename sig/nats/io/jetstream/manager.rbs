@@ -19,6 +19,10 @@ module NATS
 
       def delete_consumer: (String, String, ?Hash[Symbol, untyped]) -> bool
 
+      def pause_consumer: (String, String, Time | String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse
+
+      def resume_consumer: (String, String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse
+
       def find_stream_name_by_subject: (String, ?Hash[Symbol, untyped]) -> String
 
       def get_msg: (String, ?Hash[Symbol, untyped]) -> JetStream::API::RawStreamMsg
@@ -30,6 +34,10 @@ module NATS
       private
 
       def upsert_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], String?, Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+
+      def request_pause: (String, String, Hash[Symbol, String], Hash[Symbol, untyped]) -> JetStream::API::ConsumerPauseResponse
+
+      def rfc3339: (Time | String | nil) -> String?
 
       def api_request: (String, String, ?Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
 

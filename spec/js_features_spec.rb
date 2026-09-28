@@ -655,5 +655,115 @@ describe "JetStream" do
         expect(js.consumer_info("STANDALONE", "c").cluster).to be_nil
       end
     end
+
+    describe "pausing consumers" do
+      before do
+        js.add_stream(name: "PAUSE", subjects: ["pause"])
+        js.publish("pause", "a")
+      end
+
+      it "creates a consumer paused until the given time" do
+        pause_until = Time.now + 60
+        # Frozen, as sending it must not convert the caller's Time to UTC.
+        pause_until.freeze
+        js.create_consumer("PAUSE", durable_name: "c", pause_until: pause_until)
+
+        info = js.consumer_info("PAUSE", "c")
+        expect(info.paused).to be(true)
+        expect(info.pause_remaining).to be_between(55, 60)
+        expect(Time.parse(info.config.pause_until)).to be_within(0.001).of(pause_until)
+      end
+
+      it "takes the pause time of a config as an RFC 3339 string" do
+        pause_until = (Time.now.utc + 60).iso8601
+        js.create_consumer("PAUSE", durable_name: "c", pause_until: pause_until)
+
+        expect(js.consumer_info("PAUSE", "c").config.pause_until).to eql(pause_until)
+      end
+
+      it "pauses and resumes a consumer" do
+        js.create_consumer("PAUSE", durable_name: "c")
+        pause_until = Time.now + 60
+
+        resp = js.pause_consumer("PAUSE", "c", pause_until)
+        expect(resp.paused).to be(true)
+        expect(resp.pause_until).to be_within(0.001).of(pause_until)
+        expect(resp.pause_remaining).to be_between(55, 60)
+        expect(js.consumer_info("PAUSE", "c").paused).to be(true)
+
+        resp = js.resume_consumer("PAUSE", "c")
+        expect(resp.to_h).to eql({paused: false, pause_until: nil, pause_remaining: nil})
+        info = js.consumer_info("PAUSE", "c")
+        expect(info.paused).to be_falsey
+        expect(info.pause_remaining).to be_nil
+        expect(info.config.pause_until).to be_nil
+      end
+
+      it "does not pause a consumer until a time in the past" do
+        js.create_consumer("PAUSE", durable_name: "c")
+        pause_until = Time.now - 60
+
+        resp = js.pause_consumer("PAUSE", "c", pause_until)
+        expect(resp.paused).to be(false)
+        expect(resp.pause_until).to be_within(0.001).of(pause_until)
+        expect(resp.pause_remaining).to be_nil
+      end
+
+      it "requires a time to pause a consumer until" do
+        js.create_consumer("PAUSE", durable_name: "c", pause_until: Time.now + 60)
+
+        expect { js.pause_consumer("PAUSE", "c", nil) }.to raise_error(ArgumentError)
+        expect(js.consumer_info("PAUSE", "c").paused).to be(true)
+      end
+
+      it "takes the pause time as an RFC 3339 string" do
+        js.create_consumer("PAUSE", durable_name: "c")
+        pause_until = Time.now.utc + 60
+
+        expect(js.pause_consumer("PAUSE", "c", pause_until.iso8601(3)).pause_until)
+          .to be_within(0.001).of(pause_until)
+      end
+
+      it "delivers no messages while paused" do
+        sub = js.pull_subscribe("pause", "c")
+        js.pause_consumer("PAUSE", "c", Time.now + 60)
+
+        expect { sub.fetch(1, timeout: 0.5) }.to raise_error(NATS::Timeout)
+
+        js.resume_consumer("PAUSE", "c")
+        expect(sub.fetch(1).map(&:data)).to eql(["a"])
+      end
+
+      it "keeps the pause through updates, whatever pause time they carry" do
+        pause_until = (Time.now.utc + 60).iso8601(9)
+        js.create_consumer("PAUSE", durable_name: "c", pause_until: pause_until)
+        config = js.consumer_info("PAUSE", "c").config
+        config.max_ack_pending = 10
+
+        # The server only takes the pause time of a consumer it creates.
+        [config, config.to_h.merge(pause_until: Time.now + 3600), config.to_h.merge(pause_until: nil)].each do |update|
+          info = js.update_consumer("PAUSE", update)
+          expect(info.paused).to be(true)
+          expect(Time.parse(info.config.pause_until)).to eql(Time.parse(pause_until))
+          expect(info.config.max_ack_pending).to eql(10)
+        end
+      end
+
+      it "raises ConsumerNotFound for a consumer that does not exist" do
+        expect do
+          js.pause_consumer("PAUSE", "missing", Time.now + 60)
+        end.to raise_error(NATS::JetStream::Error::ConsumerNotFound)
+        expect do
+          js.resume_consumer("PAUSE", "missing")
+        end.to raise_error(NATS::JetStream::Error::ConsumerNotFound)
+      end
+
+      it "requires a stream and a consumer name" do
+        expect { js.pause_consumer("", "c", Time.now) }.to raise_error(NATS::JetStream::Error::InvalidStreamName)
+        expect { js.pause_consumer("PAUSE", nil, Time.now) }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
+        expect { js.resume_consumer(nil, "c") }.to raise_error(NATS::JetStream::Error::InvalidStreamName)
+        expect { js.resume_consumer("PAUSE", "") }.to raise_error(NATS::JetStream::Error::InvalidConsumerName)
+      end
+    end
   end
 end
