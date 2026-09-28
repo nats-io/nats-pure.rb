@@ -9,7 +9,11 @@ module NATS
 
       def delete_stream: (String, ?Hash[Symbol, untyped]) -> bool
 
-      def add_consumer: (String, JetStream::API::ConsumerConfig, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+      def add_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+
+      def create_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
+
+      def update_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
 
       def consumer_info: (String, String, ?Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
 
@@ -24,6 +28,8 @@ module NATS
       def account_info: () -> Hash[Symbol, untyped]
 
       private
+
+      def upsert_consumer: (String, JetStream::API::ConsumerConfig | Hash[Symbol, untyped], String?, Hash[Symbol, untyped]) -> JetStream::API::ConsumerInfo
 
       def api_request: (String, String, ?Hash[Symbol, untyped]) -> Hash[Symbol, untyped]
 

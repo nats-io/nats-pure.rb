@@ -115,6 +115,14 @@ module NATS
           @code ||= 400
         end
       end
+
+      # When create_consumer finds the consumer already exists with a
+      # different configuration.
+      class ConsumerAlreadyExists < BadRequest; end
+
+      # When update_consumer finds no consumer to update. The server reports
+      # it as a bad request, so unlike ConsumerNotFound it is not NotFound.
+      class ConsumerDoesNotExist < BadRequest; end
     end
   end
 end

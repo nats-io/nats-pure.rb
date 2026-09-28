@@ -258,7 +258,8 @@ module NATS
     CONSUMER_STALLED_HDR = "Nats-Consumer-Stalled"
 
     # watch will be signaled when a key that matches the keys
-    # pattern is updated.
+    # pattern is updated. keys can also be an Array of patterns
+    # (requires nats-server v2.10.0); an empty Array watches all keys.
     # The first update after starting the watch is nil in case
     # there are no pending updates.
     def watch(keys, params = {})
@@ -267,7 +268,12 @@ module NATS
       params[:ignore_deletes] ||= false
       params[:idle_heartbeat] ||= 5 # seconds
       params[:inactive_threshold] ||= 5 * 60 # 5 minutes
-      subject = "#{@pre}#{keys}"
+      subject = if keys.is_a?(Array)
+        keys = [">"] if keys.empty?
+        keys.map { |key| "#{@pre}#{key}" }
+      else
+        "#{@pre}#{keys}"
+      end
       init_setup = new_cond
       init_setup_done = false
       nc = @js.nc
@@ -294,7 +300,7 @@ module NATS
       }
 
       # watch_updates callback.
-      sub = @js.subscribe(subject, config: ordered) do |msg|
+      sub = @js.subscribe(subject, stream: @stream, config: ordered) do |msg|
         synchronize do
           if !init_setup_done
             init_setup.wait(@js.opts[:timeout])

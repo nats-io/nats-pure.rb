@@ -2,6 +2,23 @@
 
 ## main
 
+### Added
+
+- JetStream: stream configs take the settings added in nats-server 2.10: `compression`, `first_seq`, `subject_transform` and `consumer_limits` (whose `inactive_threshold` is in nanoseconds, like the other stream durations). They used to be dropped, so a stream could not be created with them, and sending a fetched config back as an update left them out.
+- JetStream: `stream_info` reports the stream's `mirror` and `sources`, including their subject transforms, and both `stream_info` and `consumer_info` report when the server reported the info, as `ts`.
+- JetStream: `create_consumer` and `update_consumer` use the create and update actions of nats-server 2.10. Creating a consumer that exists with a different config raises `NATS::JetStream::Error::ConsumerAlreadyExists`, and updating one that does not exist raises `NATS::JetStream::Error::ConsumerDoesNotExist`; both are `BadRequest` errors. An update replaces the whole config, so fields left out take their defaults. `add_consumer` still creates or updates.
+- JetStream: `msg.term(reason: "...")` passes the reason on to the server's advisory for the terminated message. Servers before 2.10.4 do not terminate a message given a reason.
+- KV: buckets can be created with `compression: true` and with `metadata`, which `status.compressed?` and `status.metadata` report.
+- KV: `watch` takes an Array of keys, watched by a single consumer (nats-server 2.10). An empty Array watches all keys.
+
+### Changed
+
+- JetStream and KV: settings that used to be dropped are now sent. Code that already passed `compression`, `first_seq`, `subject_transform` or `consumer_limits` to `add_stream`, or `compression` or `metadata` to `create_key_value`, created its streams and buckets without them, so calling it again for an existing stream or bucket now fails with "stream name already in use with a different configuration" (err_code 10058). Apply the setting with `update_stream`, or stop passing it.
+- KV: `create_key_value` takes only `true` or `false` for `compression`; anything else, such as `"s2"`, which used to be ignored, raises `ArgumentError`.
+- JetStream: `add_consumer` leaves the `ConsumerConfig` it is given unchanged. It used to set its `name` and a default `ack_policy`, and convert its durations to nanoseconds, so passing the same config again sent durations a billion times too long.
+- JetStream: two `stream_info` or `consumer_info` results are no longer `==` unless they were reported at the same time, as they now carry `ts`.
+- KV: `watch` no longer looks up the bucket's stream before creating its consumer.
+
 ### Fixed
 
 - JetStream: `js.publish` raised `ArgumentError: unknown keywords` after the server had stored the message, when publishing to a stream with counters or committing an atomic batch, as the acks of nats-server 2.12 carry `val`, `batch` and `count`. `PubAck` now has these fields and ignores any it does not know, so fields added to acks later cannot break publish. (#192, #177, thanks @jnowakplacewise)

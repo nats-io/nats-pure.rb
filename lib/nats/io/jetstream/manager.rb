@@ -95,75 +95,44 @@ module NATS
         result[:success]
       end
 
-      # add_consumer creates a consumer with a given config.
+      # add_consumer creates a consumer with a given config, or updates the
+      # consumer if one with the same name already exists.
       # @param stream [String] Name of the stream.
       # @param config [JetStream::API::ConsumerConfig] Configuration of the consumer to create.
       # @param params [Hash] Options to customize API request.
       # @option params [Float] :timeout Time to wait for response.
       # @return [JetStream::API::ConsumerInfo] The result of creating a Consumer.
       def add_consumer(stream, config, params = {})
-        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
-        config = if !config.is_a?(JetStream::API::ConsumerConfig)
-          JetStream::API::ConsumerConfig.new(config)
-        else
-          config
-        end
-        config[:name] ||= config[:durable_name]
-        req_subject = if config[:name]
-          ###############################################################################
-          #                                                                             #
-          #  Using names is the supported way of creating consumers (NATS +v2.9.0.      #
-          #                                                                             #
-          ###############################################################################
-          if config[:filter_subject] && config[:filter_subject] != ">"
-            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}.#{config[:filter_subject]}"
-          else
-            ##############################################################################
-            #                                                                            #
-            # Endpoint to support creating ANY consumer with multi-filters (NATS +v2.10) #
-            #                                                                            #
-            ##############################################################################
-            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}"
-          end
-        elsif config[:durable_name]
-          ###############################################################################
-          #                                                                             #
-          # Endpoint to support creating DURABLES before NATS v2.9.0.                   #
-          #                                                                             #
-          ###############################################################################
-          "#{@prefix}.CONSUMER.DURABLE.CREATE.#{stream}.#{config[:durable_name]}"
-        else
-          ###############################################################################
-          #                                                                             #
-          # Endpoint to support creating EPHEMERALS before NATS v2.9.0.                 #
-          #                                                                             #
-          ###############################################################################
-          "#{@prefix}.CONSUMER.CREATE.#{stream}"
-        end
+        upsert_consumer(stream, config, nil, params)
+      end
 
-        config[:ack_policy] ||= JS::Config::AckExplicit
-        # Check if have to normalize ack wait so that it is in nanoseconds for Go compat.
-        if config[:ack_wait]
-          raise ArgumentError.new("nats: invalid ack wait") unless config[:ack_wait].is_a?(Integer)
-          config[:ack_wait] = config[:ack_wait] * ::NATS::NANOSECONDS
-        end
-        if config[:inactive_threshold]
-          raise ArgumentError.new("nats: invalid inactive threshold") unless config[:inactive_threshold].is_a?(Integer)
-          config[:inactive_threshold] = config[:inactive_threshold] * ::NATS::NANOSECONDS
-        end
-        if config[:idle_heartbeat]
-          raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
-          config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
-        end
+      # create_consumer creates a consumer with a given config. Creating a
+      # consumer that already exists with the same config succeeds; one that
+      # exists with a different config raises ConsumerAlreadyExists.
+      # Requires nats-server v2.10.0.
+      # @param stream [String] Name of the stream.
+      # @param config [JetStream::API::ConsumerConfig] Configuration of the consumer to create.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerInfo] The result of creating a Consumer.
+      def create_consumer(stream, config, params = {})
+        upsert_consumer(stream, config, "create", params)
+      end
 
-        cfg = config.to_h.compact
-        req = {
-          stream_name: stream,
-          config: cfg
-        }
-
-        result = api_request(req_subject, req.to_json, params)
-        JetStream::API::ConsumerInfo.new(result).freeze
+      # update_consumer replaces the config of an existing consumer, named by
+      # the config's name or durable_name, so fields left out take their
+      # defaults: pass the whole config, with the changes. The config from
+      # consumer_info lacks the settings this client does not know, and has
+      # its durations rounded down to whole seconds. A consumer that does
+      # not exist raises ConsumerDoesNotExist; the server decides which
+      # fields may change. Requires nats-server v2.10.0.
+      # @param stream [String] Name of the stream.
+      # @param config [JetStream::API::ConsumerConfig] New configuration of the consumer.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerInfo] The updated Consumer.
+      def update_consumer(stream, config, params = {})
+        upsert_consumer(stream, config, "update", params)
       end
 
       # consumer_info retrieves the current status of a consumer.
@@ -259,6 +228,80 @@ module NATS
       end
 
       private
+
+      # upsert_consumer sends a consumer create request. The action is
+      # "create", "update", or nil to create or update.
+      def upsert_consumer(stream, config, action, params)
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        # Work on a copy: the durations are converted to nanoseconds below,
+        # and the caller may send the same config again.
+        config = if !config.is_a?(JetStream::API::ConsumerConfig)
+          JetStream::API::ConsumerConfig.new(config)
+        else
+          config.dup
+        end
+        config[:name] ||= config[:durable_name]
+        if action == "update" && (config[:name].nil? || config[:name].empty?)
+          raise ArgumentError.new("nats: the consumer to update needs a name or durable name")
+        end
+        req_subject = if config[:name]
+          ###############################################################################
+          #                                                                             #
+          #  Using names is the supported way of creating consumers (NATS +v2.9.0.      #
+          #                                                                             #
+          ###############################################################################
+          if config[:filter_subject] && config[:filter_subject] != ">"
+            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}.#{config[:filter_subject]}"
+          else
+            ##############################################################################
+            #                                                                            #
+            # Endpoint to support creating ANY consumer with multi-filters (NATS +v2.10) #
+            #                                                                            #
+            ##############################################################################
+            "#{@prefix}.CONSUMER.CREATE.#{stream}.#{config[:name]}"
+          end
+        elsif config[:durable_name]
+          ###############################################################################
+          #                                                                             #
+          # Endpoint to support creating DURABLES before NATS v2.9.0.                   #
+          #                                                                             #
+          ###############################################################################
+          "#{@prefix}.CONSUMER.DURABLE.CREATE.#{stream}.#{config[:durable_name]}"
+        else
+          ###############################################################################
+          #                                                                             #
+          # Endpoint to support creating EPHEMERALS before NATS v2.9.0.                 #
+          #                                                                             #
+          ###############################################################################
+          "#{@prefix}.CONSUMER.CREATE.#{stream}"
+        end
+
+        config[:ack_policy] ||= JS::Config::AckExplicit
+        # Check if have to normalize ack wait so that it is in nanoseconds for Go compat.
+        if config[:ack_wait]
+          raise ArgumentError.new("nats: invalid ack wait") unless config[:ack_wait].is_a?(Integer)
+          config[:ack_wait] = config[:ack_wait] * ::NATS::NANOSECONDS
+        end
+        if config[:inactive_threshold]
+          raise ArgumentError.new("nats: invalid inactive threshold") unless config[:inactive_threshold].is_a?(Integer)
+          config[:inactive_threshold] = config[:inactive_threshold] * ::NATS::NANOSECONDS
+        end
+        if config[:idle_heartbeat]
+          raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
+          config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
+        end
+
+        cfg = config.to_h.compact
+        req = {
+          stream_name: stream,
+          config: cfg
+        }
+        # Without an action the server creates or updates.
+        req[:action] = action if action
+
+        result = api_request(req_subject, req.to_json, params)
+        JetStream::API::ConsumerInfo.new(result).freeze
+      end
 
       def api_request(req_subject, req = "", params = {})
         params[:timeout] ||= @opts[:timeout]

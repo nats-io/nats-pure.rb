@@ -83,7 +83,14 @@ module NATS
               ::NATS::JetStream::Error::NotFound.new(err)
             end
           when 400
-            ::NATS::JetStream::Error::BadRequest.new(err)
+            case err[:err_code]
+            when 10148
+              ::NATS::JetStream::Error::ConsumerAlreadyExists.new(err)
+            when 10149
+              ::NATS::JetStream::Error::ConsumerDoesNotExist.new(err)
+            else
+              ::NATS::JetStream::Error::BadRequest.new(err)
+            end
           else
             ::NATS::JetStream::API::Error.new(err)
           end

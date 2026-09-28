@@ -58,13 +58,19 @@ module NATS
           resp
         end
 
+        # term tells the server not to redeliver the message. A :reason is
+        # passed on in the server's terminated advisory. Servers before
+        # v2.10.4 do not terminate a message given a reason, so it will
+        # be redelivered.
         def term(**params)
           ensure_is_acked_once!
 
+          reason = params.delete(:reason)
+          payload = reason.to_s.strip.empty? ? Ack::Term : "#{Ack::Term} #{reason}"
           resp = if params[:timeout]
-            @nc.request(@reply, Ack::Term, **params)
+            @nc.request(@reply, payload, **params)
           else
-            @nc.publish(@reply, Ack::Term)
+            @nc.publish(@reply, payload)
           end
           @sub.synchronize { @ackd = true }
 
