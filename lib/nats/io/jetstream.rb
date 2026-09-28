@@ -90,21 +90,28 @@ module NATS
     # @param payload [String] The payload of the message.
     # @param params [Hash] Options to customize the publish message request.
     # @option params [Float] :timeout Time to wait for an PubAck response or an error.
-    # @option params [Hash] :header NATS Headers to use for the message.
+    # @option params [Hash] :header NATS Headers to use for the message; the
+    #   options below replace those that they set.
     # @option params [String] :stream Expected Stream to which the message is being published.
+    # @option params [Integer, Symbol] :ttl Seconds after which the stream
+    #   removes the message, from 1 to 2**32, or :never to keep it past the max_age of
+    #   the stream. The stream needs allow_msg_ttl (requires nats-server v2.11.0).
     # @raise [NATS::Timeout] When it takes too long to receive an ack response.
+    # @raise [ArgumentError] When an option is invalid, before the message is sent.
     # @return [PubAck] The pub ack response.
     def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
-      if params[:stream]
-        params[:header] ||= {}
-        params[:header][JS::Header::ExpectedStream] = params[:stream]
-      end
+      # The options add to a copy of the header, which the caller may reuse.
+      options = {
+        Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
+        Header::MSG_TTL => (msg_ttl(params[:ttl]) if params[:ttl])
+      }.compact
+      header = options.empty? ? params[:header] : params[:header].to_h.merge(options)
 
       # Send message with headers.
       msg = NATS::Msg.new(subject: subject,
         data: payload,
-        header: params[:header])
+        header: header)
 
       begin
         resp = @nc.request_msg(msg, **params)
@@ -348,6 +355,20 @@ module NATS
         nms: subject
       )
       sub
+    end
+
+    private
+
+    # msg_ttl formats a message TTL as the server takes it. Longer TTLs than
+    # 2**32 seconds, some 136 years, overflow in the server, which then
+    # removes the message at once.
+    def msg_ttl(ttl)
+      return "never" if ttl == :never
+      unless ttl.is_a?(Integer) && ttl.between?(1, 2**32)
+        raise ArgumentError.new("nats: invalid ttl #{ttl.inspect}, expected whole seconds from 1 to 2**32, or :never")
+      end
+
+      ttl.to_s
     end
   end
 end

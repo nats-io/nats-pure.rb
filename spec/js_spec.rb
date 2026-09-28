@@ -113,6 +113,77 @@ describe "JetStream" do
       nc.close
     end
 
+    describe "with a TTL" do
+      let(:nc) { NATS.connect(@s.uri) }
+      let(:js) { nc.jetstream }
+
+      before { js.add_stream(name: "TTL", subjects: ["ttl"], allow_msg_ttl: true) }
+      after { nc.close }
+
+      it "removes the message once its TTL has passed" do
+        ack = js.publish("ttl", "short lived", ttl: 1)
+
+        expect(js.get_msg("TTL", seq: ack.seq).headers).to include(NATS::JetStream::Header::MSG_TTL => "1")
+        eventually { expect { js.get_msg("TTL", seq: ack.seq) }.to raise_error(NATS::JetStream::Error::NotFound) }
+      end
+
+      it "keeps a message that never expires past the max age of the stream" do
+        js.add_stream(name: "AGED", subjects: ["aged"], allow_msg_ttl: true, max_age: ::NATS::NANOSECONDS)
+        kept = js.publish("aged", "kept", ttl: :never)
+        aged = js.publish("aged", "aged")
+
+        eventually { expect { js.get_msg("AGED", seq: aged.seq) }.to raise_error(NATS::JetStream::Error::NotFound) }
+        expect(js.get_msg("AGED", seq: kept.seq).headers).to include(NATS::JetStream::Header::MSG_TTL => "never")
+      end
+
+      it "adds the TTL to the header, leaving the given header unchanged" do
+        header = {"color" => "blue"}
+
+        ack = js.publish("ttl", "x", header: header, stream: "TTL", ttl: 60)
+
+        expect(header).to eql({"color" => "blue"})
+        expect(js.get_msg("TTL", seq: ack.seq).headers)
+          .to include("color" => "blue", NATS::JetStream::Header::MSG_TTL => "60")
+      end
+
+      it "refuses a TTL that is not a whole number of seconds from 1 to 2**32, or :never" do
+        [0, -1, 1.5, "5", "never", :forever, 2**32 + 1].each do |ttl|
+          expect { js.publish("ttl", "x", ttl: ttl) }.to raise_error(ArgumentError)
+        end
+        expect(js.stream_info("TTL").state.messages).to eql(0)
+
+        # Longer TTLs overflow in the server, which then removes the message at once.
+        ack = js.publish("ttl", "x", ttl: 2**32)
+        expect(js.get_msg("TTL", seq: ack.seq).headers).to include(NATS::JetStream::Header::MSG_TTL => "4294967296")
+      end
+
+      it "lets the options replace the same headers in the given header" do
+        header = {NATS::JetStream::Header::EXPECTED_STREAM => "OTHER", NATS::JetStream::Header::MSG_TTL => "5"}
+
+        ack = js.publish("ttl", "x", header: header, stream: "TTL", ttl: 60)
+
+        expect(js.get_msg("TTL", seq: ack.seq).headers).to include(
+          NATS::JetStream::Header::EXPECTED_STREAM => "TTL",
+          NATS::JetStream::Header::MSG_TTL => "60"
+        )
+      end
+
+      it "expects no stream when the stream option is false or nil" do
+        [false, nil].each do |stream|
+          ack = js.publish("ttl", "x", stream: stream)
+          expect(js.get_msg("TTL", seq: ack.seq).headers).to be_nil
+        end
+      end
+
+      it "fails on a stream that does not allow TTLs" do
+        js.add_stream(name: "PLAIN", subjects: ["plain"])
+
+        expect do
+          js.publish("plain", "x", ttl: 5)
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10166) }
+      end
+    end
+
     describe "with the JetStream headers" do
       let(:nc) { NATS.connect(@s.uri) }
       let(:js) { nc.jetstream }
