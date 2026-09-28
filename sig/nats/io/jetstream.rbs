@@ -15,5 +15,9 @@ module NATS
     private
 
     def msg_ttl: (Integer | :never) -> String
+
+    def schedule_header: (target: String, ?at: Time?, ?every: Integer?, ?cron: String?, ?source: String?, ?ttl: (Integer | :never)?, ?time_zone: String?, ?rollup: bool?) -> Hash[String, String]
+
+    def nonempty_string?: (untyped) -> bool
   end
 end

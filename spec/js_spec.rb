@@ -184,6 +184,153 @@ describe "JetStream" do
       end
     end
 
+    describe "with a schedule" do
+      let(:nc) { NATS.connect(@s.uri) }
+      let(:js) { nc.jetstream }
+
+      before do
+        js.add_stream(name: "SCHEDULES", subjects: ["schedules.>", "targets.>", "sources.>"],
+          allow_msg_schedules: true, allow_msg_ttl: true)
+      end
+
+      after { nc.close }
+
+      # The header stored with a published message.
+      def stored_header(ack)
+        js.get_msg("SCHEDULES", seq: ack.seq).headers
+      end
+
+      # The first message that a schedule publishes to the target.
+      def scheduled_msg(target)
+        wait_until do
+          msg = js.get_last_msg("SCHEDULES", target)
+          msg if msg.headers&.key?(NATS::JetStream::Header::SCHEDULER)
+        rescue NATS::JetStream::Error::NotFound
+          nil
+        end
+      end
+
+      it "publishes the message to the target at the given time" do
+        at = Time.now + 1
+        ack = js.publish("schedules.at", "hello", schedule: {at: at, target: "targets.at"})
+
+        expect(stored_header(ack)).to include(
+          NATS::JetStream::Header::SCHEDULE => "@at #{at.getutc.iso8601(9)}",
+          NATS::JetStream::Header::SCHEDULE_TARGET => "targets.at"
+        )
+        msg = scheduled_msg("targets.at")
+        expect(msg.data).to eql("hello")
+        expect(msg.headers).to include(
+          NATS::JetStream::Header::SCHEDULER => "schedules.at",
+          NATS::JetStream::Header::SCHEDULE_NEXT => "purge"
+        )
+      end
+
+      it "sends the time in UTC to the nanosecond, leaving the given time unchanged" do
+        at = Time.new(2030, 1, 2, 3, 4, 5.5, "+02:00")
+
+        ack = js.publish("schedules.at", "", schedule: {at: at, target: "targets.at"})
+
+        expect(stored_header(ack)).to include(NATS::JetStream::Header::SCHEDULE => "@at 2030-01-02T01:04:05.500000000Z")
+        expect(at.utc_offset).to eql(7200)
+      end
+
+      it "publishes the message to the target every so many seconds" do
+        ack = js.publish("schedules.every", "tick", schedule: {every: 1, target: "targets.every"})
+
+        expect(stored_header(ack)).to include(NATS::JetStream::Header::SCHEDULE => "@every 1s")
+        msg = scheduled_msg("targets.every")
+        expect(msg.data).to eql("tick")
+        expect(Time.iso8601(msg.headers[NATS::JetStream::Header::SCHEDULE_NEXT])).to be_within(5).of(Time.now)
+      end
+
+      it "publishes the message on a cron schedule in a time zone" do
+        ack = js.publish("schedules.cron", "tick",
+          schedule: {cron: "* * * * * *", time_zone: "Europe/Warsaw", target: "targets.cron"})
+
+        expect(stored_header(ack)).to include(
+          NATS::JetStream::Header::SCHEDULE => "* * * * * *",
+          NATS::JetStream::Header::SCHEDULE_TIME_ZONE => "Europe/Warsaw"
+        )
+        expect(scheduled_msg("targets.cron").data).to eql("tick")
+
+        ack = js.publish("schedules.hourly", "", schedule: {cron: "@hourly", target: "targets.hourly"})
+        expect(stored_header(ack)).to include(NATS::JetStream::Header::SCHEDULE => "@hourly")
+      end
+
+      it "publishes the last message of the source instead" do
+        js.publish("sources.a", "sampled")
+
+        js.publish("schedules.sample", "own", schedule: {at: Time.now, target: "targets.sample", source: "sources.a"})
+
+        expect(scheduled_msg("targets.sample").data).to eql("sampled")
+      end
+
+      it "publishes messages with a TTL" do
+        js.publish("schedules.ttl", "", schedule: {at: Time.now, target: "targets.ttl", ttl: 60})
+
+        expect(scheduled_msg("targets.ttl").headers).to include(NATS::JetStream::Header::MSG_TTL => "60")
+
+        ack = js.publish("schedules.never", "", schedule: {at: Time.now + 3600, target: "targets.never", ttl: :never})
+        expect(stored_header(ack)).to include(NATS::JetStream::Header::SCHEDULE_TTL => "never")
+      end
+
+      it "rolls up the target" do
+        earlier = js.publish("targets.rollup", "earlier")
+
+        js.publish("schedules.rollup", "", schedule: {at: Time.now, target: "targets.rollup", rollup: true})
+
+        expect(scheduled_msg("targets.rollup").headers).to include(NATS::JetStream::Header::ROLLUP => "sub")
+        expect { js.get_msg("SCHEDULES", seq: earlier.seq) }.to raise_error(NATS::JetStream::Error::NotFound)
+
+        ack = js.publish("schedules.kept", "", schedule: {at: Time.now + 3600, target: "targets.kept", rollup: false})
+        expect(stored_header(ack)).not_to have_key(NATS::JetStream::Header::SCHEDULE_ROLLUP)
+      end
+
+      it "refuses an invalid schedule before sending it" do
+        at = Time.now + 3600
+        [
+          {target: "targets.a"},
+          {at: at, every: 60, target: "targets.a"},
+          {at: at},
+          {at: at, target: ""},
+          {at: at.iso8601, target: "targets.a"},
+          {every: 0, target: "targets.a"},
+          {every: 1.5, target: "targets.a"},
+          {cron: "", target: "targets.a"},
+          {cron: 60, target: "targets.a"},
+          {at: at, target: "targets.a", ttl: 0},
+          {at: at, target: "targets.a", rollup: "sub"},
+          {at: at, target: "targets.a", timezone: "UTC"},
+          {at: at, every: false, target: "targets.a"},
+          {at: at, target: "targets.a", source: ""},
+          {at: at, target: "targets.a", source: :sources},
+          {at: at, target: "targets.a", time_zone: "UTC"},
+          {every: 60, target: "targets.a", time_zone: "UTC"},
+          {cron: "@daily", target: "targets.a", time_zone: ""},
+          "@daily",
+          [[:cron, "@daily"], [:target, "targets.a"]]
+        ].each do |schedule|
+          expect { js.publish("schedules.a", "", schedule: schedule) }.to raise_error(ArgumentError)
+        end
+        expect(js.stream_info("SCHEDULES").state.messages).to eql(0)
+      end
+
+      it "fails on a schedule that the server does not take" do
+        expect do
+          js.publish("schedules.a", "", schedule: {cron: "0 30 * * *", target: "targets.a"})
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10189) }
+      end
+
+      it "fails on a stream that does not allow schedules" do
+        js.add_stream(name: "PLAIN", subjects: ["plain.>"])
+
+        expect do
+          js.publish("plain.a", "", schedule: {at: Time.now + 3600, target: "plain.b"})
+        end.to raise_error(NATS::JetStream::Error::BadRequest) { |e| expect(e.err_code).to eql(10188) }
+      end
+    end
+
     describe "with the JetStream headers" do
       let(:nc) { NATS.connect(@s.uri) }
       let(:js) { nc.jetstream }
