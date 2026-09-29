@@ -138,7 +138,9 @@ describe "KeyValue" do
       storage: "file",
       republish: nil,
       allow_direct: false,
-      mirror_direct: false
+      mirror_direct: false,
+      compression: "none",
+      consumer_limits: {}
     )
     # Since v2.11 the server injects its own metadata (_nats.ver etc.),
     # whose values change with every server version — assert presence
@@ -864,5 +866,101 @@ describe "KeyValue" do
 
     w.stop
     nc.close
+  end
+
+  describe "NATS v2.10 features" do
+    let(:nc) { NATS.connect(@s.uri) }
+    let(:js) { nc.jetstream }
+
+    after { nc.close }
+
+    it "compresses buckets created with compression" do
+      kv = js.create_key_value(bucket: "ZIP", compression: true)
+
+      expect(js.stream_info("KV_ZIP").config.compression).to eql("s2")
+      expect(kv.status.compressed?).to be(true)
+    end
+
+    it "does not compress buckets by default" do
+      kv = js.create_key_value(bucket: "PLAIN")
+
+      expect(js.stream_info("KV_PLAIN").config.compression).to eql("none")
+      expect(kv.status.compressed?).to be(false)
+    end
+
+    it "refuses a compression setting that is not true or false" do
+      # The stream setting is a string, "s2" or "none"; a bucket's is not.
+      expect { js.create_key_value(bucket: "NONE", compression: "none") }.to raise_error(ArgumentError)
+      expect { js.stream_info("KV_NONE") }.to raise_error(NATS::JetStream::Error::NotFound)
+    end
+
+    it "keeps bucket metadata" do
+      kv = js.create_key_value(bucket: "META", metadata: {owner: "billing"})
+
+      expect(js.stream_info("KV_META").config.metadata).to include(owner: "billing")
+      expect(kv.status.metadata).to include(owner: "billing")
+    end
+
+    it "watches several keys at once" do
+      skip "watch requires ruby >= 3.2" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
+
+      kv = js.create_key_value(bucket: "MULTI")
+      kv.put("a.1", "1")
+      kv.put("b.1", "2")
+      kv.put("c.1", "3")
+      kv.put("d.1", "4")
+      # The bucket's stream is known, so no key needs a stream lookup.
+      lookups = nc.subscribe("$JS.API.STREAM.NAMES")
+      nc.flush
+
+      w = kv.watch(["a.*", "c.*", "d.*"])
+      nc.flush
+      expect { lookups.next_msg(timeout: 0.5) }.to raise_error(NATS::Timeout)
+      initial = []
+      while (entry = w.updates)
+        initial << entry.key
+      end
+      expect(initial).to eql(["a.1", "c.1", "d.1"])
+
+      kv.put("b.2", "4")
+      kv.put("a.2", "5")
+      expect(w.updates.key).to eql("a.2")
+      w.stop
+    end
+
+    it "keeps watching several keys when the consumer is recreated" do
+      skip "watch requires ruby >= 3.2" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
+
+      kv = js.create_key_value(bucket: "MULTI_RECREATE")
+      kv.put("a.1", "1")
+      w = kv.watch(["a.*", "c.*"], idle_heartbeat: 1)
+      expect(w.updates.key).to eql("a.1")
+      expect(w.updates).to eql(nil)
+
+      recreate_consumer(js, w)
+      kv.put("b.1", "2")
+      kv.put("c.1", "3")
+
+      expect(w.updates.key).to eql("c.1")
+      w.stop
+    end
+
+    it "watches every key when given no keys" do
+      skip "watch requires ruby >= 3.2" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
+
+      kv = js.create_key_value(bucket: "ALL")
+      kv.put("a", "1")
+      kv.put("b", "2")
+      kv.put("a.b.c", "3")
+
+      w = kv.watch([])
+      keys = []
+      while (entry = w.updates)
+        keys << entry.key
+      end
+      w.stop
+
+      expect(keys).to eql(["a", "b", "a.b.c"])
+    end
   end
 end

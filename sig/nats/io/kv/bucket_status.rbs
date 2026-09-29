@@ -12,6 +12,10 @@ module NATS
       def history: () -> Integer
 
       def ttl: () -> Float
+
+      def compressed?: () -> bool
+
+      def metadata: () -> Hash[Symbol, String]?
     end
   end
 end

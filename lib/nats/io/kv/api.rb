@@ -30,6 +30,10 @@ module NATS
         :republish,
         :direct,
         :validate_keys,
+        # Compress the bucket's stream with S2 (requires nats-server v2.10.0).
+        :compression,
+        # Freeform metadata of the bucket (requires nats-server v2.10.0).
+        :metadata,
         keyword_init: true
       ) do
         def initialize(opts = {})

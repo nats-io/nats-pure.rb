@@ -35,6 +35,18 @@ module NATS
       def ttl
         @stream_info.config.max_age / ::NATS::NANOSECONDS
       end
+
+      # Whether the bucket's stream is compressed (requires nats-server v2.10.0).
+      def compressed?
+        compression = @stream_info.config.compression
+        !compression.nil? && compression != "none"
+      end
+
+      # The bucket's metadata, including the metadata that the server sets
+      # (requires nats-server v2.10.0).
+      def metadata
+        @stream_info.config.metadata
+      end
     end
   end
 end

@@ -49,6 +49,12 @@ module NATS
 
       class BadRequest < NATS::JetStream::Error::APIError
       end
+
+      class ConsumerAlreadyExists < NATS::JetStream::Error::BadRequest
+      end
+
+      class ConsumerDoesNotExist < NATS::JetStream::Error::BadRequest
+      end
     end
   end
 end

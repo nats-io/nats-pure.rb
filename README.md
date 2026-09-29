@@ -102,6 +102,24 @@ loop do
 end
 ```
 
+Streams and consumers can also be managed directly:
+
+```ruby
+# Compressed, and no consumer may have more than 1000 unacknowledged messages.
+js.add_stream(name: "orders", subjects: ["orders.>"], compression: "s2",
+  consumer_limits: {max_ack_pending: 1000})
+
+config = {durable_name: "billing", filter_subject: "orders.paid", max_ack_pending: 100}
+
+# Fails with NATS::JetStream::Error::ConsumerAlreadyExists if "billing"
+# exists with a different config.
+js.create_consumer("orders", config)
+
+# An update replaces the whole config, so send all of it again.
+# Fails with NATS::JetStream::Error::ConsumerDoesNotExist if there is no "billing".
+js.update_consumer("orders", config.merge(max_ack_pending: 200))
+```
+
 ## Service API
 
 The service API allows you to easily [build NATS services](docs/service_api.md).

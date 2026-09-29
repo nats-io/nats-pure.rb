@@ -65,13 +65,17 @@ module NATS
       #   @return [Integer]
       # @!attribute cluster
       #   @return [Hash]
+      # @!attribute ts
+      #   When the server reported this info (requires nats-server v2.10.0).
+      #   @return [Time]
       ConsumerInfo = Struct.new(:type, :stream_name, :name, :created,
         :config, :delivered, :ack_floor,
         :num_ack_pending, :num_redelivered, :num_waiting,
-        :num_pending, :cluster, :push_bound,
+        :num_pending, :cluster, :push_bound, :ts,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:created] = Time.parse(opts[:created])
+          opts[:ts] = Time.parse(opts[:ts]) if opts[:ts]
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
           opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS if opts[:config][:ack_wait]
@@ -172,6 +176,24 @@ module NATS
       #   @return [Integer]
       # @!attribute duplicate_window
       #   @return [Integer]
+      # @!attribute compression
+      #   Storage compression of a file based stream, "s2" or "none"
+      #   (requires nats-server v2.10.0).
+      #   @return [String]
+      # @!attribute first_seq
+      #   The sequence of the first message stored in a new stream
+      #   (requires nats-server v2.10.0).
+      #   @return [Integer]
+      # @!attribute subject_transform
+      #   Transform applied to the subject of every message stored, as
+      #   `{src:, dest:}` (requires nats-server v2.10.0).
+      #   @return [Hash]
+      # @!attribute consumer_limits
+      #   Defaults and upper limits for the stream's consumers, as
+      #   `{inactive_threshold:, max_ack_pending:}`. Like the other durations
+      #   of a stream, inactive_threshold is in nanoseconds
+      #   (requires nats-server v2.10.0).
+      #   @return [Hash]
       StreamConfig = Struct.new(
         :name,
         :description,
@@ -199,6 +221,10 @@ module NATS
         :allow_direct,
         :mirror_direct,
         :metadata,
+        :compression,
+        :first_seq,
+        :subject_transform,
+        :consumer_limits,
         keyword_init: true
       ) do
         def initialize(opts = {})
@@ -221,12 +247,25 @@ module NATS
       #   @return [Hash]
       # @!attribute domain
       #   @return [String]
+      # @!attribute mirror
+      #   State of the stream's mirror, such as its lag and subject
+      #   transforms, as a Hash.
+      #   @return [Hash]
+      # @!attribute sources
+      #   State of each of the stream's sources, such as its lag and subject
+      #   transforms, as Hashes.
+      #   @return [Array<Hash>]
+      # @!attribute ts
+      #   When the server reported this info (requires nats-server v2.10.0).
+      #   @return [Time]
       StreamInfo = Struct.new(:type, :config, :created, :state, :domain,
+        :mirror, :sources, :ts,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:config] = StreamConfig.new(opts[:config])
           opts[:state] = StreamState.new(opts[:state])
           opts[:created] = ::Time.parse(opts[:created])
+          opts[:ts] = ::Time.parse(opts[:ts]) if opts[:ts]
 
           # Filter fields and freeze.
           rem = opts.keys - members

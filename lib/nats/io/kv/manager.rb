@@ -59,6 +59,10 @@ module NATS
           raise NATS::KeyValue::KeyHistoryTooLargeError
         end
 
+        unless [true, false, nil].include?(config.compression)
+          raise ArgumentError.new("nats: compression must be true or false")
+        end
+
         stream = JetStream::API::StreamConfig.new(
           name: "KV_#{config.bucket}",
           description: config.description,
@@ -76,7 +80,9 @@ module NATS
           max_msgs_per_subject: config.history,
           num_replicas: config.replicas,
           storage: config.storage,
-          republish: config.republish
+          republish: config.republish,
+          compression: config.compression ? "s2" : nil,
+          metadata: config.metadata
         )
 
         si = add_stream(stream)
