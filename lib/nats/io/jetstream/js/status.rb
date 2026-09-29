@@ -24,6 +24,7 @@ module NATS
         NoMsgs = "404"
         NotFound = "404"
         RequestTimeout = "408"
+        PinIdMismatch = "423"
         ServiceUnavailable = "503"
 
         # rubocop:enable Naming/ConstantName

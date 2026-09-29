@@ -41,6 +41,27 @@ module NATS
         end
       end
 
+      # PriorityGroupState is the state of a priority group of a consumer
+      # (requires nats-server v2.11.0).
+      #
+      # @!attribute group
+      #   @return [String] Name of the group.
+      # @!attribute pinned_client_id
+      #   @return [String, nil] With the pinned_client priority policy, the
+      #     pin id of the subscription that the group is pinned to.
+      # @!attribute pinned_ts
+      #   @return [Time, nil] When the group was pinned.
+      PriorityGroupState = Struct.new(:group, :pinned_client_id, :pinned_ts,
+        keyword_init: true) do
+        def initialize(opts = {})
+          opts[:pinned_ts] = JS.parse_time(opts[:pinned_ts])
+          rem = opts.keys - members
+          opts.delete_if { |k| rem.include?(k) }
+          super
+          freeze
+        end
+      end
+
       # ConsumerInfo is the current status of a JetStream consumer.
       #
       # @!attribute stream_name
@@ -64,25 +85,43 @@ module NATS
       # @!attribute num_pending
       #   @return [Integer]
       # @!attribute cluster
-      #   @return [Hash]
+      #   The cluster of a clustered consumer, such as its leader, its
+      #   replicas and, as leader_since, when the leader was elected
+      #   (requires nats-server v2.12.0); nil on a standalone server. The
+      #   values are the server's: leader_since is a String, and the
+      #   active of the replicas is in nanoseconds.
+      #   @return [Hash, nil]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
+      # @!attribute paused
+      #   True while the consumer is paused (requires nats-server v2.11.0).
+      #   @return [Boolean, nil]
+      # @!attribute pause_remaining
+      #   Seconds until a paused consumer resumes, rounded down, so 0 in its
+      #   last second (requires nats-server v2.11.0).
+      #   @return [Integer, nil]
+      # @!attribute priority_groups
+      #   State of the consumer's priority groups (requires nats-server v2.11.0).
+      #   @return [Array<PriorityGroupState>, nil]
       ConsumerInfo = Struct.new(:type, :stream_name, :name, :created,
         :config, :delivered, :ack_floor,
         :num_ack_pending, :num_redelivered, :num_waiting,
         :num_pending, :cluster, :push_bound, :ts,
+        :paused, :pause_remaining, :priority_groups,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:created] = Time.parse(opts[:created])
           opts[:ts] = Time.parse(opts[:ts]) if opts[:ts]
+          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
+          opts[:priority_groups] = opts[:priority_groups].map { |state| PriorityGroupState.new(state) } if opts[:priority_groups]
           opts[:ack_floor] = SequenceInfo.new(opts[:ack_floor])
           opts[:delivered] = SequenceInfo.new(opts[:delivered])
           opts[:config][:ack_wait] = opts[:config][:ack_wait] / ::NATS::NANOSECONDS if opts[:config][:ack_wait]
           opts[:config][:inactive_threshold] = opts[:config][:inactive_threshold] / ::NATS::NANOSECONDS if opts[:config][:inactive_threshold]
           opts[:config][:idle_heartbeat] = opts[:config][:idle_heartbeat] / ::NATS::NANOSECONDS if opts[:config][:idle_heartbeat]
+          opts[:config][:priority_timeout] = opts[:config][:priority_timeout] / ::NATS::NANOSECONDS if opts[:config][:priority_timeout]
           opts[:config] = ConsumerConfig.new(opts[:config])
-          opts.delete(:cluster)
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
@@ -110,6 +149,27 @@ module NATS
       #   @return [Integer]
       # @!attribute max_ack_pending
       #   @return [Integer]
+      # @!attribute pause_until
+      #   Time until which the consumer delivers no messages, as a Time or
+      #   as an RFC 3339 String; a fetched config has a String. The server
+      #   takes it only when it creates the consumer: updates keep the pause,
+      #   which pause_consumer and resume_consumer change. Requires
+      #   nats-server v2.11.0; older ones create the consumer unpaused.
+      #   @return [Time, String, nil]
+      # @!attribute priority_policy
+      #   How the consumer serves the pulls of its priority groups: "none",
+      #   "overflow", "pinned_client", or "prioritized" (requires
+      #   nats-server v2.11.0, and v2.12.0 for "prioritized").
+      #   @return [String, nil]
+      # @!attribute priority_groups
+      #   Names of the consumer's priority groups, one of which each pull
+      #   has to name (requires nats-server v2.11.0).
+      #   @return [Array<String>, nil]
+      # @!attribute priority_timeout
+      #   With the pinned_client priority policy, seconds after which a
+      #   pinned subscription that stops pulling is unpinned
+      #   (requires nats-server v2.11.0).
+      #   @return [Integer, nil]
       ConsumerConfig = Struct.new(:name, :durable_name, :description,
         :deliver_policy, :opt_start_seq, :opt_start_time,
         :ack_policy, :ack_wait, :max_deliver, :backoff,
@@ -129,12 +189,55 @@ module NATS
         :mem_storage,
         # NATS v2.10 features
         :metadata, :filter_subjects, :max_bytes,
+        # NATS v2.11 features
+        :pause_until, :priority_policy, :priority_groups, :priority_timeout,
         keyword_init: true) do
         def initialize(opts = {})
           # Filter unrecognized fields just in case.
           rem = opts.keys - members
           opts.delete_if { |k| rem.include?(k) }
           super
+        end
+      end
+
+      # ConsumerPauseResponse is the result of pausing or resuming a consumer
+      # (requires nats-server v2.11.0).
+      #
+      # @!attribute paused
+      #   @return [Boolean] Whether the consumer is paused.
+      # @!attribute pause_until
+      #   @return [Time, nil] When the consumer resumes; nil once resumed. A time
+      #     in the past does not pause the consumer, and paused is then false.
+      # @!attribute pause_remaining
+      #   @return [Integer, nil] Seconds until the consumer resumes, rounded down,
+      #     so 0 in its last second; nil when it is not paused.
+      ConsumerPauseResponse = Struct.new(:paused, :pause_until, :pause_remaining,
+        keyword_init: true) do
+        def initialize(opts = {})
+          opts[:pause_until] = JS.parse_time(opts[:pause_until])
+          opts[:pause_remaining] = opts[:pause_remaining] / ::NATS::NANOSECONDS if opts[:pause_remaining]
+          rem = opts.keys - members
+          opts.delete_if { |k| rem.include?(k) }
+          super
+          freeze
+        end
+      end
+
+      # ConsumerResetResponse is the result of resetting a consumer
+      # (requires nats-server v2.14.0).
+      #
+      # @!attribute info
+      #   @return [ConsumerInfo] The consumer after the reset.
+      # @!attribute reset_seq
+      #   @return [Integer] Stream sequence the consumer delivers from. The next
+      #     message it delivers can come later, as the first one from there that
+      #     matches its filter.
+      ConsumerResetResponse = Struct.new(:info, :reset_seq,
+        keyword_init: true) do
+        def initialize(opts = {})
+          reset_seq = opts[:reset_seq]
+          super(info: ConsumerInfo.new(opts), reset_seq: reset_seq)
+          freeze
         end
       end
 
@@ -307,11 +410,18 @@ module NATS
       #   State of each of the stream's sources, such as its lag and subject
       #   transforms, as Hashes.
       #   @return [Array<Hash>]
+      # @!attribute cluster
+      #   The cluster of the stream, such as its leader, its replicas and,
+      #   as leader_since, when the leader was elected (requires nats-server
+      #   v2.12.0). A standalone server reports only itself, as the leader.
+      #   The values are the server's: leader_since is a String, and the
+      #   active of the replicas is in nanoseconds.
+      #   @return [Hash]
       # @!attribute ts
       #   When the server reported this info (requires nats-server v2.10.0).
       #   @return [Time]
       StreamInfo = Struct.new(:type, :config, :created, :state, :domain,
-        :mirror, :sources, :ts,
+        :mirror, :sources, :cluster, :ts,
         keyword_init: true) do
         def initialize(opts = {})
           opts[:config] = StreamConfig.new(opts[:config])

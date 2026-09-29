@@ -7,11 +7,20 @@ module NATS
       class SequenceInfo < Struct[Integer]
       end
 
-      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time]
+      class PriorityGroupState < Struct[String | Time]
       end
 
-      class ConsumerConfig < Struct[String | Integer]
+      class ConsumerInfo < Struct[String | NATS::JetStream::API::ConsumerConfig | NATS::JetStream::API::SequenceInfo | Integer | Hash[Symbol, untyped] | Time | bool | Array[NATS::JetStream::API::PriorityGroupState]]
+      end
+
+      class ConsumerConfig < Struct[String | Integer | Time | Array[String]]
         def to_json: (*Hash[untyped, untyped]) -> String
+      end
+
+      class ConsumerPauseResponse < Struct[bool | Time | Integer]
+      end
+
+      class ConsumerResetResponse < Struct[NATS::JetStream::API::ConsumerInfo | Integer]
       end
 
       class StreamConfig < Struct[String | Hash[Symbol, untyped] | NATS::JetStream::API::StreamState | bool | Integer]

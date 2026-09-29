@@ -551,6 +551,73 @@ describe "JetStream" do
     end
   end
 
+  describe "ConsumerInfo" do
+    # A consumer info response as the server sends it, with the given fields.
+    def consumer_info(fields = {})
+      NATS::JetStream::API::ConsumerInfo.new({
+        stream_name: "S", name: "C", created: "2026-01-01T00:00:00Z",
+        config: {durable_name: "C", ack_policy: "explicit"},
+        delivered: {consumer_seq: 0, stream_seq: 0},
+        ack_floor: {consumer_seq: 0, stream_seq: 0}
+      }.merge(fields))
+    end
+
+    it "should report the cluster of a clustered consumer" do
+      cluster = {name: "C1", leader: "n1", leader_since: "2026-01-01T00:00:00Z", replicas: [{name: "n2", current: true}]}
+
+      expect(consumer_info(cluster: cluster).cluster).to eql(cluster)
+      expect(consumer_info.cluster).to be_nil
+    end
+
+    it "should report the state of the priority groups" do
+      info = consumer_info(priority_groups: [
+        {group: "A", pinned_client_id: "pin", pinned_ts: "2026-01-02T03:04:05.5Z", future: true},
+        # The server sends Go's zero time for a group that is not pinned.
+        {group: "B", pinned_ts: "0001-01-01T00:00:00Z"}
+      ])
+
+      expect(info.priority_groups.map(&:to_h)).to eql([
+        {group: "A", pinned_client_id: "pin", pinned_ts: Time.utc(2026, 1, 2, 3, 4, 5.5)},
+        {group: "B", pinned_client_id: nil, pinned_ts: nil}
+      ])
+      expect(info.priority_groups).to all(be_a(NATS::JetStream::API::PriorityGroupState).and(be_frozen))
+      expect(consumer_info.priority_groups).to be_nil
+    end
+
+    it "should report the priority timeout in seconds" do
+      config = {durable_name: "C", priority_policy: "pinned_client", priority_groups: ["A"], priority_timeout: 90_000_000_000}
+
+      expect(consumer_info(config: config).config.priority_timeout).to eql(90)
+      expect(consumer_info.config.priority_timeout).to be_nil
+    end
+  end
+
+  describe "pull requests" do
+    def next_req(fields)
+      JSON.parse(NATS::JetStream.const_get(:JS).next_req_to_json(fields), symbolize_names: true)
+    end
+
+    it "should carry the priority group settings that are given" do
+      expect(next_req(batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5))
+        .to eql({batch: 2, expires: 1_000, group: "A", min_pending: 10, min_ack_pending: 5})
+      expect(next_req(batch: 2, group: "A", id: "pin", priority: 0))
+        .to eql({batch: 2, group: "A", id: "pin", priority: 0})
+      expect(next_req(batch: 2, no_wait: true, group: nil, min_pending: nil, min_ack_pending: nil, id: nil, priority: nil))
+        .to eql({batch: 2, no_wait: true})
+    end
+  end
+
+  describe "StreamInfo" do
+    it "should report the cluster of the stream" do
+      cluster = {name: "C1", leader: "n1", leader_since: "2026-01-01T00:00:00Z"}
+      info = NATS::JetStream::API::StreamInfo.new({
+        config: {name: "S"}, state: {messages: 0}, created: "2026-01-01T00:00:00Z", cluster: cluster
+      })
+
+      expect(info.cluster).to eql(cluster)
+    end
+  end
+
   describe "Pull Subscribe" do
     before do
       @tmpdir = Dir.mktmpdir("ruby-jetstream")
@@ -640,6 +707,239 @@ describe "JetStream" do
       sub = js.pull_subscribe("test", "psub-none")
       msgs = sub.fetch(1)
       expect(msgs.map(&:data)).to eql(["2"])
+    end
+
+    it "should not hold up the connection when a fetch finds no message to take" do
+      js = nc.jetstream
+      js.publish("test", "1")
+      sub = js.pull_subscribe("test", "psub")
+      # As when a fetch saw a pending message that a concurrent fetch
+      # took first. The connection delivers to the subscription under its
+      # lock, so taking from an empty queue must not wait holding it.
+      taker = Thread.new { sub.send(:pop_pending) }
+      taker.join(0.1)
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+
+      expect { nc.flush(1) }.not_to raise_error
+      expect(sub.fetch(1).map(&:data)).to eql(["1"])
+    ensure
+      taker&.kill
+    end
+
+    it "should check for a message and take it under one lock" do
+      js = nc.jetstream
+      js.publish("test", "1")
+      sub = js.pull_subscribe("test", "psub")
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+      # Otherwise a concurrent fetch can take the message between the
+      # check and the take, which then waits for the next one.
+      sub.mon_enter
+      taker = Thread.new { sub.send(:pop_pending) }
+
+      expect(taker.join(0.1)).to be_nil
+      expect(sub.pending_queue.size).to eql(1)
+      sub.mon_exit
+      expect(taker.value.data).to eql("1")
+    ensure
+      sub.mon_exit if sub&.mon_owned?
+    end
+
+    it "should not take statuses left over from earlier pulls for the reply to its own" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+
+      [1, 2].each do |batch|
+        # The 408 that ends a pull can come after the fetch that sent it gave up.
+        2.times do
+          nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1, expires: 10_000_000}.to_json, sub.subject)
+        end
+        wait_until { sub.pending_queue.size == 2 }
+        data = Array.new(batch) { |i| "#{batch}.#{i}" }
+        data.each { |d| js.publish("test", d) }
+
+        expect(sub.fetch(batch).map(&:data)).to eql(data)
+      end
+    end
+
+    it "should take the reply that came before it waits for it" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      # As when the fetching thread is preempted right after it pulls: the
+      # reply is there before the fetch waits for it.
+      replies = 0
+      replied = -> { wait_until { sub.pending_queue.size >= replies } }
+      nc.singleton_class.prepend(Module.new do
+        define_method(:publish) do |subject, *args, **opts|
+          super(subject, *args, **opts).tap { replied.call if subject.start_with?("$JS.API.CONSUMER.MSG.NEXT") }
+        end
+      end)
+
+      replies = 1
+      js.publish("test", "1")
+      expect(sub.fetch(1, timeout: 1).map(&:data)).to eql(["1"])
+
+      replies = 3
+      data = %w[2 3 4]
+      data.each { |d| js.publish("test", d) }
+      started = NATS::MonotonicTime.now
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(data)
+      expect(NATS::MonotonicTime.since(started)).to be < 0.5
+    end
+
+    describe "when an earlier pull ends before its first pull is answered" do
+      let(:js) { nc.jetstream }
+      let(:sub) { js.pull_subscribe("test", "psub") }
+      let(:pulls) { nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub") }
+
+      # Holds back the first pull of the fetch, which does not wait, until
+      # the 408 that ends a pull of another consumer, sent to the same
+      # subscription as if left over from an earlier fetch, is there.
+      def fetch_after_earlier_pull_ends(batch, timeout)
+        js.add_consumer("test", durable_name: "later", deliver_policy: "new")
+        sub
+        pulls
+        nc.flush
+        held = false
+        ended = -> { wait_until { sub.pending_queue.size == 1 } }
+        nc.singleton_class.prepend(Module.new do
+          define_method(:publish) do |subject, data = "", *args, **opts|
+            if !held && data.include?("no_wait")
+              held = true
+              ended.call
+            end
+            super(subject, data, *args, **opts)
+          end
+        end)
+        nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.later", {batch: 1, expires: 100_000_000}.to_json, sub.subject)
+        sub.fetch(batch, timeout: timeout)
+      end
+
+      def pulls_sent
+        nc.flush
+        Array.new(pulls.pending_queue.size) { JSON.parse(pulls.next_msg.data, symbolize_names: true) }
+      end
+
+      it "should not take that end for its pull being turned away" do
+        data = Array.new(5) { |i| i.to_s }
+        data.each { |d| js.publish("test", d) }
+
+        expect(fetch_after_earlier_pull_ends(5, 2).map(&:data)).to eql(data)
+        expect(pulls_sent).to eql([{batch: 5, no_wait: true}])
+      end
+
+      it "should not pull again for longer than it has left" do
+        expect { fetch_after_earlier_pull_ends(5, 1) }.to raise_error(NATS::Timeout)
+        pull = pulls_sent.last
+        expect(pull[:no_wait]).to be_nil
+        expect(pull[:expires]).to be <= 900_000_000
+      end
+    end
+
+    it "should wait for its message past the end of an earlier pull" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      pulls = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub")
+      nc.flush
+      # A pull left over from an earlier fetch, which ends while this one waits.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1, expires: 50_000_000}.to_json, sub.subject)
+      fetch = Thread.new { sub.fetch(1, timeout: 2) }
+      wait_until { pulls.pending_queue.size == 2 }
+      eventually { expect(js.consumer_info("test", "psub").num_waiting).to eql(1) }
+      js.publish("test", "1")
+
+      expect(fetch.value.map(&:data)).to eql(["1"])
+    end
+
+    it "should return the messages it took when the server refuses its pull" do
+      js = nc.jetstream
+      js.add_consumer("test", durable_name: "one", max_waiting: 1)
+      sub = js.pull_subscribe("test", "one", stream: "test")
+      other = js.pull_subscribe("test", "one", stream: "test")
+      js.publish("test", "left")
+      # Left by an earlier pull.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.one", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+      # The only pull the consumer lets wait.
+      other_fetch = Thread.new { other.fetch(1, timeout: 1) }
+      eventually { expect(js.consumer_info("test", "one").num_waiting).to eql(1) }
+
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(["left"])
+      expect { other_fetch.value }.to raise_error(NATS::Timeout)
+    end
+
+    it "should return the messages it took at once when no more are pending" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      js.publish("test", "left")
+      # Left by an earlier pull.
+      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+      wait_until { sub.pending_queue.size == 1 }
+
+      started = NATS::MonotonicTime.now
+      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(["left"])
+      expect(NATS::MonotonicTime.since(started)).to be < 0.5
+    end
+
+    it "should never let a pull wait for good" do
+      sub = nc.jetstream.pull_subscribe("test", "psub")
+
+      # The server keeps a pull that expires in 0 until it gets a message.
+      expect(sub.send(:pull_expires, NATS::MonotonicTime.now)).to eql(1)
+      expect(sub.send(:pull_expires, NATS::MonotonicTime.now - 1)).to eql(1)
+    end
+
+    # Threads fetching from one subscription share its messages, and wake
+    # up for each other's (#181).
+    it "should only time out when threads fetch one message at a time from an empty consumer" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+
+      errors = Queue.new
+      Array.new(6) do
+        Thread.new do
+          20.times do
+            started = NATS::MonotonicTime.now
+            sub.fetch(1, timeout: 0.1)
+          rescue NATS::Timeout
+            # No messages, which it only says once its timeout is up.
+            elapsed = NATS::MonotonicTime.since(started)
+            errors << "timed out after #{elapsed}s" if elapsed < 0.1
+          rescue => e
+            errors << e
+          end
+        end
+      end.each(&:join)
+
+      expect(Array.new(errors.size) { errors.pop }).to eql([])
+    end
+
+    it "should deliver each message once to threads fetching one message at a time" do
+      js = nc.jetstream
+      sub = js.pull_subscribe("test", "psub")
+      data = Array.new(200) { |i| i.to_s }
+      data.each { |d| js.publish("test", d) }
+
+      received = Queue.new
+      errors = Queue.new
+      Array.new(6) do
+        Thread.new do
+          loop do
+            sub.fetch(1, timeout: 0.2).each do |msg|
+              received << msg.data
+              msg.ack
+            end
+          rescue NATS::Timeout
+            break if received.size >= data.size
+          rescue => e
+            errors << e
+            break
+          end
+        end
+      end.each { |thread| thread.join(10) }
+
+      expect(Array.new(errors.size) { errors.pop }).to eql([])
+      expect(Array.new(received.size) { received.pop }.sort_by(&:to_i)).to eql(data)
     end
 
     it "should find the pull subscription by subject" do

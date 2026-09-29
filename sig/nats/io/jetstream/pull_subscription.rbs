@@ -9,6 +9,22 @@ module NATS
       def fetch: (Integer, Hash[Symbol, untyped]) -> Array[NATS::Msg]
 
       def consumer_info: (Hash[Symbol, untyped]) -> NATS::JetStream::ConsumerInfo
+
+      private
+
+      def take_pending: (Array[NATS::Msg], Integer) -> bool
+
+      def pull_ended?: (NATS::Msg) -> bool
+
+      def nothing_pending?: (NATS::Msg) -> bool
+
+      def pull_expires: (Float) -> Integer
+
+      def wait_pending: (Float) -> NATS::Msg?
+
+      def pull: (Hash[Symbol, untyped]) -> void
+
+      def pop_pending: () -> NATS::Msg?
     end
   end
 end

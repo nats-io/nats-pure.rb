@@ -6,11 +6,13 @@ module NATS
       # class << self
       def self.next_req_to_json: (Hash[Symbol, untyped]) -> String
 
+      def self.parse_time: (String?) -> Time?
+
       def self.is_status_msg: (NATS::Msg) -> bool
 
       def self.check_503_error: (NATS::Msg) -> void
 
-      def self.from_msg: (NATS::Msg) -> NATS::JetStream::API::Error
+      def self.from_msg: (NATS::Msg) -> (NATS::JetStream::API::Error | NATS::JetStream::Error::PinIdMismatch)
 
       def self.from_error: (Hash[Symbol, untyped]) -> (
           NATS::JetStream::Error::ServiceUnavailable |

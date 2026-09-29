@@ -32,7 +32,18 @@ module NATS
           req[:batch] = next_req[:batch]
           req[:expires] = next_req[:expires].to_i if next_req[:expires]
           req[:no_wait] = next_req[:no_wait] if next_req[:no_wait]
+          # Priority groups (requires nats-server v2.11.0).
+          req.merge!(next_req.slice(:group, :min_pending, :min_ack_pending, :priority, :id).compact)
           req.to_json
+        end
+
+        # parse_time parses a time from the server, which sends Go's zero
+        # time for a time that is not set.
+        def parse_time(time)
+          return if time.nil?
+
+          time = ::Time.parse(time)
+          time unless time.year == 1
         end
 
         def is_status_msg(msg)
@@ -61,6 +72,8 @@ module NATS
           check_503_error(msg)
           code = msg.header[JS::Header::Status]
           desc = msg.header[JS::Header::Desc]
+          return ::NATS::JetStream::Error::PinIdMismatch.new({description: desc}) if code == Status::PinIdMismatch
+
           ::NATS::JetStream::API::Error.new({code: code, description: desc})
         end
 
@@ -88,6 +101,8 @@ module NATS
               ::NATS::JetStream::Error::ConsumerAlreadyExists.new(err)
             when 10149
               ::NATS::JetStream::Error::ConsumerDoesNotExist.new(err)
+            when 10204
+              ::NATS::JetStream::Error::ConsumerInvalidReset.new(err)
             else
               ::NATS::JetStream::Error::BadRequest.new(err)
             end

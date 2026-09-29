@@ -142,7 +142,8 @@ module NATS
       # consumer_info lacks the settings this client does not know, and has
       # its durations rounded down to whole seconds. A consumer that does
       # not exist raises ConsumerDoesNotExist; the server decides which
-      # fields may change. Requires nats-server v2.10.0.
+      # fields may change, and keeps the pause of the consumer, which
+      # pause_consumer and resume_consumer change. Requires nats-server v2.10.0.
       # @param stream [String] Name of the stream.
       # @param config [JetStream::API::ConsumerConfig] New configuration of the consumer.
       # @param params [Hash] Options to customize API request.
@@ -180,6 +181,96 @@ module NATS
         req_subject = "#{@prefix}.CONSUMER.DELETE.#{stream}.#{consumer}"
         result = api_request(req_subject, "", params)
         result[:success]
+      end
+
+      # pause_consumer pauses a consumer, so that it delivers no messages
+      # until the given time. Requires nats-server v2.11.0: older servers
+      # let the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param pause_until [Time, String] When to resume, as a Time or as an RFC 3339 String.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerPauseResponse]
+      # @raise [ArgumentError] When pause_until is nil: resume_consumer resumes.
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def pause_consumer(stream, consumer, pause_until, params = {})
+        raise ArgumentError.new("nats: a time to pause until is required, resume_consumer resumes") if pause_until.nil?
+
+        request_pause(stream, consumer, {pause_until: rfc3339(pause_until)}, params)
+      end
+
+      # resume_consumer resumes a paused consumer. Requires nats-server
+      # v2.11.0: older servers let the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerPauseResponse]
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def resume_consumer(stream, consumer, params = {})
+        request_pause(stream, consumer, {}, params)
+      end
+
+      # unpin_consumer unpins a priority group of a consumer with the
+      # pinned_client priority policy from its subscription, so that the
+      # next subscription to pull is pinned instead. The server tells the
+      # subscription that was pinned once it has a message for its pull, and
+      # its fetch then raises PinIdMismatch; without messages, the fetch
+      # times out. Requires nats-server v2.11.0.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param group [String] Name of the priority group.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [Boolean]
+      # @raise [JetStream::Error::StreamNotFound] When the stream does not exist.
+      # @raise [JetStream::Error::ConsumerNotFound] When the consumer does not exist.
+      # @raise [JetStream::Error::BadRequest] When the consumer has no such group.
+      # @raise [NATS::Timeout] With a server before v2.11.0.
+      def unpin_consumer(stream, consumer, group, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+
+        req_subject = "#{@prefix}.CONSUMER.UNPIN.#{stream}.#{consumer}"
+        api_request(req_subject, {group: group}.to_json, params)
+        true
+      end
+
+      # reset_consumer resets the delivery state of a consumer, as if it had
+      # been created again to start from a stream sequence: by default the
+      # one after its ack floor, so that it redelivers the messages that
+      # await acks. Only a consumer that delivers all messages, or from a
+      # start sequence or time, can be given a sequence, and not one before
+      # its start. Requires nats-server v2.14.0: an older server, like a
+      # stream or consumer that does not exist, lets the request time out.
+      # @param stream [String] Name of the stream.
+      # @param consumer [String] Name of the consumer.
+      # @param params [Hash] Options to customize API request.
+      # @option params [Integer] :seq Stream sequence to deliver from; 0, like
+      #   none, for the one after the ack floor.
+      # @option params [Float] :timeout Time to wait for response.
+      # @return [JetStream::API::ConsumerResetResponse]
+      # @raise [ArgumentError] When seq is not an integer of 0 or more.
+      # @raise [JetStream::Error::ConsumerInvalidReset] When the consumer cannot be reset to seq.
+      # @raise [NATS::Timeout] When the stream or consumer does not exist, or the server
+      #   cannot reset consumers.
+      def reset_consumer(stream, consumer, params = {})
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+        seq = params[:seq]
+        if !seq.nil? && !(seq.is_a?(Integer) && seq >= 0)
+          raise ArgumentError.new("nats: seq should be an integer of 0 or more")
+        end
+
+        req_subject = "#{@prefix}.CONSUMER.RESET.#{stream}.#{consumer}"
+        req = {seq: seq}.compact
+        result = api_request(req_subject, req.to_json, params.except(:seq))
+        JetStream::API::ConsumerResetResponse.new(result)
       end
 
       # find_stream_name_by_subject does a lookup for the stream to which
@@ -307,6 +398,11 @@ module NATS
           raise ArgumentError.new("nats: invalid idle heartbeat") unless config[:idle_heartbeat].is_a?(Integer)
           config[:idle_heartbeat] = config[:idle_heartbeat] * ::NATS::NANOSECONDS
         end
+        if config[:priority_timeout]
+          raise ArgumentError.new("nats: invalid priority timeout") unless config[:priority_timeout].is_a?(Integer)
+          config[:priority_timeout] = config[:priority_timeout] * ::NATS::NANOSECONDS
+        end
+        config[:pause_until] = rfc3339(config[:pause_until])
 
         cfg = config.to_h.compact
         req = {
@@ -318,6 +414,23 @@ module NATS
 
         result = api_request(req_subject, req.to_json, params)
         JetStream::API::ConsumerInfo.new(result).freeze
+      end
+
+      # request_pause sends a consumer pause request, which resumes the
+      # consumer when it has no pause time.
+      def request_pause(stream, consumer, req, params)
+        raise JetStream::Error::InvalidStreamName.new("nats: invalid stream name") if stream.nil? || stream.empty?
+        raise JetStream::Error::InvalidConsumerName.new("nats: invalid consumer name") if consumer.nil? || consumer.empty?
+
+        req_subject = "#{@prefix}.CONSUMER.PAUSE.#{stream}.#{consumer}"
+        result = api_request(req_subject, req.to_json, params)
+        JetStream::API::ConsumerPauseResponse.new(result)
+      end
+
+      # rfc3339 formats a Time as the server expects it; a String is
+      # sent as is.
+      def rfc3339(time)
+        time.is_a?(Time) ? time.getutc.iso8601(9) : time
       end
 
       def api_request(req_subject, req = "", params = {})
