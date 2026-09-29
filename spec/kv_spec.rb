@@ -140,7 +140,8 @@ describe "KeyValue" do
       allow_direct: false,
       mirror_direct: false,
       compression: "none",
-      consumer_limits: {}
+      consumer_limits: {},
+      allow_msg_ttl: false
     )
     # Since v2.11 the server injects its own metadata (_nats.ver etc.),
     # whose values change with every server version — assert presence

@@ -6,10 +6,18 @@ module NATS
     class PubAck < Struct[String | Numeric | bool]
     end
 
-    def publish: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PubAck
+    def publish: (String, ?String, **untyped) -> NATS::JetStream::PubAck
 
     def subscribe: (String, Hash[Symbol, untyped]) { (?(NATS::Msg | String), ?String, ?String, ?Hash[Symbol, untyped]) -> void } -> NATS::JetStream::PushSubscription
 
     def pull_subscribe: (String, String, Hash[Symbol, untyped]) -> NATS::JetStream::PullSubscription
+
+    private
+
+    def msg_ttl: (Integer | :never) -> String
+
+    def schedule_header: (target: String, ?at: Time?, ?every: Integer?, ?cron: String?, ?source: String?, ?ttl: (Integer | :never)?, ?time_zone: String?, ?rollup: bool?) -> Hash[String, String]
+
+    def nonempty_string?: (untyped) -> bool
   end
 end

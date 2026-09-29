@@ -16,6 +16,7 @@
 require_relative "kv"
 require_relative "jetstream/api"
 require_relative "jetstream/errors"
+require_relative "jetstream/header"
 require_relative "jetstream/js"
 require_relative "jetstream/manager"
 require_relative "jetstream/msg"
@@ -89,21 +90,51 @@ module NATS
     # @param payload [String] The payload of the message.
     # @param params [Hash] Options to customize the publish message request.
     # @option params [Float] :timeout Time to wait for an PubAck response or an error.
-    # @option params [Hash] :header NATS Headers to use for the message.
+    # @option params [Hash] :header NATS Headers to use for the message; the
+    #   options below replace those that they set.
     # @option params [String] :stream Expected Stream to which the message is being published.
+    # @option params [Integer, Symbol] :ttl Seconds after which the stream
+    #   removes the message, from 1 to 2**32, or :never to keep it past the max_age of
+    #   the stream. The stream needs allow_msg_ttl (requires nats-server v2.11.0).
+    # @option params [Hash] :schedule Makes the message a schedule, which
+    #   publishes it to the subject given as :target: once at the Time given
+    #   as :at; every so many whole seconds, given as :every; or on a :cron
+    #   expression with seconds, such as "0 30 * * * *", or "@hourly",
+    #   "@daily", "@weekly", "@monthly" or "@yearly", in UTC or the IANA
+    #   :time_zone, which only cron schedules take. :at is sent to the
+    #   nanosecond. :source publishes the last message of that subject
+    #   instead, :ttl gives the published messages a TTL, like the ttl
+    #   option, and rollup: true rolls up the target with each. The target
+    #   and source have to be subjects of the stream, which needs
+    #   allow_msg_schedules, and allow_msg_ttl for :ttl. Another schedule
+    #   on the subject replaces the schedule, and deleting its message stops
+    #   it. Requires nats-server v2.12.0 for :at, :target and :ttl, and
+    #   v2.14.0 for the others; v2.12 ignores :source and :rollup.
     # @raise [NATS::Timeout] When it takes too long to receive an ack response.
+    # @raise [ArgumentError] When an option is invalid, before the message is sent.
+    # @raise [NATS::JetStream::Error::APIError] When the stream refuses the
+    #   message, as a stream that does not allow TTLs refuses one with a TTL.
+    # @raise [NATS::JetStream::Error::NoStreamResponse] When no stream takes
+    #   the subject.
     # @return [PubAck] The pub ack response.
     def publish(subject, payload = "", **params)
       params[:timeout] ||= @opts[:timeout]
-      if params[:stream]
-        params[:header] ||= {}
-        params[:header][JS::Header::ExpectedStream] = params[:stream]
+      # The options add to a copy of the header, which the caller may reuse.
+      options = {
+        Header::EXPECTED_STREAM => (params[:stream] if params[:stream]),
+        Header::MSG_TTL => (msg_ttl(params[:ttl]) if params[:ttl])
+      }.compact
+      if (schedule = params[:schedule])
+        raise ArgumentError.new("nats: invalid schedule #{schedule.inspect}, expected a Hash") unless schedule.is_a?(Hash)
+
+        options.merge!(schedule_header(**schedule))
       end
+      header = options.empty? ? params[:header] : params[:header].to_h.merge(options)
 
       # Send message with headers.
       msg = NATS::Msg.new(subject: subject,
         data: payload,
-        header: params[:header])
+        header: header)
 
       begin
         resp = @nc.request_msg(msg, **params)
@@ -347,6 +378,52 @@ module NATS
         nms: subject
       )
       sub
+    end
+
+    private
+
+    # msg_ttl formats a message TTL as the server takes it. Longer TTLs than
+    # 2**32 seconds, some 136 years, overflow in the server, which then
+    # removes the message at once.
+    def msg_ttl(ttl)
+      return "never" if ttl == :never
+      unless ttl.is_a?(Integer) && ttl.between?(1, 2**32)
+        raise ArgumentError.new("nats: invalid ttl #{ttl.inspect}, expected whole seconds from 1 to 2**32, or :never")
+      end
+
+      ttl.to_s
+    end
+
+    # schedule_header makes the headers of a message schedule.
+    def schedule_header(target:, at: nil, every: nil, cron: nil, source: nil, ttl: nil, time_zone: nil, rollup: nil)
+      pattern = if at.is_a?(Time)
+        "@at #{at.getutc.iso8601(9)}"
+      elsif every.is_a?(Integer) && every >= 1
+        "@every #{every}s"
+      elsif nonempty_string?(cron)
+        cron
+      end
+      unless pattern && [at, every, cron].compact.size == 1
+        raise ArgumentError.new("nats: a schedule needs one of at: a Time, every: whole seconds from 1, or cron: an expression")
+      end
+      raise ArgumentError.new("nats: a schedule needs a target subject") unless nonempty_string?(target)
+      raise ArgumentError.new("nats: invalid schedule source #{source.inspect}") unless source.nil? || nonempty_string?(source)
+      raise ArgumentError.new("nats: invalid schedule time zone #{time_zone.inspect}") unless time_zone.nil? || nonempty_string?(time_zone)
+      raise ArgumentError.new("nats: only cron: schedules take a time zone") if time_zone && !cron
+      raise ArgumentError.new("nats: invalid schedule rollup #{rollup.inspect}") unless [nil, true, false].include?(rollup)
+
+      {
+        Header::SCHEDULE => pattern,
+        Header::SCHEDULE_TARGET => target,
+        Header::SCHEDULE_SOURCE => source,
+        Header::SCHEDULE_TTL => (msg_ttl(ttl) if ttl),
+        Header::SCHEDULE_TIME_ZONE => time_zone,
+        Header::SCHEDULE_ROLLUP => ("sub" if rollup)
+      }.compact
+    end
+
+    def nonempty_string?(value)
+      value.is_a?(String) && !value.empty?
     end
   end
 end

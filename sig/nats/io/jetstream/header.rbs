@@ -1,0 +1,33 @@
+module NATS
+  class JetStream
+    module Header
+      MSG_ID: 'Nats-Msg-Id'
+      EXPECTED_STREAM: 'Nats-Expected-Stream'
+      EXPECTED_LAST_SEQUENCE: 'Nats-Expected-Last-Sequence'
+      EXPECTED_LAST_SUBJECT_SEQUENCE: 'Nats-Expected-Last-Subject-Sequence'
+      EXPECTED_LAST_SUBJECT_SEQUENCE_SUBJECT: 'Nats-Expected-Last-Subject-Sequence-Subject'
+      EXPECTED_LAST_MSG_ID: 'Nats-Expected-Last-Msg-Id'
+      ROLLUP: 'Nats-Rollup'
+      MSG_TTL: 'Nats-TTL'
+      MARKER_REASON: 'Nats-Marker-Reason'
+      STREAM: 'Nats-Stream'
+      SUBJECT: 'Nats-Subject'
+      SEQUENCE: 'Nats-Sequence'
+      TIME_STAMP: 'Nats-Time-Stamp'
+      LAST_SEQUENCE: 'Nats-Last-Sequence'
+      STREAM_SOURCE: 'Nats-Stream-Source'
+      BATCH_ID: 'Nats-Batch-Id'
+      BATCH_SEQUENCE: 'Nats-Batch-Sequence'
+      BATCH_COMMIT: 'Nats-Batch-Commit'
+      SCHEDULE: 'Nats-Schedule'
+      SCHEDULE_TARGET: 'Nats-Schedule-Target'
+      SCHEDULE_SOURCE: 'Nats-Schedule-Source'
+      SCHEDULE_TTL: 'Nats-Schedule-TTL'
+      SCHEDULE_TIME_ZONE: 'Nats-Schedule-Time-Zone'
+      SCHEDULE_ROLLUP: 'Nats-Schedule-Rollup'
+      SCHEDULER: 'Nats-Scheduler'
+      SCHEDULE_NEXT: 'Nats-Schedule-Next'
+      REQUIRED_API_LEVEL: 'Nats-Required-Api-Level'
+    end
+  end
+end

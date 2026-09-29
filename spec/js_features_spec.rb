@@ -384,6 +384,74 @@ describe "JetStream" do
         expect(raw[:consumer_limits]).to eql({max_ack_pending: 100})
       end
 
+      # The settings of nats-server 2.11 to 2.14, as the server reports them.
+      # Fast batches need nats-server 2.14.
+      {
+        "per-message TTLs" => {allow_msg_ttl: true},
+        "subject delete markers" => {allow_msg_ttl: true, subject_delete_marker_ttl: 60 * ::NATS::NANOSECONDS},
+        "counters" => {allow_msg_counter: true},
+        "atomic batches" => {allow_atomic: true},
+        "message schedules" => {allow_msg_schedules: true},
+        "async persistence" => {persist_mode: "async"},
+        "fast batches" => {allow_batched: true}
+      }.each do |feature, settings|
+        it "creates streams with #{feature}" do
+          js.add_stream(name: "NEW", subjects: ["new"], **settings)
+
+          expect(raw_stream_config("NEW").slice(*settings.keys)).to eql(settings)
+          expect(js.stream_info("NEW").config.to_h.slice(*settings.keys)).to eql(settings)
+        end
+
+        it "keeps #{feature} when a fetched config is sent back as an update" do
+          # Created without the client, so that only the update is tested.
+          resp = nc.request("$JS.API.STREAM.CREATE.RMW", {name: "RMW", subjects: ["rmw"], **settings}.to_json)
+          expect(JSON.parse(resp.data)).not_to have_key("error")
+
+          config = js.stream_info("RMW").config
+          config.max_msgs = 10
+          js.update_stream(config)
+
+          raw = raw_stream_config("RMW")
+          expect(raw[:max_msgs]).to eql(10)
+          expect(raw.slice(*settings.keys)).to eql(settings)
+        end
+      end
+
+      it "refuses to disable per-message TTLs" do
+        js.add_stream(name: "TTL", subjects: ["ttl"], allow_msg_ttl: true)
+        config = js.stream_info("TTL").config
+        config.allow_msg_ttl = false
+
+        expect { js.update_stream(config) }.to raise_error(NATS::JetStream::Error::ServerError) { |e|
+          expect(e.err_code).to eql(10052)
+          expect(e.description).to eql("message TTL status can not be disabled")
+        }
+        expect(raw_stream_config("TTL")[:allow_msg_ttl]).to be(true)
+      end
+
+      it "sends the settings of nats-server 2.11 to 2.14 only when they are not the defaults" do
+        creates = nc.subscribe("$JS.API.STREAM.CREATE.WIRE")
+        updates = nc.subscribe("$JS.API.STREAM.UPDATE.WIRE")
+        nc.flush
+        defaults = {allow_msg_ttl: false, subject_delete_marker_ttl: 0, allow_msg_counter: false,
+                    allow_atomic: false, allow_msg_schedules: false, persist_mode: "default", allow_batched: false}
+        sent = ->(requests) { JSON.parse(requests.next_msg.data, symbolize_names: true).slice(*defaults.keys) }
+
+        js.add_stream(name: "WIRE", subjects: ["wire"], **defaults)
+        expect(sent.call(creates)).to be_empty
+
+        # The server reports allow_msg_ttl even when it is false.
+        config = js.stream_info("WIRE").config
+        expect(config.allow_msg_ttl).to be(false)
+        js.update_stream(config)
+        expect(sent.call(updates)).to be_empty
+
+        config.allow_msg_ttl = true
+        config.allow_atomic = true
+        js.update_stream(config)
+        expect(sent.call(updates)).to eql({allow_msg_ttl: true, allow_atomic: true})
+      end
+
       it "sources messages through the source subject transforms" do
         js.add_stream(name: "ORIGIN", subjects: ["o.>"])
         js.add_stream(name: "OTHER", subjects: ["p.>"])

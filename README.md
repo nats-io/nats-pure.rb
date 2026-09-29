@@ -102,6 +102,34 @@ loop do
 end
 ```
 
+Messages can expire on their own, in streams that allow it (nats-server 2.11):
+
+```ruby
+js.add_stream(name: "sessions", subjects: ["sessions.>"], allow_msg_ttl: true)
+
+# Removed after an hour. With ttl: :never, kept past the max_age of the stream.
+js.publish("sessions.42", "token", ttl: 3600)
+```
+
+Messages can also be scheduled (nats-server 2.12; `every:` and `cron:` need 2.14):
+
+```ruby
+js.add_stream(name: "reminders", subjects: ["reminders.>", "due.>"], allow_msg_schedules: true)
+
+# Published to due.42 in an hour. Another schedule on reminders.42 replaces it.
+js.publish("reminders.42", "call back", schedule: {at: Time.now + 3600, target: "due.42"})
+
+# Published to due.standup at 9:00 on weekdays, Warsaw time.
+js.publish("reminders.standup", "stand-up",
+  schedule: {cron: "0 0 9 * * 1-5", time_zone: "Europe/Warsaw", target: "due.standup"})
+
+# Cancels the schedule on reminders.42.
+js.publish("reminders.cancelled", "", header: {
+  NATS::JetStream::Header::SCHEDULE_NEXT => "purge",
+  NATS::JetStream::Header::SCHEDULER => "reminders.42"
+})
+```
+
 Streams and consumers can also be managed directly:
 
 ```ruby
