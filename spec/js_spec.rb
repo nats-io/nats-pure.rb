@@ -792,10 +792,10 @@ describe "JetStream" do
       let(:sub) { js.pull_subscribe("test", "psub") }
       let(:pulls) { nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub") }
 
-      # Holds back the first pull of the fetch, which does not wait, until
-      # the 408 that ends a pull of another consumer, sent to the same
-      # subscription as if left over from an earlier fetch, is there.
-      def fetch_after_earlier_pull_ends(batch, timeout)
+      # Holds back the pull of the fetch until the 408 that ends a pull of
+      # another consumer, sent to the same subscription as if left over
+      # from an earlier fetch, is there.
+      def fetch_after_earlier_pull_ends(batch, params)
         js.add_consumer("test", durable_name: "later", deliver_policy: "new")
         sub
         pulls
@@ -804,7 +804,7 @@ describe "JetStream" do
         ended = -> { wait_until { sub.pending_queue.size == 1 } }
         nc.singleton_class.prepend(Module.new do
           define_method(:publish) do |subject, data = "", *args, **opts|
-            if !held && data.include?("no_wait")
+            if !held && subject == "$JS.API.CONSUMER.MSG.NEXT.test.psub"
               held = true
               ended.call
             end
@@ -812,7 +812,7 @@ describe "JetStream" do
           end
         end)
         nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.later", {batch: 1, expires: 100_000_000}.to_json, sub.subject)
-        sub.fetch(batch, timeout: timeout)
+        sub.fetch(batch, params)
       end
 
       def pulls_sent
@@ -820,19 +820,22 @@ describe "JetStream" do
         Array.new(pulls.pending_queue.size) { JSON.parse(pulls.next_msg.data, symbolize_names: true) }
       end
 
-      it "should not take that end for its pull being turned away" do
-        data = Array.new(5) { |i| i.to_s }
+      it "should not take that end for its own when it does not wait" do
+        data = %w[1 2 3]
         data.each { |d| js.publish("test", d) }
 
-        expect(fetch_after_earlier_pull_ends(5, 2).map(&:data)).to eql(data)
+        expect(fetch_after_earlier_pull_ends(5, timeout: 2, no_wait: true).map(&:data)).to eql(data)
         expect(pulls_sent).to eql([{batch: 5, no_wait: true}])
       end
 
-      it "should not pull again for longer than it has left" do
-        expect { fetch_after_earlier_pull_ends(5, 1) }.to raise_error(NATS::Timeout)
-        pull = pulls_sent.last
-        expect(pull[:no_wait]).to be_nil
-        expect(pull[:expires]).to be <= 900_000_000
+      it "should wait on for its batch past that end when it waits" do
+        data = %w[1 2 3 4 5]
+        data.each { |d| js.publish("test", d) }
+        started = NATS::MonotonicTime.now
+
+        expect(fetch_after_earlier_pull_ends(5, timeout: 2).map(&:data)).to eql(data)
+        expect(NATS::MonotonicTime.since(started)).to be < 1
+        expect(pulls_sent.map(&:keys)).to eql([[:batch, :expires]])
       end
     end
 
@@ -868,17 +871,100 @@ describe "JetStream" do
       expect { other_fetch.value }.to raise_error(NATS::Timeout)
     end
 
-    it "should return the messages it took at once when no more are pending" do
-      js = nc.jetstream
-      sub = js.pull_subscribe("test", "psub")
-      js.publish("test", "left")
-      # Left by an earlier pull.
-      nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
-      wait_until { sub.pending_queue.size == 1 }
+    describe "fetching a batch" do
+      let(:js) { nc.jetstream }
+      let(:sub) { js.pull_subscribe("test", "psub") }
+      let(:pulls) { nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.test.psub") }
 
-      started = NATS::MonotonicTime.now
-      expect(sub.fetch(3, timeout: 1).map(&:data)).to eql(["left"])
-      expect(NATS::MonotonicTime.since(started)).to be < 0.5
+      before do
+        sub
+        pulls
+        nc.flush
+      end
+
+      def pulls_sent
+        nc.flush
+        Array.new(pulls.pending_queue.size) { JSON.parse(pulls.next_msg.data, symbolize_names: true) }
+      end
+
+      def timed
+        started = NATS::MonotonicTime.now
+        [yield, NATS::MonotonicTime.since(started)]
+      end
+
+      # What reached the subscription after the fetch returned. The 408
+      # that ends a pull comes a few milliseconds after it expires.
+      def left_over
+        nc.flush
+        sleep 0.1
+        sub.pending_queue.size
+      end
+
+      it "should pull once and wait until it has the whole batch" do
+        js.publish("test", "1")
+        js.publish("test", "2")
+        fetch = Thread.new { timed { sub.fetch(5, timeout: 3).map(&:data) } }
+        # Its pull got the two pending messages, and waits for three more.
+        eventually { expect(js.consumer_info("test", "psub").num_waiting).to eql(1) }
+        %w[3 4 5].each { |d| js.publish("test", d) }
+
+        data, elapsed = fetch.value
+        expect(data).to eql(%w[1 2 3 4 5])
+        expect(elapsed).to be < 2
+        pull, *others = pulls_sent
+        expect(others).to be_empty
+        expect(pull).to include(batch: 5)
+        expect(pull).not_to have_key(:no_wait)
+        expect(pull[:expires]).to be_between(1, 3_000_000_000)
+      end
+
+      it "should return what came when its timeout is up" do
+        js.publish("test", "1")
+        js.publish("test", "2")
+
+        data, elapsed = timed { sub.fetch(5, timeout: 1).map(&:data) }
+        expect(data).to eql(%w[1 2])
+        expect(elapsed).to be_between(1, 1.5)
+        # It waited for the server to end its pull, and left nothing.
+        expect(left_over).to eql(0)
+      end
+
+      it "should time out once the server ends its pull, and leave nothing" do
+        10.times do
+          _, elapsed = timed { expect { sub.fetch(2, timeout: 0.2) }.to raise_error(NATS::Timeout) }
+          expect(elapsed).to be_between(0.2, 0.4)
+          expect(left_over).to eql(0)
+        end
+      end
+
+      it "should return what is pending at once when it does not wait" do
+        js.publish("test", "1")
+        js.publish("test", "2")
+
+        data, elapsed = timed { sub.fetch(5, no_wait: true, timeout: 2).map(&:data) }
+        expect(data).to eql(%w[1 2])
+        expect(elapsed).to be < 1
+        expect(pulls_sent).to eql([{batch: 5, no_wait: true}])
+      end
+
+      it "should return nothing at once when nothing is pending and it does not wait" do
+        data, elapsed = timed { sub.fetch(5, no_wait: true, timeout: 2) }
+        expect(data).to eql([])
+        expect(elapsed).to be < 1
+      end
+
+      it "should take what earlier pulls left, and pull only for the rest, when it does not wait" do
+        js.publish("test", "left")
+        # Left by an earlier pull.
+        nc.publish("$JS.API.CONSUMER.MSG.NEXT.test.psub", {batch: 1}.to_json, sub.subject)
+        wait_until { sub.pending_queue.size == 1 }
+        js.publish("test", "pending")
+
+        data, elapsed = timed { sub.fetch(3, no_wait: true, timeout: 2).map(&:data) }
+        expect(data).to eql(%w[left pending])
+        expect(elapsed).to be < 1
+        expect(pulls_sent.last).to eql({batch: 2, no_wait: true})
+      end
     end
 
     it "should never let a pull wait for good" do

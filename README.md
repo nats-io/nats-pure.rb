@@ -154,10 +154,10 @@ js.resume_consumer("orders", "billing")
 
 Pull consumers can serve priority groups. With the `"pinned_client"` policy,
 the server delivers to one subscription at a time, and to another once it
-stops pulling for `priority_timeout` seconds. A fetch pulls as it starts,
-and can then wait for its whole timeout, 5 seconds by default, without
-pulling again: keep the timeout, plus the time between fetches, below
-`priority_timeout`, or the subscription can lose its pin:
+stops pulling for `priority_timeout` seconds. The server counts it from
+each pull, not while a pull waits: keep the fetch timeout, 5 seconds by
+default, plus the time between fetches, below `priority_timeout`, or the
+subscription can lose its pin:
 
 ```ruby
 js.create_consumer("orders", durable_name: "shipping", filter_subject: "orders.paid",

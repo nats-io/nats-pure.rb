@@ -946,17 +946,18 @@ describe "JetStream" do
           expect(sub.fetch(2, group: "A", min_ack_pending: 5).map(&:data)).to eql(["5", "6"])
         end
 
-        it "sends the priority settings with every pull request of a fetch" do
+        it "sends the priority settings with its pull, whether it waits or not" do
           requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
           nc.flush
 
           expect { sub.fetch(2, group: "A", min_pending: 10, min_ack_pending: 20, timeout: 0.5) }
             .to raise_error(NATS::Timeout)
+          expect(sub.fetch(2, group: "A", min_pending: 10, min_ack_pending: 20, no_wait: true)).to eql([])
 
           pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
           expect(pulls.map { |pull| pull.slice(:no_wait, :group, :min_pending, :min_ack_pending) }).to eql([
-            {no_wait: true, group: "A", min_pending: 10, min_ack_pending: 20},
-            {group: "A", min_pending: 10, min_ack_pending: 20}
+            {group: "A", min_pending: 10, min_ack_pending: 20},
+            {no_wait: true, group: "A", min_pending: 10, min_ack_pending: 20}
           ])
         end
 
@@ -1011,7 +1012,7 @@ describe "JetStream" do
           expect(pin_ids(msgs)).to eql([pin_id])
         end
 
-        it "sends its pin id with every pull request of a fetch" do
+        it "sends its pin id with its pull, whether it waits or not" do
           create_consumer
           publish(1)
           pin_id = pin_ids(sub.fetch(1, group: "A")).first
@@ -1019,11 +1020,12 @@ describe "JetStream" do
           nc.flush
 
           expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+          expect(sub.fetch(2, group: "A", no_wait: true)).to eql([])
 
           pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
           expect(pulls.map { |pull| pull.slice(:no_wait, :group, :id) }).to eql([
-            {no_wait: true, group: "A", id: pin_id},
-            {group: "A", id: pin_id}
+            {group: "A", id: pin_id},
+            {no_wait: true, group: "A", id: pin_id}
           ])
         end
 

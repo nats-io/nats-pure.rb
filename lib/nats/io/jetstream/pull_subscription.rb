@@ -46,10 +46,15 @@ module NATS
       end
 
       # fetch makes a request to be delivered more messages from a pull consumer.
+      # It returns as soon as it has the batch; otherwise it waits for more
+      # messages, and returns those that came once its timeout is up. With
+      # :no_wait, it returns at once the messages that are pending.
       #
       # @param batch [Fixnum] Number of messages to pull from the stream.
       # @param params [Hash] Options to customize the fetch request.
       # @option params [Float] :timeout Duration of the fetch request before it expires.
+      # @option params [Boolean] :no_wait Take only the messages that are pending,
+      #   without waiting for more; none is an empty Array.
       # @option params [String] :group Priority group to pull from, which the pulls
       #   of a consumer with a priority policy must name (requires nats-server v2.11.0).
       # @option params [Integer] :min_pending With the overflow priority policy, deliver
@@ -60,14 +65,15 @@ module NATS
       # @option params [Integer] :priority With the prioritized priority policy, the priority
       #   of the pull, from 0, served first, to 9 (requires nats-server v2.12.0).
       # @return [Array<NATS::Msg>]
+      # @raise [NATS::Timeout] When the fetch got no messages before its timeout,
+      #   or, with :no_wait, no reply.
       # @raise [ArgumentError] When a minimum is not an integer of at least 1.
       # @raise [NATS::JetStream::Error::PinIdMismatch] With the pinned_client priority
       #   policy, when the fetch got no messages as the subscription is no longer
       #   pinned: its pin expired or it was unpinned. The next fetch can be pinned
-      #   again. A subscription that does not pull for the priority_timeout of the
-      #   consumer loses its pin. A fetch pulls as it starts, but can then wait for
-      #   its whole timeout without pulling again, so keep the fetch timeout, plus
-      #   the time between fetches, below the priority_timeout.
+      #   again. The server counts the priority_timeout of the consumer from each
+      #   pull it gets, not while a pull waits, so keep the fetch timeout, plus the
+      #   time between fetches, below it.
       def fetch(batch = 1, params = {})
         if batch < 1
           raise ::NATS::JetStream::Error.new("nats: invalid batch size")
@@ -81,13 +87,12 @@ module NATS
 
         timeout = params[:timeout] ||= 5
         deadline = MonotonicTime.now + timeout
+        no_wait = params[:no_wait]
         msgs = []
         # Take what was delivered before this fetch first.
         return msgs if take_pending(msgs, batch)
 
-        # A fetch of one message pulls and waits for it. A fetch of more
-        # first asks for the messages that are pending, without waiting.
-        no_wait = batch > 1
+        # Like nats.go and nats.rs, pull once, for the rest of the batch.
         next_req = {
           batch: batch - msgs.size,
           **params.slice(:group, :min_pending, :min_ack_pending, :priority)
@@ -95,31 +100,32 @@ module NATS
         if no_wait
           next_req[:no_wait] = true
         else
+          # The pull expires with the timeout. As nats.go does, wait a little
+          # longer for the server to end it, so that it leaves nothing behind.
           next_req[:expires] = pull_expires(deadline)
+          expired = deadline
+          deadline += [timeout, 1].min
         end
         pull(next_req)
 
         while msgs.size < batch && (msg = wait_pending(deadline))
           if !JS.is_status_msg(msg)
             msgs << msg
-            no_wait = false
-          elsif no_wait && nothing_pending?(msg)
-            # As nats.go does, return what it took before, or else pull
-            # again and wait until the timeout.
-            return msgs unless msgs.empty?
-
-            no_wait = false
-            next_req.delete(:no_wait)
-            next_req[:expires] = pull_expires(deadline)
-            pull(next_req)
           elsif !pull_ended?(msg)
             # An error ends the fetch, with the messages taken before it.
             return msgs unless msgs.empty?
 
             raise JS.from_msg(msg)
+          elsif no_wait
+            # The pull that does not wait ended, with all that was pending:
+            # a 404, or a 408 as other pulls wait for more than is pending,
+            # or after some messages, the 408 of nats-server v2.10.
+            return msgs if nothing_pending?(msg) || !msgs.empty?
+          elsif MonotonicTime.now >= expired
+            # Past its expiry, the pull of this fetch has ended too.
+            break
           end
-          # Otherwise a pull ended, this fetch's or an earlier one's: like
-          # nats.go, wait on for messages until the timeout.
+          # Otherwise the status ended an earlier pull: wait on.
         end
         raise ::NATS::Timeout.new("nats: fetch timeout") if msgs.empty?
 
@@ -164,19 +170,18 @@ module NATS
       end
 
       # nothing_pending? tells whether a status says that a pull that does
-      # not wait got nothing: no messages are pending (404), or other pulls
-      # wait for more than are pending (408 Requests Pending). Other 408s
-      # end pulls that expired, such as those of earlier fetches.
+      # not wait got all that was pending: none are left (404), or other
+      # pulls wait for more than are pending (408 Requests Pending). Other
+      # 408s end pulls that expired, such as those of earlier fetches.
       def nothing_pending?(msg)
         status, desc = msg.header.values_at(JS::Header::Status, JS::Header::Desc)
         status == JS::Status::NoMsgs || (status == JS::Status::RequestTimeout && desc == "Requests Pending")
       end
 
-      # pull_expires is how long a pull may wait, in nanoseconds: until a
-      # little before the fetch gives up, so that the fetch sees it end.
-      # Never 0, with which the pull would wait for good.
+      # pull_expires is how long a pull may wait, in nanoseconds: until the
+      # deadline. Never 0, with which the pull would wait for good.
       def pull_expires(deadline)
-        [((deadline - MonotonicTime.now) * 1_000_000_000).to_i - 100_000, 1].max
+        [((deadline - MonotonicTime.now) * 1_000_000_000).to_i, 1].max
       end
 
       # wait_pending takes the next message delivered to the subscription,
