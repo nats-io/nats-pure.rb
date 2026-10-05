@@ -103,8 +103,8 @@ end
 ```
 
 `fetch` returns as soon as it has the batch, or once its timeout is up, the
-messages that came. With `no_wait: true`, it returns at once the messages that
-are pending, if any. Given a block, it passes each message to it as it comes,
+messages that came. With `no_wait: true`, it takes what the server delivers at
+once, without waiting for more. Given a block, it passes each message to it as it comes,
 so that the message can be acked before the `ack_wait` of the consumer is up:
 
 ```ruby

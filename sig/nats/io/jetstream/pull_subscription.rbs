@@ -4,27 +4,49 @@ module NATS
       class PubAck < Struct[String | Numeric | bool]
       end
 
+      UNCHECKED_PULL_AGE: Integer
+
+      def self.extended: (NATS::Subscription) -> void
+
       def next_msg: (untyped) -> void
 
-      def fetch: (Integer, Hash[Symbol, untyped]) -> Array[NATS::Msg]
+      def fetch: (Integer, Hash[Symbol, untyped]) ?{ (NATS::Msg) -> void } -> Array[NATS::Msg]
 
       def consumer_info: (Hash[Symbol, untyped]) -> NATS::JetStream::ConsumerInfo
 
       private
 
-      def take_pending: (Array[NATS::Msg], Integer) -> bool
+      def pull_and_wait: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
+
+      def pull_pending: (Array[NATS::Msg], Hash[Symbol, untyped], Float) ?{ (NATS::Msg) -> void } -> bool
+
+      def receive: (Array[NATS::Msg], Integer, String?, ^() -> NATS::Msg?) ?{ (NATS::Msg) -> void } -> bool
+
+      def release: (NATS::Subscription, Float) -> void
+
+      def hand_over: (NATS::Subscription, ?Float) -> void
+
+      def keep: (NATS::Msg) -> void
+
+      def collect: (Array[NATS::Msg], NATS::Msg) ?{ (NATS::Msg) -> void } -> void
 
       def pull_ended?: (NATS::Msg) -> bool
 
-      def nothing_pending?: (NATS::Msg) -> bool
-
       def pull_expires: (Float) -> Integer
 
-      def wait_pending: (Float) -> NATS::Msg?
+      def wait_pending: (String, Float) -> NATS::Msg?
 
-      def pull: (Hash[Symbol, untyped]) -> void
+      def next_pending: (?String?) -> NATS::Msg?
+
+      def next_reply: (NATS::Subscription, Float) -> NATS::Msg?
+
+      def pull: (Hash[Symbol, untyped], String) -> String?
 
       def pop_pending: () -> NATS::Msg?
+
+      def track_pin: (NATS::Msg) -> NATS::Msg
+
+      def forget_pin: (String?) -> void
     end
   end
 end

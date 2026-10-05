@@ -39,6 +39,11 @@ module NATS
     #
     # @!visibility public
     module PullSubscription
+      # For as long, in seconds, a server with leafnodes or gateways delivers
+      # to a new pull without checking for interest in its reply first
+      # (defaultGatewayRecentSubExpiration of nats-server).
+      UNCHECKED_PULL_AGE = 2
+
       def self.extended(sub)
         sub.instance_eval do
           # The count of pulls, which names their replies, and the statuses
@@ -57,13 +62,15 @@ module NATS
       # fetch pulls a batch of messages from a pull consumer. It returns as
       # soon as it has the batch; otherwise it waits for more messages, and
       # returns those that came once its timeout is up. With :no_wait, it
-      # returns at once the messages that are pending.
+      # takes what the server delivers at once, without waiting for more.
       #
-      # Given a block, it passes each message to it as it comes, in the
+      # Given a block, it passes each delivery to it as it comes, in the
       # calling thread. Otherwise the messages wait for the fetch to end. The
       # server delivers again those not acked within the ack_wait of the
       # consumer, and the fetch returns each message once, as last delivered.
-      # Keep the timeout below the ack_wait, or ack in a block.
+      # Keep the timeout below the ack_wait, or ack in a block. When the block
+      # breaks off the fetch, what the server still delivers to its pull is
+      # left to the next fetch.
       #
       # @example Ack each message as it comes.
       #
@@ -75,12 +82,15 @@ module NATS
       # @param batch [Fixnum] Number of messages to pull from the stream.
       # @param params [Hash] Options to customize the fetch request.
       # @option params [Float] :timeout How long to wait for the batch, 5 seconds
-      #   by default. The fetch then waits a little longer, up to a second, for
-      #   the server to end its pull, so that it leaves no message behind.
-      # @option params [Boolean] :no_wait Take only the messages that are pending,
-      #   without waiting for more. None is an empty Array, as is no reply from
-      #   the server before the timeout, as when the consumer may not deliver
-      #   more messages until some are acked (max_ack_pending).
+      #   by default. The fetch then waits up to a second longer for the server
+      #   to end its pull, so that it leaves no message behind. With :no_wait,
+      #   how long to wait for what the server holds back, 1 second by default.
+      # @option params [Boolean] :no_wait Take what the server delivers at once,
+      #   without waiting for more messages: none, an empty Array, when none are
+      #   pending, or when other pulls wait for more than are pending. While the
+      #   consumer may not deliver more until some are acked (max_ack_pending),
+      #   the server holds the pull back, and the fetch returns what it got once
+      #   its timeout is up. Messages that come later are left to the next fetch.
       # @option params [String] :group Priority group to pull from, which the pulls
       #   of a consumer with a priority policy must name (requires nats-server v2.11.0).
       # @option params [Integer] :min_pending With the overflow priority policy, deliver
@@ -90,11 +100,11 @@ module NATS
       #   minimums, either will do.
       # @option params [Integer] :priority With the prioritized priority policy, the priority
       #   of the pull, from 0, served first, to 9 (requires nats-server v2.12.0).
-      # @yieldparam msg [NATS::Msg] Each message, as it comes.
+      # @yieldparam msg [NATS::Msg] Each delivery, as it comes.
       # @return [Array<NATS::Msg>]
       # @raise [NATS::Timeout] When a fetch that waits got no messages before its timeout.
-      # @raise [ArgumentError] When the timeout is not a positive number, or a minimum
-      #   is not an integer of at least 1.
+      # @raise [ArgumentError] When the timeout is not a finite positive number, or a
+      #   minimum is not an integer of at least 1.
       # @raise [NATS::JetStream::Error::PinIdMismatch] With the pinned_client priority
       #   policy, when the server turned the pull of the fetch away before it got
       #   messages, as the subscription is no longer pinned: its pin expired or it
@@ -113,9 +123,9 @@ module NATS
 
           raise ArgumentError.new("nats: #{min} should be an integer of at least 1")
         end
-        timeout = params[:timeout] || 5
-        unless timeout.is_a?(Numeric) && timeout.positive?
-          raise ArgumentError.new("nats: timeout should be a positive number")
+        timeout = params[:timeout] || (params[:no_wait] ? 1 : 5)
+        unless timeout.is_a?(Numeric) && timeout.positive? && timeout.finite?
+          raise ArgumentError.new("nats: timeout should be a finite positive number")
         end
 
         deadline = MonotonicTime.now + timeout
@@ -124,9 +134,10 @@ module NATS
         while msgs.size < batch && (msg = next_pending)
           collect(msgs, msg, &block)
         end
-        return msgs if msgs.size == batch
+        return msgs if msgs.size == batch || (!msgs.empty? && MonotonicTime.now >= deadline)
 
-        # Like nats.go and nats.rs, pull once, for the rest of the batch.
+        # Like the nats.go jetstream package and nats.rs, pull once, for the
+        # rest of the batch.
         next_req = {
           batch: batch - msgs.size,
           **params.slice(:group, :min_pending, :min_ack_pending, :priority)
@@ -135,10 +146,11 @@ module NATS
           next_req[:no_wait] = true
           pull_pending(msgs, next_req, deadline, &block)
         else
-          # The pull expires with the timeout. As nats.go does, wait a little
-          # longer for the server to end it, so that it leaves nothing behind.
+          # The pull expires with the timeout. As nats.go does, wait up to a
+          # second longer for the server to end it, so that it leaves nothing
+          # behind.
           next_req[:expires] = pull_expires(deadline)
-          pull_and_wait(msgs, next_req, deadline + [timeout, 1].min, &block)
+          pull_and_wait(msgs, next_req, deadline + 1, &block)
           raise ::NATS::Timeout.new("nats: fetch timeout") if msgs.empty?
         end
         msgs
@@ -161,8 +173,8 @@ module NATS
       def pull_and_wait(msgs, next_req, deadline, &block)
         reply = synchronize { "#{@subject.chomp("*")}#{@pulls += 1}" }
         synchronize { @pull_ends[reply] = nil }
-        pull(next_req, reply)
-        receive(msgs, next_req[:batch], -> { wait_pending(reply, deadline) }, &block)
+        pin_id = pull(next_req, reply)
+        receive(msgs, next_req[:batch], pin_id, -> { wait_pending(reply, deadline) }, &block)
       ensure
         synchronize { @pull_ends.delete(reply) }
       end
@@ -172,23 +184,68 @@ module NATS
       # does while the consumer may not deliver more messages.
       def pull_pending(msgs, next_req, deadline, &block)
         inbox = @nc.subscribe(@nc.new_inbox)
-        pull(next_req, inbox.subject)
-        receive(msgs, next_req[:batch], -> { next_reply(inbox, deadline) }, &block)
+        pulled = MonotonicTime.now
+        pin_id = pull(next_req, inbox.subject)
+        ended = receive(msgs, next_req[:batch], pin_id, -> { next_reply(inbox, deadline) }, &block)
       ensure
-        inbox&.unsubscribe
+        release(inbox, ended ? 0 : pulled + UNCHECKED_PULL_AGE - MonotonicTime.now) if inbox
       end
 
-      # receive collects the messages a pull delivers, until it delivered
-      # its batch, the server ended it, or none came before the deadline.
-      def receive(msgs, batch, next_msg, &block)
+      # receive collects the messages a pull delivers. It returns true once
+      # the pull delivered its batch or the server ended it, and false when
+      # nothing came before the deadline.
+      def receive(msgs, batch, pin_id, next_msg, &block)
         batch.times do
           msg = next_msg.call
-          return if msg.nil?
+          return false if msg.nil?
           next collect(msgs, msg, &block) unless JS.is_status_msg(msg)
+
+          forget_pin(pin_id) if msg.header[JS::Header::Status] == JS::Status::PinIdMismatch
           # An error ends the fetch too, with the messages taken before it.
-          return if pull_ended?(msg) || !msgs.empty?
+          return true if pull_ended?(msg) || !msgs.empty?
 
           raise JS.from_msg(msg)
+        end
+        true
+      end
+
+      # release unsubscribes the inbox of a pull that did not wait, handing
+      # what came to it to the next fetches. Unless the pull ended, it waits
+      # until the server checks for interest before it delivers to the pull.
+      def release(inbox, linger)
+        if linger > 0
+          return Thread.new do
+            hand_over(inbox, MonotonicTime.now + linger)
+            release(inbox, 0)
+          end
+        end
+
+        begin
+          inbox.unsubscribe
+        rescue NATS::IO::ConnectionClosedError, NATS::IO::BadSubscription
+          # The connection closed, which ended the pull too.
+        end
+        hand_over(inbox)
+      end
+
+      # hand_over adds the messages that come to the inbox of a pull that did
+      # not wait, until the deadline, to those of the subscription.
+      def hand_over(inbox, deadline = MonotonicTime.now)
+        while (msg = next_reply(inbox, deadline))
+          keep(msg) unless JS.is_status_msg(msg)
+        end
+      end
+
+      # keep adds a message to those delivered to the subscription, for the
+      # next fetches. Like the connection, it drops the message when the
+      # subscription holds as many as it may, and the server delivers it again.
+      def keep(msg)
+        synchronize do
+          return if @pending_queue.size >= pending_msgs_limit || @pending_size >= pending_bytes_limit
+
+          @pending_queue << msg
+          @pending_size += msg.data.size
+          wait_for_msgs_cond.signal
         end
       end
 
@@ -263,16 +320,19 @@ module NATS
 
             inbox.wait_for_msgs_cond.wait(remaining)
           end
-          inbox.pending_queue.pop
+          inbox.pending_queue.pop.tap { |reply| inbox.pending_size -= reply.data.size }
         end
+        msg.sub = self
         track_pin(msg)
       end
 
       # pull asks the server for messages, sending the pin id of the
       # subscription, if it is pinned, as the messages it took last say.
+      # Returns the pin id it sent.
       def pull(next_req, reply)
         next_req[:id] = synchronize { @pin_id }
         @nc.publish(@jsi.nms, JS.next_req_to_json(next_req), reply)
+        next_req[:id]
       end
 
       # pop_pending takes the next message delivered to the subscription,
@@ -290,18 +350,18 @@ module NATS
 
       # track_pin keeps the pin id of the subscription. With the pinned_client
       # priority policy, every message delivered to a pinned subscription
-      # carries its pin id, which it sends with its pulls, until a 423 status
-      # says that it is no longer pinned.
+      # carries its pin id, which it sends with its pulls.
       def track_pin(msg)
-        header = msg.header || {}
-        synchronize do
-          if header[JS::Header::Status] == JS::Status::PinIdMismatch
-            @pin_id = nil
-          elsif header[JS::Header::PinId]
-            @pin_id = header[JS::Header::PinId]
-          end
-        end
+        pin_id = (msg.header || {})[JS::Header::PinId]
+        synchronize { @pin_id = pin_id } if pin_id
         msg
+      end
+
+      # forget_pin drops the pin id a pull sent, which the server turned away
+      # (423) as the subscription is no longer pinned, unless the subscription
+      # got another one since.
+      def forget_pin(pin_id)
+        synchronize { @pin_id = nil if @pin_id == pin_id }
       end
     end
     private_constant :PullSubscription
