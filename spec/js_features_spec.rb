@@ -990,6 +990,11 @@ describe "JetStream" do
           msgs.map { |msg| msg.header["Nats-Pin-Id"] }.uniq
         end
 
+        # A reply subject of the subscription, as for a pull of an earlier fetch.
+        def earlier_reply(sub)
+          sub.subject.sub("*", "earlier")
+        end
+
         def pinned_client_id
           js.consumer_info("PRIO", "c").priority_groups.first.pinned_client_id
         end
@@ -1111,10 +1116,10 @@ describe "JetStream" do
           # subscription, as when the fetch timed out a little before it.
           def leftover_pull(pin_id, batch)
             nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
-              {batch: batch, expires: 5_000_000_000, group: "A", id: pin_id}.to_json, sub.subject)
+              {batch: batch, expires: 5_000_000_000, group: "A", id: pin_id}.to_json, earlier_reply(sub))
           end
 
-          it "raises PinIdMismatch on the next fetch, which then pins the subscription again" do
+          it "pulls without the stale pin id on the next fetch, which pins the subscription again" do
             create_consumer
             js.publish("prio", "first")
             pin_id = pin_ids(sub.fetch(1, group: "A")).first
@@ -1126,18 +1131,16 @@ describe "JetStream" do
             requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
             nc.flush
 
-            expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+            # The 423 ended a pull of an earlier fetch, not of this one.
             msgs = sub.fetch(1, group: "A")
             expect(msgs.map(&:data)).to eql(["second"])
             expect(pin_ids(msgs)).not_to eql([pin_id])
-            # The fetch that raised did not pull, and the next one pulled
-            # without the stale pin id.
             nc.flush
             pulls = Array.new(requests.pending_queue.size) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
             expect(pulls.map { |pull| pull.slice(:group, :id) }).to eql([{group: "A"}])
           end
 
-          it "returns the messages the pull got before" do
+          it "takes the messages the pull got before, and pulls the rest without its pin id" do
             create_consumer
             js.publish("prio", "first")
             pin_id = pin_ids(sub.fetch(1, group: "A")).first
@@ -1149,13 +1152,13 @@ describe "JetStream" do
             js.publish("prio", "third")
             wait_until { sub.pending_queue.size == 2 }
 
-            expect(sub.fetch(2, group: "A").map(&:data)).to eql(["second"])
-            msgs = sub.fetch(1, group: "A")
-            expect(msgs.map(&:data)).to eql(["third"])
-            expect(pin_ids(msgs)).not_to eql([pin_id])
+            msgs = sub.fetch(2, group: "A")
+            expect(msgs.map(&:data)).to eql(["second", "third"])
+            expect(pin_ids(msgs).first).to eql(pin_id)
+            expect(pin_ids(msgs).last).not_to eql(pin_id)
           end
 
-          it "raises PinIdMismatch only once, however many messages the next fetch asks for" do
+          it "waits on standby on the next fetch once another subscription is pinned" do
             create_consumer
             js.publish("prio", "first")
             pin_id = pin_ids(sub.fetch(1, group: "A")).first
@@ -1166,8 +1169,6 @@ describe "JetStream" do
             other = js.pull_subscribe("prio", "c", stream: "PRIO")
             expect(other.fetch(1, group: "A").map(&:data)).to eql(["second"])
 
-            expect { sub.fetch(2, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
-            # No longer pinned, the subscription now waits on standby.
             expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
           end
 
@@ -1199,7 +1200,7 @@ describe "JetStream" do
           # A pull without a pin id, left over from before the subscription
           # was pinned, gets the group pinned to it again, with a new pin.
           nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
-            {batch: 1, expires: 5_000_000_000, group: "A"}.to_json, sub.subject)
+            {batch: 1, expires: 5_000_000_000, group: "A"}.to_json, earlier_reply(sub))
           js.publish("prio", "second")
           wait_until { sub.pending_queue.size == 1 }
           js.publish("prio", "third")

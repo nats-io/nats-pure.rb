@@ -365,8 +365,8 @@ module NATS
         add_consumer(stream, config)
       end
 
-      deliver = @nc.new_inbox
-      sub = @nc.subscribe(deliver)
+      # Each pull gets a reply of its own under the subscription.
+      sub = @nc.subscribe("#{@nc.new_inbox}.*")
       sub.extend(PullSubscription)
 
       consumer = params[:consumer]

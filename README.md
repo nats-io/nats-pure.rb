@@ -102,6 +102,18 @@ loop do
 end
 ```
 
+`fetch` returns as soon as it has the batch, or once its timeout is up, the
+messages that came. With `no_wait: true`, it returns at once the messages that
+are pending, if any. Given a block, it passes each message to it as it comes,
+so that the message can be acked before the `ack_wait` of the consumer is up:
+
+```ruby
+psub.fetch(100, timeout: 60) do |msg|
+  puts msg.data
+  msg.ack
+end
+```
+
 Messages can expire on their own, in streams that allow it (nats-server 2.11):
 
 ```ruby
