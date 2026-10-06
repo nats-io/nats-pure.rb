@@ -271,6 +271,28 @@ describe "Client - Errors" do
     gate&.push(:go)
   end
 
+  it "should not drop messages of a sync subscription that keeps up, past its pending bytes limit" do
+    nats = NATS::IO::Client.new
+    nats.connect(reconnect: false)
+
+    errors = []
+    nats.on_error do |e|
+      errors << e
+    end
+
+    sub = nats.subscribe("hello", pending_bytes_limit: 10)
+
+    # 20 bytes in all, but never more than 1 pending at a time.
+    20.times do |n|
+      nats.publish("hello", "A")
+      expect(sub.next_msg(timeout: 1).data).to eql("A")
+    end
+    expect(sub.pending_size).to eql(0)
+    expect(errors).to be_empty
+  ensure
+    nats&.close
+  end
+
   context "against a server which is idle" do
     before(:all) do
       # Start a fake tcp server

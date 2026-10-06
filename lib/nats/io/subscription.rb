@@ -89,18 +89,19 @@ module NATS
     def next_msg(opts = {})
       timeout = opts[:timeout] ||= 0.5
       synchronize do
-        return @pending_queue.pop if !@pending_queue.empty?
+        if @pending_queue.empty?
+          # Wait for a bit until getting a signal.
+          MonotonicTime.with_nats_timeout(timeout) do
+            wait_for_msgs_cond.wait(timeout)
+          end
 
-        # Wait for a bit until getting a signal.
-        MonotonicTime.with_nats_timeout(timeout) do
-          wait_for_msgs_cond.wait(timeout)
+          raise NATS::Timeout if @pending_queue.empty?
         end
 
-        if !@pending_queue.empty?
-          return @pending_queue.pop
-        else
-          raise NATS::Timeout
-        end
+        # Decrease pending size since consumed already
+        msg = @pending_queue.pop
+        self.pending_size -= msg.data.size
+        msg
       end
     end
 

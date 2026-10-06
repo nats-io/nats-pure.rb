@@ -43,6 +43,7 @@
 - JetStream: when the first pull of a `fetch` of more than one message found no messages, the fetch pulled again for its whole timeout, counted from then, so that pull outlived the fetch, and left what it got to the next fetch. It now pulls for the time it has left, and only for a 404 or a 408 Requests Pending, not for the 408 that ended an earlier pull.
 - KV: after its consumer was recreated, as after a server restart, a watcher yielded the entries of every key in the bucket instead of the watched keys. The recreated consumer now keeps the keys filter. (#192)
 - KV: after its consumer was recreated, a watcher yielded its last entry again, and a watcher with no entries yet, such as one on an empty bucket, never got its consumer back (`err_code` 10094) and stayed silent. The recreated consumer now starts after the last entry. (#192, #175, thanks @Xayc73)
+- A subscription without a callback, read with `next_msg`, dropped every message and reported `NATS::IO::SlowConsumer` once it had received its `pending_bytes_limit` in all, 64 MiB by default, however fast it was read, as `next_msg` did not take the messages it returned off the pending bytes.
 
 ## v2.6.0
 
