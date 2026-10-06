@@ -992,7 +992,7 @@ describe "JetStream" do
 
         # A reply subject of the subscription, as for a pull of an earlier fetch.
         def earlier_reply(sub)
-          sub.subject.sub("*", "earlier")
+          "#{sub.subject.delete_suffix("*")}earlier"
         end
 
         def pinned_client_id
