@@ -46,8 +46,14 @@ module NATS
           time unless time.year == 1
         end
 
+        # is_status_msg tells whether the server sent a message as a status:
+        # one with a Status header and no reply. A message of a stream can
+        # have a Status header too, but a consumer delivers it with a reply
+        # to ack it.
         def is_status_msg(msg)
-          (!msg.nil? and (!msg.header.nil? and msg.header[Header::Status]))
+          return false if msg.nil? || msg.header.nil?
+
+          !msg.header[Header::Status].nil? && msg.reply.to_s.empty?
         end
 
         # check_503_error raises exception when a NATS::Msg has a 503 status header.

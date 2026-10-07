@@ -946,17 +946,18 @@ describe "JetStream" do
           expect(sub.fetch(2, group: "A", min_ack_pending: 5).map(&:data)).to eql(["5", "6"])
         end
 
-        it "sends the priority settings with every pull request of a fetch" do
+        it "sends the priority settings with its pull, whether it waits or not" do
           requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
           nc.flush
 
           expect { sub.fetch(2, group: "A", min_pending: 10, min_ack_pending: 20, timeout: 0.5) }
             .to raise_error(NATS::Timeout)
+          expect(sub.fetch(2, group: "A", min_pending: 10, min_ack_pending: 20, no_wait: true)).to eql([])
 
           pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
           expect(pulls.map { |pull| pull.slice(:no_wait, :group, :min_pending, :min_ack_pending) }).to eql([
-            {no_wait: true, group: "A", min_pending: 10, min_ack_pending: 20},
-            {group: "A", min_pending: 10, min_ack_pending: 20}
+            {group: "A", min_pending: 10, min_ack_pending: 20},
+            {no_wait: true, group: "A", min_pending: 10, min_ack_pending: 20}
           ])
         end
 
@@ -989,6 +990,11 @@ describe "JetStream" do
           msgs.map { |msg| msg.header["Nats-Pin-Id"] }.uniq
         end
 
+        # A reply subject of the subscription, as for a pull of an earlier fetch.
+        def earlier_reply(sub)
+          "#{sub.subject.delete_suffix("*")}earlier"
+        end
+
         def pinned_client_id
           js.consumer_info("PRIO", "c").priority_groups.first.pinned_client_id
         end
@@ -1011,7 +1017,7 @@ describe "JetStream" do
           expect(pin_ids(msgs)).to eql([pin_id])
         end
 
-        it "sends its pin id with every pull request of a fetch" do
+        it "sends its pin id with its pull, whether it waits or not" do
           create_consumer
           publish(1)
           pin_id = pin_ids(sub.fetch(1, group: "A")).first
@@ -1019,12 +1025,25 @@ describe "JetStream" do
           nc.flush
 
           expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
+          expect(sub.fetch(2, group: "A", no_wait: true)).to eql([])
 
           pulls = Array.new(2) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
           expect(pulls.map { |pull| pull.slice(:no_wait, :group, :id) }).to eql([
-            {no_wait: true, group: "A", id: pin_id},
-            {group: "A", id: pin_id}
+            {group: "A", id: pin_id},
+            {no_wait: true, group: "A", id: pin_id}
           ])
+        end
+
+        it "keeps the pin of the messages a fetch that did not wait took" do
+          create_consumer
+          publish(2)
+          pin_id = pin_ids(sub.fetch(1, group: "A", no_wait: true)).first
+          expect(pin_id).not_to be_nil
+          requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
+          nc.flush
+
+          expect(sub.fetch(1, group: "A").map(&:data)).to eql(["1"])
+          expect(JSON.parse(requests.next_msg.data, symbolize_names: true)[:id]).to eql(pin_id)
         end
 
         it "raises PinIdMismatch once the pin expired, then pins the subscription again" do
@@ -1109,7 +1128,7 @@ describe "JetStream" do
           # subscription, as when the fetch timed out a little before it.
           def leftover_pull(pin_id, batch)
             nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
-              {batch: batch, expires: 5_000_000_000, group: "A", id: pin_id}.to_json, sub.subject)
+              {batch: batch, expires: 5_000_000_000, group: "A", id: pin_id}.to_json, earlier_reply(sub))
           end
 
           it "raises PinIdMismatch on the next fetch, which then pins the subscription again" do
@@ -1124,15 +1143,15 @@ describe "JetStream" do
             requests = nc.subscribe("$JS.API.CONSUMER.MSG.NEXT.PRIO.c")
             nc.flush
 
+            # The 423 ended a pull of an earlier fetch: the next fetch pulls
+            # with the stale pin id, which the server turns away too.
             expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
             msgs = sub.fetch(1, group: "A")
             expect(msgs.map(&:data)).to eql(["second"])
             expect(pin_ids(msgs)).not_to eql([pin_id])
-            # The fetch that raised did not pull, and the next one pulled
-            # without the stale pin id.
             nc.flush
             pulls = Array.new(requests.pending_queue.size) { JSON.parse(requests.next_msg.data, symbolize_names: true) }
-            expect(pulls.map { |pull| pull.slice(:group, :id) }).to eql([{group: "A"}])
+            expect(pulls.map { |pull| pull.slice(:group, :id) }).to eql([{group: "A", id: pin_id}, {group: "A"}])
           end
 
           it "returns the messages the pull got before" do
@@ -1169,6 +1188,60 @@ describe "JetStream" do
             expect { sub.fetch(2, group: "A", timeout: 0.5) }.to raise_error(NATS::Timeout)
           end
 
+          it "keeps the pin the subscription got since" do
+            create_consumer(priority_timeout: 30)
+            js.publish("prio", "first")
+            pin_id = pin_ids(sub.fetch(1, group: "A")).first
+            js.unpin_consumer("PRIO", "c", "A")
+            js.publish("prio", "second")
+            expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+            new_pin_id = pin_ids(sub.fetch(1, group: "A")).first
+            expect(new_pin_id).not_to eql(pin_id)
+
+            # As the pull of a fetch that read the pin id before it changed.
+            leftover_pull(pin_id, 1)
+            wait_until { sub.pending_queue.size == 1 }
+            js.publish("prio", "third")
+
+            msgs = sub.fetch(1, group: "A", timeout: 2)
+            expect(msgs.map(&:data)).to eql(["third"])
+            expect(pin_ids(msgs)).to eql([new_pin_id])
+          end
+
+          it "keeps the pin the subscription got since its pull was sent" do
+            create_consumer(priority_timeout: 30)
+            js.publish("prio", "first")
+            sub.fetch(1, group: "A")
+            js.unpin_consumer("PRIO", "c", "A")
+            %w[second third].each { |d| js.publish("prio", d) }
+            # Holds back the pull of a fetch that read the pin id, until
+            # another one got the subscription pinned again.
+            pinned = Queue.new
+            nc.singleton_class.prepend(Module.new do
+              define_method(:publish) do |subject, *args, **opts|
+                if Thread.current[:held] && subject.start_with?("$JS.API.CONSUMER.MSG.NEXT")
+                  Thread.current[:pulling] = true
+                  pinned.pop
+                end
+                super(subject, *args, **opts)
+              end
+            end)
+            held = Thread.new do
+              Thread.current[:held] = true
+              sub.fetch(1, group: "A")
+            end
+            wait_until { held[:pulling] }
+
+            expect { sub.fetch(1, group: "A") }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+            new_pin_id = pin_ids(sub.fetch(1, group: "A")).first
+            pinned << true
+            expect { held.value }.to raise_error(NATS::JetStream::Error::PinIdMismatch)
+
+            msgs = sub.fetch(1, group: "A", timeout: 2)
+            expect(msgs.map(&:data)).to eql(["third"])
+            expect(pin_ids(msgs)).to eql([new_pin_id])
+          end
+
           it "returns the messages the next fetch took when its own pull is turned away" do
             create_consumer
             js.publish("prio", "first")
@@ -1197,7 +1270,7 @@ describe "JetStream" do
           # A pull without a pin id, left over from before the subscription
           # was pinned, gets the group pinned to it again, with a new pin.
           nc.publish("$JS.API.CONSUMER.MSG.NEXT.PRIO.c",
-            {batch: 1, expires: 5_000_000_000, group: "A"}.to_json, sub.subject)
+            {batch: 1, expires: 5_000_000_000, group: "A"}.to_json, earlier_reply(sub))
           js.publish("prio", "second")
           wait_until { sub.pending_queue.size == 1 }
           js.publish("prio", "third")
@@ -1427,6 +1500,21 @@ describe "JetStream" do
         publish(5)
 
         expect(sub.fetch(3, group: "A").map(&:data)).to eql(%w[0 1 2])
+        expect { other_fetch.value }.to raise_error(NATS::Timeout)
+      end
+
+      it "takes nothing when it does not wait, as the server turns its pull away" do
+        js.create_consumer("WAITING", durable_name: "c", priority_policy: "pinned_client", priority_groups: ["A"])
+        js.publish("waiting", "pin")
+        sub.fetch(1, group: "A")
+        other_fetch = Thread.new { other.fetch(10, group: "A", timeout: 1.5) }
+        eventually { expect(num_waiting).to eql(1) }
+        publish(5)
+
+        # 408 Requests Pending, as nats.go also takes it.
+        started = NATS::MonotonicTime.now
+        expect(sub.fetch(3, group: "A", no_wait: true)).to eql([])
+        expect(NATS::MonotonicTime.since(started)).to be < 0.5
         expect { other_fetch.value }.to raise_error(NATS::Timeout)
       end
 

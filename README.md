@@ -102,6 +102,18 @@ loop do
 end
 ```
 
+`fetch` returns as soon as it has the batch, or once its timeout is up, the
+messages that came. With `no_wait: true`, it takes what the server delivers at
+once, without waiting for more. Given a block, it passes each message to it as it comes,
+so that the message can be acked before the `ack_wait` of the consumer is up:
+
+```ruby
+psub.fetch(100, timeout: 60) do |msg|
+  puts msg.data
+  msg.ack
+end
+```
+
 Messages can expire on their own, in streams that allow it (nats-server 2.11):
 
 ```ruby
@@ -154,10 +166,10 @@ js.resume_consumer("orders", "billing")
 
 Pull consumers can serve priority groups. With the `"pinned_client"` policy,
 the server delivers to one subscription at a time, and to another once it
-stops pulling for `priority_timeout` seconds. A fetch pulls as it starts,
-and can then wait for its whole timeout, 5 seconds by default, without
-pulling again: keep the timeout, plus the time between fetches, below
-`priority_timeout`, or the subscription can lose its pin:
+stops pulling for `priority_timeout` seconds. The server counts it from
+each pull, not while a pull waits: keep the fetch timeout, 5 seconds by
+default, plus the time between fetches, below `priority_timeout`, or the
+subscription can lose its pin:
 
 ```ruby
 js.create_consumer("orders", durable_name: "shipping", filter_subject: "orders.paid",
