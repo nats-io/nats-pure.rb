@@ -384,6 +384,36 @@ describe "JetStream" do
         expect(raw[:consumer_limits]).to eql({max_ack_pending: 100})
       end
 
+      it "creates streams that refuse new messages for a subject at its limit" do
+        js.add_stream(name: "PERSUBJ", subjects: ["persubj.>"],
+          discard: "new", max_msgs_per_subject: 1, discard_new_per_subject: true)
+
+        expect(raw_stream_config("PERSUBJ")[:discard_new_per_subject]).to be(true)
+        expect(js.stream_info("PERSUBJ").config.discard_new_per_subject).to be(true)
+
+        js.publish("persubj.a", "first")
+        expect { js.publish("persubj.a", "second") }.to raise_error(NATS::JetStream::Error::APIError) { |e|
+          expect(e.description).to include("maximum messages per subject exceeded")
+        }
+        expect(js.get_msg("PERSUBJ", seq: 1).data).to eql("first")
+        expect(js.stream_info("PERSUBJ").state.messages).to eql(1)
+      end
+
+      it "keeps discard_new_per_subject when a fetched config is sent back as an update" do
+        # Created without the client, so that only the update is tested.
+        settings = {discard: "new", max_msgs_per_subject: 1, discard_new_per_subject: true}
+        resp = nc.request("$JS.API.STREAM.CREATE.RMW", {name: "RMW", subjects: ["rmw"], **settings}.to_json)
+        expect(JSON.parse(resp.data)).not_to have_key("error")
+
+        config = js.stream_info("RMW").config
+        config.max_msgs = 10
+        js.update_stream(config)
+
+        raw = raw_stream_config("RMW")
+        expect(raw[:max_msgs]).to eql(10)
+        expect(raw[:discard_new_per_subject]).to be(true)
+      end
+
       # The settings of nats-server 2.11 to 2.14, as the server reports them.
       # Fast batches need nats-server 2.14.
       {

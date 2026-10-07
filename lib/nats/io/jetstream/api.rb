@@ -278,6 +278,11 @@ module NATS
       #   @return [Integer]
       # @!attribute discard
       #   @return [String]
+      # @!attribute discard_new_per_subject
+      #   Whether a subject that holds max_msgs_per_subject messages refuses
+      #   new ones, instead of discarding its oldest. Needs discard "new" and
+      #   max_msgs_per_subject; the server reports false as nil.
+      #   @return [Boolean, nil]
       # @!attribute storage
       #   @return [String]
       # @!attribute num_replicas
@@ -380,6 +385,7 @@ module NATS
         :allow_msg_schedules,
         :persist_mode,
         :allow_batched,
+        :discard_new_per_subject,
         keyword_init: true
       ) do
         def initialize(opts = {})
