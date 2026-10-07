@@ -31,8 +31,10 @@ module NATS
       # The defaults of the stream settings of nats-server 2.11 to 2.14,
       # which are not sent, as nats.go does not send them either, so that
       # servers that do not know the settings take configs that leave them
-      # at their defaults.
+      # at their defaults. Nor is discard_new_per_subject at its default,
+      # which the client did not send before it knew the setting.
       UNSENT_STREAM_DEFAULTS = {
+        discard_new_per_subject: [false],
         allow_msg_ttl: [false],
         subject_delete_marker_ttl: [0],
         allow_msg_counter: [false],
