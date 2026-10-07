@@ -10,14 +10,14 @@ module NATS
     @name: String
     @stream: String
     @pre: String
-    @js: NATS::JetStream
+    @js: JetStream
     @direct: bool
 
     def initialize: (Hash[Symbol, untyped]) -> void
 
-    def get: (String, ?Hash[Symbol, untyped]) -> NATS::KeyValue::Entry
+    def get: (String, ?Hash[Symbol, untyped]) -> Entry
 
-    private def _get: (String, ?Hash[Symbol, untyped]) -> NATS::KeyValue::Entry
+    private def _get: (String, ?Hash[Symbol, untyped]) -> Entry
 
     def put: (String, untyped) -> Integer
 
@@ -29,11 +29,32 @@ module NATS
 
     def delete: (String, ?Hash[Symbol, untyped]) -> Integer
 
-    def purge: (String) -> NATS::JetStream::PubAck
+    def purge: (String) -> JetStream::PubAck
 
-    def status: () -> NATS::KeyValue::BucketStatus
+    def status: () -> BucketStatus
 
     class Entry < Struct[untyped]
+
+    def watchall: (?Hash[Symbol, untyped]) -> KeyWatcher
+
+    def keys: (?Hash[Symbol, untyped], ?Enumerable[String]) -> Enumerator[String]
+
+    def history: (String, ?Hash[Symbol, untyped]) -> Enumerator[String]
+
+    STATUS_HDR: 'Status'
+    DESC_HDR: 'Description'
+    CTRL_STATUS: '100'
+    LAST_CONSUMER_SEQ_HDR: 'Nats-Last-Consumer'
+    LAST_STREAM_SEQ_HDR: 'Nats-Last-Stream'
+    CONSUMER_STALLED_HDR: 'Nats-Consumer-Stalled'
+
+    def watch: (String, ?Hash[Symbol, untyped]) -> KeyWatcher
+
+    class KeyWatcher
+      include MonitorMixin
+      include Enumerable[untyped]
+
+      def initialize: (NATS::JetStream) -> void
     end
   end
 end
