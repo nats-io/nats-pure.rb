@@ -1807,7 +1807,8 @@ module NATS
       socket_class.new(
         uri: @uri,
         tls: {context: tls_context, hostname: @hostname},
-        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
+        connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT,
+        **@initial_options
       )
     end
 
