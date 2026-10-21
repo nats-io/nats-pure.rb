@@ -560,7 +560,7 @@ describe "Client - Errors" do
       nats&.close
     end
 
-    it "should still report a closed connection before checking the payload" do
+    it "should reject an oversized payload on a closed connection" do
       nats = NATS::IO::Client.new
       nats.connect(@limited.uri, reconnect: false)
       nats.close
@@ -568,6 +568,17 @@ describe "Client - Errors" do
 
       expect do
         nats.publish("max.payload", "x" * (@payload_limit + 1))
+      end.to raise_error(NATS::IO::MaxPayloadError, "nats: maximum payload exceeded")
+    end
+
+    it "should report a closed connection when the payload is within the limit" do
+      nats = NATS::IO::Client.new
+      nats.connect(@limited.uri, reconnect: false)
+      nats.close
+      wait_until(description: "the client to close") { nats.closed? }
+
+      expect do
+        nats.publish("max.payload", "ok")
       end.to raise_error(NATS::IO::ConnectionClosedError)
     end
   end

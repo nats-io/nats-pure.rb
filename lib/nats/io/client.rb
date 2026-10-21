@@ -1133,8 +1133,6 @@ module NATS
     # A publish that has not connected yet connects first, as send_command
     # would, so the limit is known before anything is written.
     private def check_max_payload!(size)
-      raise NATS::IO::ConnectionClosedError if closed?
-
       establish_connection! if !status || (disconnected? && should_reconnect?)
 
       limit = @server_info[:max_payload]
