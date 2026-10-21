@@ -1130,10 +1130,9 @@ module NATS
     # queued, so the socket stays up. The size is the PUB body, or the HPUB
     # header block and body together: that is the size the server measures.
     # A limit of 0, or none yet, is not a limit, and the server skips it too.
-    # A publish that has not connected yet connects first, as send_command
-    # would, so the limit is known before anything is written.
+    # A closed client is reported as such before the size is considered.
     private def check_max_payload!(size)
-      establish_connection! if !status || (disconnected? && should_reconnect?)
+      raise NATS::IO::ConnectionClosedError if closed?
 
       limit = @server_info[:max_payload]
       return unless limit.is_a?(Integer) && limit.positive? && size > limit
