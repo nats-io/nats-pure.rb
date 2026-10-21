@@ -33,6 +33,9 @@ module NATS
     class BadSubject < NATS::IO::Error
     end
 
+    class MaxPayloadError < NATS::IO::Error
+    end
+
     class BadSubscription < NATS::IO::Error
     end
 

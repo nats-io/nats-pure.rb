@@ -462,4 +462,113 @@ describe "Client - Errors" do
       expect(errors.first).to be_a(NATS::IO::ConnectError)
     end
   end
+
+  context "when the server sets max_payload" do
+    before(:all) do
+      @payload_limit = 32
+      config_opts = {
+        "host" => "127.0.0.1",
+        "port" => 4591,
+        "pid_file" => "/tmp/test-nats-max-payload.pid"
+      }
+      @limited = NatsServerControl.init_with_config_from_string(%(
+        port = #{config_opts["port"]}
+        max_payload = #{@payload_limit}
+      ), config_opts)
+      @limited.start_server(true)
+    end
+
+    after(:all) do
+      @limited.kill_server
+    end
+
+    it "should reject a payload over max_payload and keep the connection" do
+      nats = NATS::IO::Client.new
+      disconnects = []
+      nats.on_disconnect do |e|
+        disconnects << e
+      end
+      nats.connect(@limited.uri, reconnect: false)
+      expect(nats.server_info[:max_payload]).to eql(@payload_limit)
+
+      expect do
+        nats.publish("max.payload", "x" * (@payload_limit + 1))
+      end.to raise_error(NATS::IO::MaxPayloadError, "nats: maximum payload exceeded")
+
+      expect(nats.stats[:out_msgs]).to eql(0)
+      expect(nats.stats[:out_bytes]).to eql(0)
+      expect(nats).to be_connected
+      expect(disconnects).to be_empty
+
+      received = nil
+      nats.subscribe("max.payload") { |msg| received = msg.data }
+      nats.publish("max.payload", "ok")
+      nats.flush
+      wait_until(description: "the publish after the rejected one") { received }
+
+      expect(received).to eql("ok")
+      expect(nats.stats[:out_msgs]).to eql(1)
+      expect(nats).to be_connected
+    ensure
+      nats&.close
+    end
+
+    it "should send a payload of exactly max_payload" do
+      nats = NATS::IO::Client.new
+      nats.connect(@limited.uri, reconnect: false)
+      body = "x" * @payload_limit
+
+      received = nil
+      nats.subscribe("max.payload.exact") { |msg| received = msg.data }
+      nats.publish("max.payload.exact", body)
+      nats.flush
+      wait_until(description: "the payload at the limit") { received }
+
+      expect(received).to eql(body)
+      expect(nats).to be_connected
+    ensure
+      nats&.close
+    end
+
+    it "should count headers toward max_payload" do
+      nats = NATS::IO::Client.new
+      nats.connect(@limited.uri, reconnect: false)
+      header = {"X" => "y"}
+      hdr = NATS::IO::Client::NATS_HDR_LINE.dup
+      header.each { |k, v| hdr << "#{k}: #{v}#{NATS::IO::Client::CR_LF}" }
+      hdr << NATS::IO::Client::CR_LF
+
+      over = "x" * 20
+      expect(over.bytesize).to be <= @payload_limit
+      expect(hdr.bytesize + over.bytesize).to be > @payload_limit
+      expect do
+        nats.publish("max.payload.hdr", over, header: header)
+      end.to raise_error(NATS::IO::MaxPayloadError)
+      expect(nats.stats[:out_msgs]).to eql(0)
+      expect(nats).to be_connected
+
+      fit = "y" * (@payload_limit - hdr.bytesize)
+      received = nil
+      nats.subscribe("max.payload.hdr") { |msg| received = msg.data }
+      nats.publish("max.payload.hdr", fit, header: header)
+      nats.flush
+      wait_until(description: "the headed payload at the limit") { received }
+
+      expect(received).to eql(fit)
+      expect(nats).to be_connected
+    ensure
+      nats&.close
+    end
+
+    it "should still report a closed connection before checking the payload" do
+      nats = NATS::IO::Client.new
+      nats.connect(@limited.uri, reconnect: false)
+      nats.close
+      wait_until(description: "the client to close") { nats.closed? }
+
+      expect do
+        nats.publish("max.payload", "x" * (@payload_limit + 1))
+      end.to raise_error(NATS::IO::ConnectionClosedError)
+    end
+  end
 end

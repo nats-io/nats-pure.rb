@@ -479,8 +479,10 @@ module NATS
         return publish_msg(NATS::Msg.new(subject: subject, data: msg, reply: opt_reply, header: options[:header]))
       end
 
-      # Accounting
       msg_size = msg.bytesize
+      check_max_payload!(msg_size)
+
+      # Accounting
       @stats[:out_msgs] += 1
       @stats[:out_bytes] += msg_size
 
@@ -497,10 +499,6 @@ module NATS
       msg.data ||= "".dup
       msg_size = msg.data.bytesize
 
-      # Accounting
-      @stats[:out_msgs] += 1
-      @stats[:out_bytes] += msg_size
-
       if msg.header
         hdr = "".dup
         hdr << NATS_HDR_LINE
@@ -510,8 +508,20 @@ module NATS
         hdr << CR_LF
         hdr_len = hdr.bytesize
         total_size = msg_size + hdr_len
+        check_max_payload!(total_size)
+
+        # Accounting
+        @stats[:out_msgs] += 1
+        @stats[:out_bytes] += msg_size
+
         send_command("HPUB #{msg.subject} #{msg.reply} #{hdr_len} #{total_size}\r\n#{hdr}#{msg.data}\r\n")
       else
+        check_max_payload!(msg_size)
+
+        # Accounting
+        @stats[:out_msgs] += 1
+        @stats[:out_bytes] += msg_size
+
         send_command("PUB #{msg.subject} #{msg.reply} #{msg_size}\r\n#{msg.data}\r\n")
       end
 
@@ -1113,6 +1123,21 @@ module NATS
 
     def single_url_connect_used?
       @single_url_connect_used
+    end
+
+    # The server closes the connection when a payload is over max_payload from
+    # INFO (a later async INFO can lower it). Reject before the bytes are
+    # queued, so the socket stays up. The size is the PUB body, or the HPUB
+    # header block and body together: that is the size the server measures.
+    # A limit of 0, or none yet, is not a limit, and the server skips it too.
+    # A closed client is reported as such before the size is considered.
+    private def check_max_payload!(size)
+      raise NATS::IO::ConnectionClosedError if closed?
+
+      limit = @server_info[:max_payload]
+      return unless limit.is_a?(Integer) && limit.positive? && size > limit
+
+      raise NATS::IO::MaxPayloadError, "nats: maximum payload exceeded"
     end
 
     def send_command(command)
