@@ -48,6 +48,10 @@ module NATS
     # When we use an invalid subject.
     class BadSubject < Error; end
 
+    # When a publish is larger than the max_payload the server advertised.
+    # Raised before the message is written: the server would close the connection.
+    class MaxPayloadError < Error; end
+
     # When an invalid subscription is used, like one already unsubscribed
     # or when the NATS connection is already closed.
     class BadSubscription < Error; end

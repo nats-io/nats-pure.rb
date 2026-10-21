@@ -2,6 +2,10 @@
 
 ## main
 
+### Fixed
+
+- `publish` and `publish_msg` raise `NATS::IO::MaxPayloadError` (`nats: maximum payload exceeded`) when the payload is over the `max_payload` from the server's `INFO`, before anything is written. The server closes the connection for that, which drops every other request on it. A payload of exactly `max_payload` is sent. For a message with headers the limit applies to the header block and the body together, which is the size in the `HPUB` line. No `max_payload` yet, or `0`, is not a limit.
+
 ## v2.7.0
 
 This release adds the JetStream features of nats-server 2.10 to 2.14 that the
