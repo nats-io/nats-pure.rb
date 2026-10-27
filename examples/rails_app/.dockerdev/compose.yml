@@ -1,0 +1,89 @@
+x-app: &app
+  build:
+    context: .
+    args:
+      RUBY_VERSION: '3.2.2'
+      NODE_MAJOR: '18'
+  image: railsapp-dev:1.0.0
+  environment: &env
+    NODE_ENV: ${NODE_ENV:-development}
+    RAILS_ENV: ${RAILS_ENV:-development}
+  tmpfs:
+    - /tmp
+    - /app/tmp/pids
+
+x-backend: &backend
+  <<: *app
+  stdin_open: true
+  tty: true
+  volumes:
+    - ..:/app:cached
+    - bundle:/usr/local/bundle
+    - rails_cache:/app/tmp/cache
+    - assets:/app/public/assets
+    - node_modules:/app/node_modules
+    - history:/usr/local/hist
+    - ./.bashrc:/root/.bashrc:ro
+  environment: &backend_environment
+    <<: *env
+    MALLOC_ARENA_MAX: 2
+    WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    BOOTSNAP_CACHE_DIR: /usr/local/bundle/_bootsnap
+    XDG_DATA_HOME: /app/tmp/cache
+    YARN_CACHE_FOLDER: /app/node_modules/.yarn-cache
+    HISTFILE: /usr/local/hist/.bash_history
+    IRB_HISTFILE: /usr/local/hist/.irb_history
+    EDITOR: vi
+    TZ: ${TZ:-UTC}
+    NATS_URL: "nats://nats:4222"
+  depends_on:
+    - nats
+    - redis
+
+services:
+  rails:
+    <<: *backend
+    command: bundle exec rails
+
+  web:
+    <<: *backend
+    command: bundle exec rails server -b 0.0.0.0
+    ports:
+      - '3000:3000'
+    stdin_open: true
+    tty: true
+
+  listener:
+    <<: *backend
+    command: bin/nats-listener
+
+  sidekiq:
+    <<: *backend
+    command: bundle exec sidekiq
+    environment:
+      <<: *backend_environment
+      SIDEKIQ_CONCURRENCY: 5
+
+  nats:
+    image: nats:2.9.18
+    command: -c /etc/nats.conf -js -sd=/data
+    ports:
+      - '4222:4222'
+      - '8080:8080'
+    volumes:
+      - ./nats.conf:/etc/nats.conf:ro
+      - nats_data:/data
+
+  redis:
+    image: redis:6.2.5
+    ports:
+      - '6379:6379'
+
+volumes:
+  bundle:
+  node_modules:
+  history:
+  rails_cache:
+  assets:
+  nats_data:
+
