@@ -693,6 +693,31 @@ describe "KeyValue" do
     nc.close
   end
 
+  it "should list every key when the server delivers them before the subscription reads any" do
+    skip "watch requires ruby >= 3.2" if watch_unsupported
+
+    nc = NATS.connect(@s.uri)
+    js = nc.jetstream
+    kv = js.create_key_value(bucket: "KVS")
+    50.times { |i| kv.put("key#{i}", i.to_s) }
+
+    allow(js).to receive(:subscribe).and_wrap_original do |subscribe, *args, &cb|
+      sub = subscribe.call(*args, &cb)
+      allow(sub).to receive(:delivered).and_return(0)
+      allow(sub).to receive(:consumer_info).and_wrap_original do |consumer_info|
+        wait_until(description: "the server to deliver every entry") do
+          info = consumer_info.call
+          info if info.num_pending == 0
+        end
+      end
+      sub
+    end
+
+    expect(kv.keys.to_a.size).to eql(50)
+
+    nc.close
+  end
+
   it "should validate keys optionally" do
     nc = NATS.connect(@s.uri)
     nc.on_error do |e|

@@ -292,7 +292,10 @@ module NATS
       sub.jsi = JS::Sub.new(
         js: self,
         stream: stream,
-        consumer: consumer
+        consumer: consumer,
+        # Messages the consumer had to deliver when it was created or bound,
+        # counted before any could reach the subscription.
+        pending: cinfo.num_pending + cinfo.delivered.consumer_seq
       )
       sub
     end
