@@ -18,13 +18,14 @@ module NATS
   class JetStream
     module JS
       class Sub
-        attr_accessor :js, :stream, :consumer, :nms
+        attr_accessor :js, :stream, :consumer, :nms, :pending
 
         def initialize(opts = {})
           @js = opts[:js]
           @stream = opts[:stream]
           @consumer = opts[:consumer]
           @nms = opts[:nms]
+          @pending = opts[:pending]
         end
       end
     end

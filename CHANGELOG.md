@@ -5,6 +5,7 @@
 ### Fixed
 
 - `publish` and `publish_msg` raise `NATS::IO::MaxPayloadError` (`nats: maximum payload exceeded`) when the payload is over the `max_payload` from the server's `INFO`, before anything is written. The server closes the connection for that, which drops every other request on it. A payload of exactly `max_payload` is sent. For a message with headers the limit applies to the header block and the body together, which is the size in the `HPUB` line. No `max_payload` yet, or `0`, is not a limit.
+- KeyValue: `watch` no longer ends the initial values (the `nil` marker) before entries the server already delivered but the client had not read yet, which made `keys` raise `NoKeysFoundError` on a bucket full of keys now and then. Like nats.go, it takes the number to expect from the consumer creation, and falls back to the JetStream timeout when they stop arriving. (#197)
 
 ## v2.7.0
 

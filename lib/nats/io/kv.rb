@@ -344,11 +344,8 @@ module NATS
           op = msg.header[KV_OP]
           if params[:ignore_deletes]
             if (op == KV_PURGE) || (op == KV_DEL)
-              if (meta.num_pending == 0) && !watcher._init_done
-                # Push this to unblock enumerators.
-                watcher._updates.push(nil)
-                watcher._init_done = true
-              end
+              # Count it anyway to unblock enumerators after the last one.
+              watcher._init_received(meta.num_pending)
               next
             end
           end
@@ -369,18 +366,13 @@ module NATS
 
         # When there are no more updates send an empty marker
         # to signal that it is done, this will unblock iterators.
-        if (meta.num_pending == 0) && !watcher._init_done
-          watcher._updates.push(nil)
-          watcher._init_done = true
-        end
+        watcher._init_received(meta.num_pending)
       end # end of callback
       watcher._sub = sub
 
       # Snapshot the deliver subject for the consumer.
       deliver_subject = sub.subject
 
-      # Check from consumer info what is the number of messages
-      # awaiting to be consumed to send the initial signal marker.
       stream_name = nil
       begin
         cinfo = sub.consumer_info
@@ -391,19 +383,20 @@ module NATS
 
         synchronize do
           init_setup_done = true
-          # If no delivered and/or pending messages, then signal
-          # that this is the start.
-          # The consumer subscription will start receiving messages
-          # so need to check those that have already made it.
-          received = sub.delivered
-          init_setup.signal
-
-          # When there are no more updates send an empty marker
-          # to signal that it is done, this will unblock iterators.
-          if (cinfo.num_pending == 0) && (received == 0)
-            watcher._updates.push(nil)
-            watcher._init_done = true
+          # Take the initial values to expect from the consumer creation,
+          # as consumer info can report them delivered while they are still
+          # on their way to the subscription.
+          watcher.pending = sub.jsi.pending
+          if watcher.pending == 0
+            # If no pending messages, then signal that this is the start.
+            watcher._init_finish
+          else
+            # In case the pending messages never arrive, e.g. purged meanwhile.
+            watcher._init_timer = Concurrent::ScheduledTask.execute(@js.opts[:timeout]) do
+              watcher._init_finish
+            end
           end
+          init_setup.signal
         end
       rescue => err
         # cancel init
@@ -472,7 +465,7 @@ module NATS
     include Enumerable
 
     attr_accessor :received, :pending, :_sub, :_updates, :_init_done, :_watcher_cond
-    attr_accessor :_sseq, :_dseq, :_active, :_hb_task
+    attr_accessor :_sseq, :_dseq, :_active, :_hb_task, :_init_timer
 
     def initialize(js)
       super() # required to initialize monitor
@@ -480,6 +473,8 @@ module NATS
       @_sub = nil
       @_updates = SizedQueue.new(256)
       @_init_done = false
+      @_init_timer = nil
+      @received = 0
       @pending = nil
       # Ordered consumer related
       @_dseq = 1
@@ -492,8 +487,34 @@ module NATS
     end
 
     def stop
+      @_init_timer&.cancel
       @_hb_task.shutdown
       @_sub.unsubscribe
+    end
+
+    # Counts a message of the initial values and sends the marker after the
+    # last one: when as many arrived as the consumer had pending at creation,
+    # or when one has nothing pending behind it.
+    def _init_received(delta)
+      return if @_init_done
+
+      @received += 1
+      if (@pending && @received >= @pending) || delta == 0
+        _init_finish
+      else
+        @_init_timer&.reset
+      end
+    end
+
+    # Sends the marker that ends the initial values, only once.
+    def _init_finish
+      done = synchronize do
+        next false if @_init_done
+
+        @_init_timer&.cancel
+        @_init_done = true
+      end
+      @_updates.push(nil) if done
     end
 
     def updates(params = {})
