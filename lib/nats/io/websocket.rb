@@ -19,6 +19,7 @@ module NATS
 
       def initialize(options = {})
         super
+        @options = options
       end
 
       def connect
@@ -26,7 +27,7 @@ module NATS
 
         setup_tls! if @uri.scheme == "wss" # WebSocket connection must be made over TLS from the beginning
 
-        @handshake = ::WebSocket::Handshake::Client.new url: @uri.to_s
+        @handshake = ::WebSocket::Handshake::Client.new url: @uri.to_s, **@options
         @frame = ::WebSocket::Frame::Incoming::Client.new
         @handshaked = false
 
