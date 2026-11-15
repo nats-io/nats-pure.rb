@@ -55,6 +55,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency "bundler", ">= 1"
   s.add_development_dependency "rake", ">= 13.0"
   s.add_development_dependency "rspec", ">= 3.5"
+  s.add_development_dependency "rspec-retry"
   s.add_development_dependency "timecop"
   s.add_development_dependency "resolv-replace"
 end
