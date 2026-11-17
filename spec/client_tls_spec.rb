@@ -161,6 +161,16 @@ describe "Client - TLS spec" do
       end
     end
 
+    it "fails with a TLS error against a server that sends INFO first" do
+      tls_context = OpenSSL::SSL::SSLContext.new
+      tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
+
+      expect do
+        NATS::IO::Client.new.connect(servers: ["tls://127.0.0.1:4444"], reconnect: false,
+          tls: {context: tls_context, handshake_first: true})
+      end.to raise_error(OpenSSL::SSL::SSLError)
+    end
+
     it "should allow to client to try to connect securely using tls scheme" do
       nats = NATS::IO::Client.new
 
@@ -522,6 +532,52 @@ describe "Client - TLS spec" do
           }
         })
       end.to raise_error(OpenSSL::SSL::SSLError)
+    end
+  end
+
+  context "when server expects the TLS handshake first" do
+    before do
+      opts = {
+        "pid_file" => "/tmp/test-nats-4558.pid",
+        "host" => "127.0.0.1",
+        "port" => 4558
+      }
+      config = ERB.new(%(
+        net:  "<%= opts['host'] %>"
+        port: <%= opts['port'] %>
+
+        tls {
+          cert_file:  "./spec/configs/certs/server.pem"
+          key_file:   "./spec/configs/certs/key.pem"
+          timeout:    10
+          handshake_first: true
+      }))
+      @tls_first = NatsServerControl.init_with_config_from_string(config.result(binding), opts)
+      @tls_first.start_server
+    end
+
+    after do
+      @tls_first.kill_server
+    end
+
+    it "connects to a server that expects the TLS handshake first" do
+      tls_context = OpenSSL::SSL::SSLContext.new
+      tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://127.0.0.1:4558"], reconnect: false, tls: {context: tls_context, handshake_first: true})
+      nats.subscribe("hello") { |msg, reply| nats.publish(reply, "ok") }
+      expect(nats.request("hello", "world").data).to eql("ok")
+      nats.close
+    end
+
+    it "refuses a server it cannot verify with the TLS handshake first" do
+      # No CA and no verify mode.
+      tls_context = OpenSSL::SSL::SSLContext.new
+      expect do
+        NATS::IO::Client.new.connect(servers: ["tls://127.0.0.1:4558"], reconnect: false,
+          tls: {context: tls_context, handshake_first: true})
+      end.to raise_error(OpenSSL::SSL::SSLError, /certificate verify failed/)
     end
   end
 

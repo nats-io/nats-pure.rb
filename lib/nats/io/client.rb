@@ -1142,6 +1142,12 @@ module NATS
       !!@tls && @tls[:insecure_skip_verify] == true
     end
 
+    # tls: {handshake_first: true} starts the TLS handshake before the server
+    # sends INFO, for servers with handshake_first in their tls block.
+    def handshake_first?
+      !!@tls && !!@tls[:handshake_first]
+    end
+
     def single_url_connect_used?
       @single_url_connect_used
     end
@@ -1505,6 +1511,11 @@ module NATS
     end
 
     def process_connect_init
+      # A server with handshake_first expects the TLS handshake before INFO.
+      # A wss:// connection has its TLS before the WebSocket upgrade.
+      tls_first = handshake_first? && %w[nats tls].include?(@uri.scheme)
+      @io.setup_tls! if tls_first
+
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line || line.empty?
@@ -1518,7 +1529,9 @@ module NATS
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
       end
 
-      if server_using_secure_connection? && client_using_secure_connection?
+      if tls_first
+        # The connection has TLS already.
+      elsif server_using_secure_connection? && client_using_secure_connection?
         @io.setup_tls!
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
       elsif server_using_secure_connection? && !client_using_secure_connection? && (@uri.scheme != "ws")
