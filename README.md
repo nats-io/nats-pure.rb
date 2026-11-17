@@ -235,21 +235,44 @@ end
 
 ## TLS
 
-It is possible to setup a custom TLS connection to NATS by passing
-an [OpenSSL](http://ruby-doc.org/stdlib-2.3.2/libdoc/openssl/rdoc/OpenSSL/SSL/SSLContext.html) context to the client to be used on connect:
+`NATS.connect("tls://nats.example.com:4222")` connects over TLS and verifies
+the server against the system's trusted CAs. To trust your own CA, or to
+present a client certificate, pass an
+[OpenSSL](https://ruby.github.io/openssl/OpenSSL/SSL/SSLContext.html) context:
 
 ```ruby
 tls_context = OpenSSL::SSL::SSLContext.new
-tls_context.ssl_version = :TLSv1_2
+# Verifies the server, and trusts only the given CA instead of the system's CAs.
+# Pass ca_file to set_params: set after set_params, the CA is added to the
+# default store that every default context of the process shares.
+tls_context.set_params(ca_file: "./ca.pem")
+# For mutual TLS:
+# tls_context.cert = OpenSSL::X509::Certificate.new(File.read("./client-cert.pem"))
+# tls_context.key = OpenSSL::PKey.read(File.read("./client-key.pem"))
 
-NATS.connect({
-   servers: ['tls://127.0.0.1:4444'],
-   reconnect: false,
-   tls: {
-     context: tls_context
-   }
- })
+NATS.connect(servers: ["tls://nats.example.com:4222"], tls: {context: tls_context})
 ```
+
+After every TLS handshake, on the first connect and on every reconnect, the
+client checks that the server's certificate chain verifies and that the
+certificate is issued for the server's name, whatever the context checks
+itself. It closes the connection to a server that fails the check before it
+sends CONNECT. Two settings change that check:
+
+- `tls: {context: tls_context, hostname: "nats.example.com"}` sets the name
+  that the certificate of every server is verified against, and that is sent
+  as SNI. Use it for servers reached by an IP address, or by a name that their
+  certificates do not carry.
+- `tls: {insecure_skip_verify: true}` turns the client's check off, as the
+  last resort. With a context, only what the context checks is checked;
+  without one, nothing is.
+
+For servers with `handshake_first` in their `tls` block, add
+`handshake_first: true` to `tls:`: the client then starts the TLS handshake
+before the server sends INFO. `connect_timeout` does not bound the TLS
+handshake: a server that accepts the connection and does not answer the
+handshake holds the connect, or a reconnect, for as long as it keeps the
+connection open.
 
 ## WebSocket
 

@@ -2,8 +2,21 @@
 
 ## main
 
+### Added
+
+- TLS: `tls: {hostname: "nats.example.com"}` sets the name that the certificate of every server is verified against, and that is sent as SNI, on the first connect and on every reconnect. The option used to be ignored.
+- TLS: `tls: {insecure_skip_verify: true}` turns the client's check of the server's certificate off, as the last resort. With a `context:`, only what the context checks is checked; without one, nothing is. Only `true` turns the check off.
+- TLS: `tls: {handshake_first: true}` starts the TLS handshake before the server sends INFO, on every connect and reconnect, for servers with `handshake_first` in their `tls` block. The client does not fall back to TLS after INFO: against a server that sends INFO first, the attempt fails with `OpenSSL::SSL::SSLError`. `connect_timeout` does not bound the TLS handshake: a server that accepts the connection and does not answer the handshake holds the connect, or a reconnect, for as long as it keeps the connection open.
+
+### Changed
+
+- TLS: the client checks the server's certificate chain and name after every TLS handshake, before it sends CONNECT, on the first connect and on every reconnect, whatever the `tls: {context:}` checks itself. This breaks connections that worked only because the certificate or its name was not checked. A context made with `OpenSSL::SSL::SSLContext.new`, as the README showed, checked neither the chain nor the name, and one with a CA and `VERIFY_PEER` but without `verify_hostname` checked no name. Such connections now fail with `OpenSSL::SSL::SSLError`, "certificate verify failed (...)" for the chain, or "hostname ... does not match the server certificate of ..." with the names the certificate is issued for (left out on OpenSSL 1.1 when the context itself checks the name), before anything is sent. Call `set_params` on the context (with `ca_file:` for your own CA; without it the system's CAs are trusted) and connect with a name the certificates carry, or set the name with `tls: {hostname:}`; `tls: {insecure_skip_verify: true}` turns the check off.
+- TLS on JRuby: with jruby-openssl before 0.19.0 (bundled with JRuby before 10.1.3.0) no name was checked at all, also not with the client's own context for `tls://` URLs or with `verify_hostname`; it now is. A context without `VERIFY_PEER` now fails also with the right CA ("certificate verify failed (the context does not set VERIFY_PEER)"): set `VERIFY_PEER`, which `set_params` does.
+
 ### Fixed
 
+- While reconnecting, `close`, also the one after the last failed attempt, and `drain` wrote the messages published in that time to the connection of the current or last attempt, which might not have sent CONNECT and, with TLS asked for, might have had no TLS. They are now written only once a connection is established again. `drain` while reconnecting now closes the client, as there is no connection to drain.
+- `close` or `drain` called from `on_disconnect` or `on_close` runs these callbacks once more at most. `close` there used to call itself until the stack overflowed.
 - `publish` and `publish_msg` raise `NATS::IO::MaxPayloadError` (`nats: maximum payload exceeded`) when the payload is over the `max_payload` from the server's `INFO`, before anything is written. The server closes the connection for that, which drops every other request on it. A payload of exactly `max_payload` is sent. For a message with headers the limit applies to the header block and the body together, which is the size in the `HPUB` line. No `max_payload` yet, or `0`, is not a limit.
 
 ## v2.7.0
