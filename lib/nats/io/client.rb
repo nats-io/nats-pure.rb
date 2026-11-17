@@ -27,6 +27,7 @@ require "json"
 require "monitor"
 require "uri"
 require "securerandom"
+require "ipaddr"
 require "concurrent"
 
 begin
@@ -1117,8 +1118,21 @@ module NATS
         # Insecure TLS versions not supported already:
         # https://github.com/ruby/openssl/commit/3e5a009966bd7f806f7180d82cf830a04be28986
         #
-        tls_context.set_params
+        # With insecure_skip_verify there is no context of the user to leave
+        # verification to, so this one verifies nothing.
+        if insecure_skip_verify?
+          tls_context.set_params(verify_mode: OpenSSL::SSL::VERIFY_NONE, verify_hostname: false)
+        else
+          tls_context.set_params
+        end
       end
+    end
+
+    # tls: {insecure_skip_verify: true} turns the client's check of the
+    # server's certificate off. Only true does, so that a value such as
+    # "false" keeps the check on.
+    def insecure_skip_verify?
+      !!@tls && @tls[:insecure_skip_verify] == true
     end
 
     def single_url_connect_used?
@@ -1831,7 +1845,7 @@ module NATS
 
       socket_class.new(
         uri: @uri,
-        tls: {context: tls_context, hostname: @hostname},
+        tls: {context: tls_context, hostname: @hostname, insecure_skip_verify: insecure_skip_verify?},
         connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
       )
     end
@@ -2054,11 +2068,19 @@ module NATS
         # Close TCP socket after closing TLS socket as well.
         tls_socket.sync_close = true
 
-        # Required to enable hostname verification if Ruby runtime supports it (>= 2.4):
+        # Sets SNI, and the name that a context with verify_hostname checks
+        # during the handshake on CRuby:
         # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
         tls_socket.hostname = @tls[:hostname]
 
-        tls_socket.connect
+        begin
+          tls_socket.connect
+        rescue OpenSSL::SSL::SSLError
+          # Nothing is sent on a connection whose handshake failed.
+          tls_socket.close
+          raise
+        end
+        verify_server!(tls_socket) unless @tls[:insecure_skip_verify]
         @socket = tls_socket
       end
 
@@ -2141,6 +2163,69 @@ module NATS
       end
 
       private
+
+      # A context checks only what it is set up to check: one made with
+      # OpenSSL::SSL::SSLContext.new checks nothing, and jruby-openssl before
+      # 0.19.0 checks no name during the handshake. So the client checks the
+      # chain and the name after every handshake, before it sends anything.
+      def verify_server!(tls_socket)
+        # jruby-openssl keeps the result of the last check per context, so
+        # after a resumed session, or with another handshake on the same
+        # context, the result can be that of another server. With VERIFY_PEER
+        # it fails the handshake when the chain does not verify.
+        if RUBY_ENGINE == "jruby"
+          if (tls_socket.context.verify_mode.to_i & OpenSSL::SSL::VERIFY_PEER).zero?
+            raise OpenSSL::SSL::SSLError, "certificate verify failed (the context does not set VERIFY_PEER) for #{@uri.host}:#{@uri.port}"
+          end
+        elsif (result = tls_socket.verify_result) != OpenSSL::X509::V_OK
+          raise OpenSSL::SSL::SSLError, "certificate verify failed (#{verify_error_string(result)}) for #{@uri.host}:#{@uri.port}"
+        end
+
+        unless certificate_identity?(tls_socket.peer_cert, @tls[:hostname])
+          raise OpenSSL::SSL::SSLError, "hostname #{@tls[:hostname].inspect} does not match the server certificate"
+        end
+      rescue
+        tls_socket.close
+        raise
+      end
+
+      # Whether the certificate is issued for name, by the rules of CRuby's
+      # OpenSSL::SSL.verify_certificate_identity: the DNS names and IP
+      # addresses of subjectAltName, else the common name. That of
+      # jruby-openssl before 0.19.0 compares the printed names, in which ::1
+      # is 0:0:0:0:0:0:0:1.
+      def certificate_identity?(cert, name)
+        return false unless cert
+
+        ip = begin
+          IPAddr.new(name).hton
+        rescue IPAddr::Error
+          nil
+        end
+        sans = subject_alt_names(cert).select { |san| san.tag == 2 || san.tag == 7 }
+        if sans.empty?
+          return cert.subject.to_a.any? { |oid, value| oid == "CN" && OpenSSL::SSL.verify_hostname(name, value) }
+        end
+
+        sans.any? { |san| (san.tag == 2) ? OpenSSL::SSL.verify_hostname(name, san.value) : san.value == ip }
+      rescue OpenSSL::ASN1::ASN1Error
+        false
+      end
+
+      # The GeneralName entries of the certificate's subjectAltName: tag 2 is
+      # a DNS name, tag 7 an IP address in network byte order.
+      def subject_alt_names(cert)
+        cert.extensions.select { |ext| ext.oid == "subjectAltName" }.flat_map do |ext|
+          ostr = OpenSSL::ASN1.decode(ext.to_der).value.last
+          OpenSSL::ASN1.decode(ostr.value).value
+        end
+      end
+
+      def verify_error_string(code)
+        store_ctx = OpenSSL::X509::StoreContext.new(OpenSSL::X509::Store.new)
+        store_ctx.error = code
+        store_ctx.error_string
+      end
 
       def connect_addrinfo(ai, port, timeout)
         sock = ::Socket.new(::Socket.const_get(ai[0]), ::Socket::SOCK_STREAM, 0)

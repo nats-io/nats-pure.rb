@@ -65,6 +65,14 @@ describe "Client - WebSocket spec" do
       CONF
     end
 
+    it "refuses a wss:// server it cannot verify" do
+      # No CA and no verify mode.
+      tls_context = OpenSSL::SSL::SSLContext.new
+      expect do
+        NATS.connect(servers: ["wss://localhost:8443"], reconnect: false, tls: {context: tls_context})
+      end.to raise_error(OpenSSL::SSL::SSLError, /certificate verify failed/)
+    end
+
     # Flaky on JRuby due to NATS::IO::SocketTimeoutError
     it "should connect over TLS", skip: defined?(JRUBY_VERSION) do
       tls_context = OpenSSL::SSL::SSLContext.new
