@@ -893,8 +893,10 @@ module NATS
     end
 
     # Takes an INFO from the server. Unless ignore_discovered_urls is set,
-    # or discover is false, the servers it lists are added to the pool.
-    def process_info(line, discover: true)
+    # or discover is false, the servers it lists replace the discovered
+    # servers; those of the first INFO of an attempt (first: true) are only
+    # added.
+    def process_info(line, discover: true, first: false)
       parsed_info = JSON.parse(line)
 
       # INFO can be received asynchronously too,
@@ -908,11 +910,19 @@ module NATS
         # Detect any announced server that we might not be aware of...
         connect_urls = @server_info[:connect_urls]
         if discover && !@options[:ignore_discovered_urls] && connect_urls
-          srvs = []
-          connect_urls.each do |url|
-            u = discovered_uri(url)
-            next unless u
+          uris = connect_urls.filter_map { |url| discovered_uri(url) }
 
+          # A later list drops the discovered servers it no longer names.
+          # The configured servers and the current one stay, and an empty
+          # list changes nothing.
+          if !first && !connect_urls.empty?
+            server_pool.reject! do |srv|
+              srv[:discovered] && [@uri, *uris].none? { |u| srv[:uri].hostname == u.hostname && srv[:uri].port == u.port }
+            end
+          end
+
+          srvs = []
+          uris.each do |u|
             # Skip in case it is the current server which we already know
             next if @uri.hostname == u.hostname && @uri.port == u.port
 
@@ -1547,7 +1557,7 @@ module NATS
 
       if (match = line.match(NATS::Protocol::INFO))
         info_json = match.captures.first
-        process_info(info_json, discover: !tls_after_info)
+        process_info(info_json, discover: !tls_after_info, first: true)
       else
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
       end

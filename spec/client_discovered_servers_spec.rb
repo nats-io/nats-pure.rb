@@ -287,6 +287,90 @@ describe "Client - discovered servers" do
 
       expect { connect_tls(server) }.to raise_error(NATS::IO::ConnectError, /expected INFO/)
     end
+
+    it "replaces the discovered servers with the INFO that follows the first PONG on a reconnect" do
+      other = ip_tls_server(info: {connect_urls: ["127.0.0.1:4997"]})
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}", "127.0.0.1:4999"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: ["tls://127.0.0.1:#{seed.port}"], dont_randomize_servers: true, reconnect_time_wait: 0.1,
+        tls: tls_options("ca.pem"))
+      expect(pool_urls(nats)).to include(listed)
+
+      # The client goes on to the other server once the seed is gone.
+      seed.shutdown
+      wait_until(description: "a connection to the other server") do
+        nats.connected_server.to_s == "tls://127.0.0.1:#{other.port}"
+      end
+      expect(pool_urls(nats)).not_to include(listed)
+      expect(pool_urls(nats)).to include("tls://127.0.0.1:4997")
+      nats.close
+    end
+  end
+
+  context "with an INFO on the established connection" do
+    def url(server_or_port)
+      port = server_or_port.is_a?(Integer) ? server_or_port : server_or_port.port
+      "nats://127.0.0.1:#{port}"
+    end
+
+    it "drops a discovered server that a later INFO no longer lists" do
+      seed = fake_server(info: {connect_urls: ["127.0.0.1:4998", "127.0.0.1:4999"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [url(seed)], reconnect: false)
+      expect(pool_urls(nats)).to match_array([url(seed), url(4998), url(4999)])
+
+      seed.send_info(connect_urls: ["127.0.0.1:4998"])
+      wait_until(timeout: 3, description: "a pool without 127.0.0.1:4999") do
+        pool_urls(nats).sort == [url(seed), url(4998)].sort
+      end
+      nats.close
+    end
+
+    it "keeps the configured servers and the current server" do
+      other = fake_server
+      configured = fake_server(refuse: true)
+      seed = fake_server(info: {connect_urls: ["127.0.0.1:#{other.port}", "127.0.0.1:4999"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [url(seed), url(configured)], dont_randomize_servers: true, reconnect_time_wait: 0.1)
+
+      # The client goes on to the discovered server once the seed is gone.
+      seed.shutdown
+      wait_until(description: "a connection to the discovered server") { nats.connected_server.to_s == url(other) }
+
+      # The current server does not list itself here.
+      other.send_info(connect_urls: ["127.0.0.1:4997"])
+      wait_until(timeout: 3, description: "a pool without 127.0.0.1:4999") do
+        pool_urls(nats).sort == [url(seed), url(configured), url(other), url(4997)].sort
+      end
+      nats.close
+    end
+
+    it "keeps the discovered servers on an INFO without connect_urls" do
+      seed = fake_server(info: {connect_urls: ["127.0.0.1:4999"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [url(seed)], reconnect: false)
+
+      seed.send_info
+      seed.send_info(connect_urls: [])
+      nats.flush
+      expect(pool_urls(nats)).to match_array([url(seed), url(4999)])
+      nats.close
+    end
+
+    it "keeps the discovered servers on the first INFO of an attempt that fails" do
+      kept = fake_server
+      listed = fake_server(refuse: true)
+      refusing = fake_server(refuse: true, info: {connect_urls: ["127.0.0.1:#{listed.port}"]})
+      seed = fake_server(info: {connect_urls: ["127.0.0.1:#{listed.port}", "127.0.0.1:#{kept.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [url(seed), url(refusing)], dont_randomize_servers: true, reconnect_time_wait: 0.1)
+
+      # After the seed, the client tries the refusing server, which lists
+      # only one of the discovered servers, and then those.
+      seed.shutdown
+      expect(kept.next_connect).not_to be_nil
+      nats.close
+    end
   end
 
   context "with a cluster of nats-servers with TLS" do

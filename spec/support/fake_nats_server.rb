@@ -59,6 +59,7 @@ class FakeNatsServer
     @plaintext = +""
     @server_names = {}
     @clients = []
+    @established = []
     # jruby-openssl before 0.19.0 does not call servername_cb, so no SNI is
     # seen there.
     @tls&.servername_cb = proc do |ssl, name|
@@ -101,6 +102,13 @@ class FakeNatsServer
   # does.
   def drop_clients
     @mutex.synchronize { @clients.each { |c| close_quietly(c) } }
+  end
+
+  # Sends an INFO with the default fields and these on every connection
+  # whose first PING was answered.
+  def send_info(fields = {})
+    line = "INFO #{default_info.merge(fields).to_json}\r\n"
+    @mutex.synchronize { @established.each { |io| io.write(line) } }
   end
 
   def shutdown
@@ -175,7 +183,9 @@ class FakeNatsServer
         pings += 1
         if pings > 1
           io.write("PONG\r\n")
-        elsif !answer_first_ping(io)
+        elsif answer_first_ping(io)
+          @mutex.synchronize { @established << io }
+        else
           break
         end
       end
@@ -183,6 +193,7 @@ class FakeNatsServer
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
     # The client went away or did not complete the handshake.
   ensure
+    @mutex.synchronize { @established.delete(io) }
     close_quietly(io)
     @mutex.synchronize do
       @closed += 1
@@ -205,8 +216,12 @@ class FakeNatsServer
     ssl
   end
 
+  def default_info
+    {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: !@tls.nil?}
+  end
+
   def info
-    {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: !@tls.nil?}.merge(@info)
+    default_info.merge(@info)
   end
 
   def info_line
