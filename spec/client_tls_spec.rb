@@ -70,8 +70,9 @@ describe "Client - TLS spec" do
 
       expect do
         tls_context = OpenSSL::SSL::SSLContext.new
-        tls_context.set_params
-        tls_context.ca_file = "./spec/configs/certs/ca.pem"
+        # ca_file through set_params: set afterwards, it adds the CA to the
+        # default store that every default context of the process shares.
+        tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
         nats.connect({
           servers: ["tls://127.0.0.1:4444"],
           reconnect: false,

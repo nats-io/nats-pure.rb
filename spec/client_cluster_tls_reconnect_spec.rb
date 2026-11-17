@@ -127,8 +127,9 @@ describe "Client - Cluster TLS reconnect" do
 
         # Connect to first server only and trigger reconnect
         ctx = OpenSSL::SSL::SSLContext.new
-        ctx.set_params
-        ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
+        # ca_file through set_params: set afterwards, it adds the CA to the
+        # default store that every default context of the process shares.
+        ctx.set_params(ca_file: "./spec/configs/certs/nats-service.localhost/ca.pem")
         ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
         ctx.verify_hostname = true
 
@@ -207,8 +208,9 @@ describe "Client - Cluster TLS reconnect" do
 
         # Connect to first server only and trigger reconnect
         ctx = OpenSSL::SSL::SSLContext.new
-        ctx.set_params
-        ctx.ca_file = "./spec/configs/certs/nats-service.localhost/ca.pem"
+        # ca_file through set_params: set afterwards, it adds the CA to the
+        # default store that every default context of the process shares.
+        ctx.set_params(ca_file: "./spec/configs/certs/nats-service.localhost/ca.pem")
         ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
         ctx.verify_hostname = true
 

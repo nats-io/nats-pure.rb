@@ -68,8 +68,9 @@ describe "Client - WebSocket spec" do
     # Flaky on JRuby due to NATS::IO::SocketTimeoutError
     it "should connect over TLS", skip: defined?(JRUBY_VERSION) do
       tls_context = OpenSSL::SSL::SSLContext.new
-      tls_context.set_params
-      tls_context.ca_file = "./spec/configs/certs/ca.pem"
+      # ca_file through set_params: set afterwards, it adds the CA to the
+      # default store that every default context of the process shares.
+      tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
       nats = NATS.connect(
         servers: ["wss://localhost:8443"],
         reconnect: false,
