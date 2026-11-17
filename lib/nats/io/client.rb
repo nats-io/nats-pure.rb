@@ -219,6 +219,9 @@ module NATS
       # discovered IP address it lists inherits.
       @hostname = nil
 
+      # The discovered servers reported to on_error for having no such name.
+      @without_tls_name = {}
+
       # Track whether connect has been already been called.
       @connect_called = false
 
@@ -297,6 +300,7 @@ module NATS
     private def parse_and_validate_options
       # Reset these in case we have reconnected via fork.
       @server_pool = []
+      @without_tls_name = {}
       @resp_sub = nil
       @resp_map = nil
       @resp_sub_prefix = nil
@@ -896,6 +900,7 @@ module NATS
     # added.
     def process_info(line, discover: true, first: false)
       parsed_info = JSON.parse(line)
+      skipped = []
 
       # INFO can be received asynchronously too,
       # so has to be done under the lock.
@@ -942,6 +947,16 @@ module NATS
               end
 
               tls_name = @configured_servers.include?([u.hostname, u.port]) ? u.hostname : discovered_tls_name(u)
+
+              # Over TLS, a server with no name to verify its certificate
+              # against is not connected to. It is reported once per connect.
+              if tls_name.nil? && client_using_secure_connection? && !@tls&.fetch(:hostname, nil)
+                key = "#{u.host}:#{u.port}"
+                skipped << without_tls_name_error(key) unless @without_tls_name[key]
+                @without_tls_name[key] = true
+                next
+              end
+
               srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname, tls_name: tls_name}
               srvs << srv
             end
@@ -952,6 +967,7 @@ module NATS
           server_pool.push(*srvs)
         end
       end
+      skipped.each { |e| err_cb_call(self, e, nil) } if @err_cb
 
       @server_info
     end
@@ -984,6 +1000,13 @@ module NATS
       return uri.hostname unless ip_address?(uri.hostname)
 
       @hostname unless ip_address?(@hostname)
+    end
+
+    # The error for a discovered server, given as host:port, that has no
+    # name to verify its certificate against.
+    def without_tls_name_error(server)
+      NATS::IO::ConnectError.new("nats: skipping the discovered server #{server}, which has no name to verify its certificate against; " \
+        "tls: {hostname:} sets the name every server is verified against")
     end
 
     # Whether host is an IPv4 or IPv6 address.
@@ -1148,9 +1171,8 @@ module NATS
       @uri.user = @options[:user] if @options[:user]
       @uri.password = @options[:pass] if @options[:pass]
 
-      # Its TLS name, which a discovered IP address it lists inherits. A
-      # discovered IP address without one is verified against itself.
-      @hostname = srv[:tls_name] || srv[:hostname]
+      # Its TLS name, which a discovered IP address it lists inherits.
+      @hostname = srv[:tls_name]
 
       srv
     end

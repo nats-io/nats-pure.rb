@@ -35,6 +35,13 @@ describe "Client - discovered servers" do
     {context: ctx}.merge(opts)
   end
 
+  # For the servers reached by IP address: the IP addresses that such a
+  # server lists have no name to be verified against, so tls: {hostname:}
+  # gives every server one that these certificates carry.
+  def ip_tls_options(**opts)
+    tls_options("ca.pem", hostname: "localhost", **opts)
+  end
+
   context "with connect_urls entries" do
     # The seed lists entry and refuses the client, which then connects to
     # the server the entry names.
@@ -144,7 +151,7 @@ describe "Client - discovered servers" do
       nats = NATS::IO::Client.new
 
       nats.connect(servers: ["tls://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1,
-        tls: tls_options("ca.pem", handshake_first: true))
+        tls: ip_tls_options(handshake_first: true))
       expect(other.next_connect).not_to be_nil
       nats.close
     end
@@ -154,7 +161,7 @@ describe "Client - discovered servers" do
       seed = ip_tls_server(websocket: true, refuse: true, info: {connect_urls: ["127.0.0.1:#{other.port}"]})
       nats = NATS::IO::Client.new
 
-      nats.connect(servers: ["wss://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1, tls: tls_options("ca.pem"))
+      nats.connect(servers: ["wss://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1, tls: ip_tls_options)
       expect(other.next_connect).not_to be_nil
       expect(nats.connected_server.to_s).to eql("wss://127.0.0.1:#{other.port}")
       nats.close
@@ -166,7 +173,7 @@ describe "Client - discovered servers" do
 
     def connect_tls(server, **opts)
       NATS::IO::Client.new.tap do |nats|
-        nats.connect({servers: ["tls://127.0.0.1:#{server.port}"], reconnect: false, tls: tls_options("ca.pem")}.merge(opts))
+        nats.connect({servers: ["tls://127.0.0.1:#{server.port}"], reconnect: false, tls: ip_tls_options}.merge(opts))
       end
     end
 
@@ -293,7 +300,7 @@ describe "Client - discovered servers" do
       seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}", "127.0.0.1:4999"]})
       nats = NATS::IO::Client.new
       nats.connect(servers: ["tls://127.0.0.1:#{seed.port}"], dont_randomize_servers: true, reconnect_time_wait: 0.1,
-        tls: tls_options("ca.pem"))
+        tls: ip_tls_options)
       expect(pool_urls(nats)).to include(listed)
 
       # The client goes on to the other server once the seed is gone.
@@ -496,6 +503,84 @@ describe "Client - discovered servers" do
       expect(pool_urls(nats)).to eql([tls_url(seed_name, seed)])
       nats.close
     end
+
+    # The certificates of these servers carry 127.0.0.1.
+    it "does not dial a discovered IP listed by a server configured by IP" do
+      errors = []
+      other = ip_tls_server
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      nats.connect(servers: [tls_url("127.0.0.1", seed)], reconnect_time_wait: 0.1, max_reconnect_attempts: 1,
+        tls: tls_options("ca.pem"))
+      expect(pool_urls(nats)).to eql([tls_url("127.0.0.1", seed)])
+
+      # It is reported once, also when a later INFO lists it again.
+      seed.send_info(connect_urls: ["127.0.0.1:#{other.port}"])
+      nats.flush
+      expect(errors.map(&:class)).to eql([NATS::IO::ConnectError])
+      expect(errors.first.message).to eql(
+        "nats: skipping the discovered server 127.0.0.1:#{other.port}, which has no name to verify its certificate " \
+        "against; tls: {hostname:} sets the name every server is verified against"
+      )
+
+      seed.shutdown
+      wait_until(description: "the client to give up") { nats.closed? }
+      expect(other.accepted).to eql(0)
+    end
+
+    def skip_reports(errors, server)
+      errors.count { |e| e.message.start_with?("nats: skipping the discovered server 127.0.0.1:#{server.port},") }
+    end
+
+    it "reports a discovered server without a name again when connect runs again" do
+      errors = []
+      other = ip_tls_server
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      opts = {servers: [tls_url("127.0.0.1", seed)], reconnect: false, tls: tls_options("ca.pem")}
+
+      nats.connect(opts)
+      expect(skip_reports(errors, other)).to eql(1)
+      nats.close
+      nats.connect(opts)
+      expect(skip_reports(errors, other)).to eql(2)
+      nats.close
+    end
+
+    # tls: {hostname: false} sets no name, as for the server the client
+    # dials.
+    it "does not dial a discovered IP listed by a server configured by IP with tls: {hostname: false}" do
+      errors = []
+      other = ip_tls_server
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      nats.connect(servers: [tls_url("127.0.0.1", seed)], reconnect: false, tls: tls_options("ca.pem", hostname: false))
+
+      expect(pool_urls(nats)).to eql([tls_url("127.0.0.1", seed)])
+      expect(skip_reports(errors, other)).to eql(1)
+      nats.close
+    end
+
+    # The configured server refuses the client, so the pool drops it, and
+    # the seed lists it. The certificates of these servers carry 127.0.0.1.
+    it "dials a configured server again when a server configured by IP lists it after the pool dropped it" do
+      errors = []
+      configured = ip_tls_server(refuse: true)
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{configured.port}"]})
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      nats.connect(servers: [tls_url("127.0.0.1", configured), tls_url("127.0.0.1", seed)], dont_randomize_servers: true,
+        reconnect_time_wait: 0.1, max_reconnect_attempts: 0, tls: tls_options("ca.pem"))
+      expect(configured.next_connect).not_to be_nil
+
+      seed.shutdown
+      expect(configured.next_connect).not_to be_nil
+      expect(skip_reports(errors, configured)).to eql(0)
+      nats.close
+    end
   end
 
   context "with a cluster of nats-servers with TLS" do
@@ -521,7 +606,7 @@ describe "Client - discovered servers" do
 
       # A client that is connected learns the other node once the route is up.
       probe = NATS::IO::Client.new
-      probe.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: tls_options("ca.pem"))
+      probe.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: ip_tls_options)
       wait_until(description: "the route between the nodes") { pool_urls(probe).include?("tls://127.0.0.1:4581") }
       probe.close
     end
@@ -533,7 +618,7 @@ describe "Client - discovered servers" do
     it "knows the cluster's servers when connect returns" do
       nats = NATS::IO::Client.new
 
-      nats.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: tls_options("ca.pem"))
+      nats.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: ip_tls_options)
       expect(pool_urls(nats)).to match_array(["tls://127.0.0.1:4580", "tls://127.0.0.1:4581"])
       nats.close
     end

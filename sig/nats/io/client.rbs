@@ -81,6 +81,7 @@ module NATS
 
     @hostname: String?
     @configured_servers: Array[[String?, Integer?]]
+    @without_tls_name: Hash[String, bool]
 
     @connect_called: bool
 
@@ -164,6 +165,8 @@ module NATS
     def discovered_uri: (untyped) -> URI::Generic?
 
     def discovered_tls_name: (URI::Generic) -> String?
+
+    def without_tls_name_error: (String) -> NATS::IO::ConnectError
 
     def ip_address?: (String?) -> bool
 
