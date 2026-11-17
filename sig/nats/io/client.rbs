@@ -161,6 +161,8 @@ module NATS
 
     def process_info: (String) -> Hash[Symbol, untyped]
 
+    def discovered_uri: (untyped) -> URI::Generic?
+
     def process_hdr: (String) -> Hash[String, untyped]?
 
     def process_pong: () -> void

@@ -908,9 +908,8 @@ module NATS
         if !@options[:ignore_discovered_urls] && connect_urls
           srvs = []
           connect_urls.each do |url|
-            # Use the same scheme as the currently in use URI.
-            scheme = @uri.scheme
-            u = URI.parse("#{scheme}://#{url}")
+            u = discovered_uri(url)
+            next unless u
 
             # Skip in case it is the current server which we already know
             next if @uri.hostname == u.hostname && @uri.port == u.port
@@ -943,6 +942,22 @@ module NATS
       end
 
       @server_info
+    end
+
+    # The URI of a connect_urls entry, with the scheme of the current
+    # connection, or nil to skip the entry. nats-server writes an entry as
+    # host:port, with an IPv6 address in brackets. An entry with a scheme is
+    # skipped, and so is one that is not host:port. User info in an entry is
+    # dropped: a discovered server gets the client's own credentials.
+    def discovered_uri(entry)
+      return nil unless entry.is_a?(String) && !entry.include?("://")
+
+      u = URI.parse("nats://#{entry}")
+      return nil if u.host.to_s.empty? || !u.port&.between?(1, 65535) || !u.path.empty? || u.query || u.fragment
+
+      URI.parse("#{@uri.scheme}://#{u.host}:#{u.port}")
+    rescue URI::Error
+      nil
     end
 
     def process_hdr(header)

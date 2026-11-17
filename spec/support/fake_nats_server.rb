@@ -4,11 +4,12 @@ require "json"
 require "openssl"
 require "socket"
 
-# A NATS server for the TLS specs. It listens on a free port of host,
-# sends INFO, upgrades the connection to TLS, answers PING with PONG and
-# records the CONNECT of every client, with the server name the client sent
-# in the handshake (SNI) as "sni". It also records what clients send in
-# plaintext after a TLS handshake that failed.
+# A NATS server for the TLS and discovery specs. It listens on a free port
+# of host, sends INFO, upgrades the connection to TLS when it has a
+# context, answers PING with PONG and records the CONNECT of every client,
+# with the server name the client sent in the handshake (SNI) as "sni". It
+# also records what clients send in plaintext after a TLS handshake that
+# failed.
 class FakeNatsServer
   CERTS = File.expand_path("../configs/certs", __dir__)
 
@@ -22,12 +23,18 @@ class FakeNatsServer
 
   attr_reader :port
 
-  # tls: the server's SSLContext. later: how the connections after the
-  # first are served: as the first (nil), with another SSLContext, or with
-  # nothing sent at all (:silent). host: the address it listens on.
-  def initialize(tls:, later: nil, host: "127.0.0.1")
+  # tls: the server's SSLContext, or nil for a server without TLS. later:
+  # how the connections after the first are served: as the first (nil),
+  # with another SSLContext, or with nothing sent at all (:silent). host:
+  # the address it listens on.
+  # info: INFO fields that are added or replace the defaults.
+  # refuse: answers CONNECT with an authorization error and closes the
+  # connection.
+  def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false)
     @tls = tls
     @later = later || tls
+    @info = info
+    @refuse = refuse
     @mutex = Mutex.new
     @cond = ConditionVariable.new
     @connects = []
@@ -38,13 +45,18 @@ class FakeNatsServer
     @clients = []
     # jruby-openssl before 0.19.0 does not call servername_cb, so no SNI is
     # seen there.
-    @tls.servername_cb = proc do |ssl, name|
+    @tls&.servername_cb = proc do |ssl, name|
       @mutex.synchronize { @server_names[ssl] = name }
       nil
     end
     @server = TCPServer.new(host, 0)
     @port = @server.addr[1]
     @thread = Thread.new { accept_loop }
+  end
+
+  # The number of connections accepted so far.
+  def accepted
+    @mutex.synchronize { @accepted }
   end
 
   # The next CONNECT a client sent, or nil when none comes within timeout
@@ -112,33 +124,38 @@ class FakeNatsServer
   end
 
   def serve(sock, tls)
+    io = sock
     return record_plaintext(sock) if tls == :silent
 
-    sock.write("INFO #{info.to_json}\r\n")
-    ssl = OpenSSL::SSL::SSLSocket.new(sock, tls)
-    ssl.sync_close = true
-    begin
-      ssl.accept
-    rescue OpenSSL::SSL::SSLError
-      return record_plaintext(sock)
+    io.write(info_line)
+    if tls
+      begin
+        io = upgrade(sock, tls)
+      rescue OpenSSL::SSL::SSLError
+        return record_plaintext(sock)
+      end
     end
 
-    while (line = ssl.gets)
+    while (line = io.gets)
       case line
       when /\ACONNECT (.*)\r\n\z/
         connect = JSON.parse($1)
         @mutex.synchronize do
-          @connects << connect.merge("sni" => @server_names.delete(ssl))
+          @connects << connect.merge("sni" => @server_names.delete(io))
           @cond.broadcast
         end
+        if @refuse
+          io.write("-ERR 'Authorization Violation'\r\n")
+          break
+        end
       when "PING\r\n"
-        ssl.write("PONG\r\n")
+        io.write("PONG\r\n")
       end
     end
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
     # The client went away.
   ensure
-    close_quietly(ssl || sock)
+    close_quietly(io)
     @mutex.synchronize do
       @closed += 1
       @cond.broadcast
@@ -153,8 +170,16 @@ class FakeNatsServer
     end
   end
 
-  def info
-    {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: true}
+  def upgrade(sock, tls)
+    ssl = OpenSSL::SSL::SSLSocket.new(sock, tls)
+    ssl.sync_close = true
+    ssl.accept
+    ssl
+  end
+
+  def info_line
+    info = {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: !@tls.nil?}
+    "INFO #{info.merge(@info).to_json}\r\n"
   end
 
   def close_quietly(io)
