@@ -414,7 +414,7 @@ module NATS
         srv = select_next_server
 
         # Create TCP socket connection to NATS.
-        @io = create_socket
+        @io = create_socket(srv)
         @io.connect
 
         # Capture state that we have had a TCP connection established against
@@ -1718,7 +1718,7 @@ module NATS
         srv = select_next_server
 
         # Establish TCP connection with new server
-        @io = create_socket
+        @io = create_socket(srv)
         @io.connect
         @stats[:reconnects] += 1
 
@@ -1987,7 +1987,7 @@ module NATS
       @options[:reconnect]
     end
 
-    def create_socket
+    def create_socket(srv)
       socket_class = case @uri.scheme
       when "nats", "tls"
         NATS::IO::Socket
@@ -1999,12 +1999,14 @@ module NATS
       end
 
       # tls: {hostname:} sets the name every server is verified against,
-      # and that is sent as SNI.
-      hostname = @tls&.fetch(:hostname, nil) || @hostname
+      # and that is sent as SNI. discovered: a discovered server, verified
+      # against the name the client gave it.
+      hostname = @tls&.fetch(:hostname, nil)
 
       socket_class.new(
         uri: @uri,
-        tls: {context: tls_context, hostname: hostname, insecure_skip_verify: insecure_skip_verify?},
+        tls: {context: tls_context, hostname: hostname || @hostname, insecure_skip_verify: insecure_skip_verify?,
+              discovered: !!srv[:discovered] && !hostname},
         connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
       )
     end
@@ -2429,16 +2431,34 @@ module NATS
       # server is verified against: that name, the names the certificate is
       # issued for (at most four) and the setting for the name. Without the
       # certificate it leaves the names out: OpenSSL 1.1 keeps none when the
-      # name check fails during the handshake.
+      # name check fails during the handshake. For a discovered server, also
+      # what the cluster can advertise instead, and the setting for
+      # certificates that carry the server's IP address.
       def name_check_failed(cert)
+        names = cert ? certificate_names(cert) : []
         text = "hostname #{@tls[:hostname].inspect} does not match the server certificate of #{@uri.host}:#{@uri.port}"
         if cert
-          names = certificate_names(cert)
           issued_for = names.empty? ? "no name" : names.first(4).map(&:inspect).join(", ")
           issued_for += " and #{names.size - 4} more" if names.size > 4
           text += ", which is issued for #{issued_for}"
         end
-        "#{text}; tls: {hostname:} sets the name every server is verified against"
+        text += "; tls: {hostname:} sets the name every server is verified against"
+        return text unless @tls[:discovered]
+
+        advertise = %w[ws wss].include?(@uri.scheme) ? "advertise in the websocket block of nats-server" : "client_advertise in nats-server"
+        text += ", or each server of the cluster can advertise a name its certificate is issued for (#{advertise})"
+        if issued_for_address?(names)
+          text += ", or tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP address against itself, " \
+            "which is safe only where the CA that issued the certificates is not shared with others"
+        end
+        text
+      end
+
+      # Whether names hold the IP address the server was dialed at.
+      def issued_for_address?(names)
+        names.include?(IPAddr.new(@uri.hostname).to_s)
+      rescue IPAddr::Error
+        false
       end
 
       # The names certificate_identity? checks: the DNS names and IP

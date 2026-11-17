@@ -627,6 +627,61 @@ describe "Client - discovered servers" do
       expect(other.next_connect).to include("sni" => sni(name))
       nats.close
     end
+
+    # Connects to seed, which lists other, and returns the error of the
+    # name check of other once the seed is gone. The context leaves the
+    # name to the client, which then lists the names of the certificate
+    # also with OpenSSL 1.1.
+    def name_check_error(seed, other, url, tls)
+      tls[:context].verify_hostname = false
+      errors = []
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      nats.connect(servers: [url], reconnect_time_wait: 0.1, tls: tls)
+
+      seed.shutdown
+      error = wait_until(description: "a failed name check of #{other.port}") do
+        errors.find { |e| e.is_a?(OpenSSL::SSL::SSLError) && e.message.include?(":#{other.port},") }
+      end
+      nats.close
+      error.message
+    end
+
+    # The certificate of the discovered server carries
+    # *.clients.fake-nats-service.localhost, not the seed's name.
+    it "points at client_advertise when a discovered server fails the name check" do
+      other = tls_server("fakeserver")
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+
+      expect(name_check_error(seed, other, tls_url(seed_name, seed), tls_options)).to eql(
+        "hostname \"#{seed_name}\" does not match the server certificate of 127.0.0.1:#{other.port}, which is issued for " \
+        "\"*.clients.fake-nats-service.localhost\", \"clients.fake-nats-service.localhost\"; tls: {hostname:} sets the name " \
+        "every server is verified against, or each server of the cluster can advertise a name its certificate is issued " \
+        "for (client_advertise in nats-server)"
+      )
+    end
+
+    it "points at the websocket advertise when a discovered wss server fails the name check" do
+      other = tls_server("fakeserver", websocket: true)
+      seed = tls_server(websocket: true, info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+
+      expect(name_check_error(seed, other, "wss://#{seed_name}:#{seed.port}", tls_options))
+        .to end_with("(advertise in the websocket block of nats-server)")
+    end
+
+    # The certificate of the discovered server carries 127.0.0.1.
+    it "points at verify_discovered_servers_by_ip when the certificate carries the discovered IP" do
+      other = ip_tls_server
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+
+      expect(name_check_error(seed, other, tls_url(seed_name, seed), both_ca_options)).to eql(
+        "hostname \"#{seed_name}\" does not match the server certificate of 127.0.0.1:#{other.port}, which is issued for " \
+        "\"127.0.0.1\", \"::1\", \"localhost\", \"server.localhost\"; tls: {hostname:} sets the name every server is " \
+        "verified against, or each server of the cluster can advertise a name its certificate is issued for " \
+        "(client_advertise in nats-server), or tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP " \
+        "address against itself, which is safe only where the CA that issued the certificates is not shared with others"
+      )
+    end
   end
 
   context "with a cluster of nats-servers with TLS" do

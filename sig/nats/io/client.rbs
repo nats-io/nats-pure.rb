@@ -240,7 +240,7 @@ module NATS
 
     def should_reconnect?: () -> bool
 
-    def create_socket: () -> NATS::IO::Socket
+    def create_socket: (Hash[Symbol, untyped]) -> NATS::IO::Socket
 
     def setup_nkeys_connect: () -> void
 
