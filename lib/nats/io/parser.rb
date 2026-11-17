@@ -84,7 +84,9 @@ module NATS
               # First INFO message is processed synchronously on connect,
               # and onwards we would be receiving asynchronously INFO commands
               # signaling possible changes in the topology of the NATS cluster.
-              @nc.send(:process_info, $1)
+              # A read loop that close or a reconnect stopped reads the old
+              # connection: the current server may be the next one.
+              @nc.send(:process_info, $1) unless @nc.send(:stopping?)
             when UNKNOWN
               @buf = $'
               @nc.send(:process_err, "Unknown protocol: #{$1}")

@@ -373,6 +373,131 @@ describe "Client - discovered servers" do
     end
   end
 
+  context "with the TLS name of a discovered server" do
+    let(:seed_name) { "server-A.clients.nats-service.localhost" }
+
+    # The fake server sees no SNI with jruby-openssl before 0.19.0, which
+    # does not call servername_cb.
+    def sni(name)
+      (defined?(JOpenSSL::VERSION) && Gem::Version.new(JOpenSSL::VERSION) < Gem::Version.new("0.19.0")) ? nil : name
+    end
+
+    def tls_url(name, server)
+      "tls://#{name}:#{server.port}"
+    end
+
+    # Trusts the CAs of both kinds of certificates.
+    def both_ca_options(**opts)
+      store = OpenSSL::X509::Store.new
+      store.add_file("./spec/configs/certs/ca.pem")
+      store.add_file("./spec/configs/certs/nats-service.localhost/ca.pem")
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params(cert_store: store)
+      {context: ctx}.merge(opts)
+    end
+
+    # The certificates of these servers carry *.clients.nats-service.localhost,
+    # not 127.0.0.1. The client goes on to the discovered server once the
+    # seed is gone.
+    it "verifies a discovered IP against the name of the server that listed it, in the servers: form" do
+      other = tls_server
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url(seed_name, seed)], reconnect_time_wait: 0.1, tls: tls_options)
+
+      seed.shutdown
+      expect(other.next_connect).to include("sni" => sni(seed_name))
+      nats.close
+    end
+
+    it "verifies a discovered IP against the name of the server that listed it, after two hops" do
+      third = tls_server
+      second = tls_server(info: {connect_urls: ["127.0.0.1:#{third.port}"]})
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{second.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url(seed_name, seed)], reconnect_time_wait: 0.1, tls: tls_options)
+
+      seed.shutdown
+      expect(second.next_connect).to include("sni" => sni(seed_name))
+      wait_until(description: "the server listed by the second server") do
+        pool_urls(nats).include?("tls://127.0.0.1:#{third.port}")
+      end
+      second.shutdown
+      expect(third.next_connect).to include("sni" => sni(seed_name))
+      nats.close
+    end
+
+    # The certificate of the discovered server carries
+    # *.clients.fake-nats-service.localhost, not the seed's name.
+    it "verifies a discovered host name against itself in the String form" do
+      name = "server-A.clients.fake-nats-service.localhost"
+      other = tls_server("fakeserver")
+      seed = tls_server(info: {connect_urls: ["#{name}:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(tls_url(seed_name, seed), reconnect_time_wait: 0.1, tls: tls_options)
+
+      seed.shutdown
+      expect(other.next_connect).to include("sni" => sni(name))
+      nats.close
+    end
+
+    # The seed lists a host name and other, and the server with that name
+    # lists other again. The certificate of other carries
+    # *.clients.nats-service.localhost, not that host name.
+    it "keeps the name of the server that listed a discovered IP first" do
+      name = "server-A.clients.fake-nats-service.localhost"
+      other = tls_server
+      named = tls_server("fakeserver", info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      seed = tls_server(info: {connect_urls: ["#{name}:#{named.port}", "127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url(seed_name, seed)], dont_randomize_servers: true, reconnect_time_wait: 0.1,
+        tls: tls_options)
+
+      seed.shutdown
+      expect(named.next_connect).to include("sni" => sni(name))
+      wait_until(description: "the connection to #{name}") { nats.connected_server&.port == named.port }
+      nats.flush
+      named.shutdown
+      expect(other.next_connect).to include("sni" => sni(seed_name))
+      nats.close
+    end
+
+    # The configured server refuses the client, so the pool drops it, and
+    # the seed lists it. Its certificate carries 127.0.0.1, not the seed's
+    # name.
+    it "verifies a configured server against the host of its URL when a server lists it after the pool dropped it" do
+      configured = ip_tls_server(refuse: true)
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{configured.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url("127.0.0.1", configured), tls_url(seed_name, seed)], dont_randomize_servers: true,
+        reconnect_time_wait: 0.1, max_reconnect_attempts: 0, tls: both_ca_options)
+      expect(configured.next_connect).not_to be_nil
+
+      seed.shutdown
+      expect(configured.next_connect).not_to be_nil
+      nats.close
+    end
+
+    # The INFO reaches the parser on a thread whose stop signal is
+    # stopped, as in a read loop that close or a reconnect has stopped
+    # and that has not ended yet.
+    it "takes no servers from an INFO that a stopped read loop reads" do
+      other = tls_server
+      seed = tls_server
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url(seed_name, seed)], reconnect: false, tls: tls_options)
+      stop = NATS::IO::StopSignal.new
+      stop.stop!
+      Thread.new do
+        Thread.current[:nats_stop] = stop
+        nats.instance_variable_get("@parser").parse("INFO #{{connect_urls: ["127.0.0.1:#{other.port}"]}.to_json}\r\n")
+      end.join
+
+      expect(pool_urls(nats)).to eql([tls_url(seed_name, seed)])
+      nats.close
+    end
+  end
+
   context "with a cluster of nats-servers with TLS" do
     before do
       @nodes = [[4580, 6580], [4581, 6581]].map do |port, cluster_port|

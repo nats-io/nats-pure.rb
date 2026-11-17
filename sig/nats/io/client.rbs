@@ -80,7 +80,7 @@ module NATS
     @tls: bool?
 
     @hostname: String?
-    @single_url_connect_used: bool
+    @configured_servers: Array[[String?, Integer?]]
 
     @connect_called: bool
 
@@ -163,6 +163,10 @@ module NATS
 
     def discovered_uri: (untyped) -> URI::Generic?
 
+    def discovered_tls_name: (URI::Generic) -> String?
+
+    def ip_address?: (String?) -> bool
+
     def next_connect_op: (Float) -> String?
 
     def read_info_after_first_pong: () -> void
@@ -184,8 +188,6 @@ module NATS
     def server_using_secure_connection?: () -> bool
 
     def client_using_secure_connection?: () -> bool
-
-    def single_url_connect_used?: () -> bool
 
     def send_command: (String) -> void
 

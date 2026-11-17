@@ -267,6 +267,12 @@ sends CONNECT. Two settings change that check:
   last resort. With a context, only what the context checks is checked;
   without one, nothing is.
 
+A server that the client discovers from the cluster is verified against a
+name the client trusts: a host name against itself, and an IP address against
+the name of the server that listed it. Over any number of servers, that is the
+name of a server you configured, or a discovered host name.
+`tls: {hostname:}` overrides both.
+
 For servers with `handshake_first` in their `tls` block, add
 `handshake_first: true` to `tls:`: the client then starts the TLS handshake
 before the server sends INFO. `connect_timeout` does not bound the TLS

@@ -214,10 +214,10 @@ module NATS
       # Secure TLS options
       @tls = nil
 
-      # Hostname of current server; used for when TLS host
-      # verification is enabled.
+      # The TLS name of the current server: the name its certificate is
+      # verified against unless tls: {hostname:} is set, and the name a
+      # discovered IP address it lists inherits.
       @hostname = nil
-      @single_url_connect_used = false
 
       # Track whether connect has been already been called.
       @connect_called = false
@@ -323,7 +323,6 @@ module NATS
         if srvs.any? { |u| %w[tls wss].include? u.scheme } && !opts[:tls]
           opts[:tls] = {context: tls_context}
         end
-        @single_url_connect_used = true if srvs.size == 1
       when Hash
         opts = uri
       end
@@ -362,11 +361,18 @@ module NATS
         else
           URI.parse(u)
         end
+        # A configured server is verified against the host of its URL.
         @server_pool << {
           uri: nats_uri,
-          hostname: nats_uri.hostname
+          hostname: nats_uri.hostname,
+          tls_name: nats_uri.hostname
         }
       end
+
+      # The pool drops a server after failed attempts. Listed again by a
+      # server, a configured server is still verified against the host of
+      # its URL.
+      @configured_servers = @server_pool.map { |srv| [srv[:uri].hostname, srv[:uri].port] }
 
       if @options[:old_style_request]
         # Replace for this instance the implementation
@@ -402,14 +408,6 @@ module NATS
       srv = nil
       begin
         srv = select_next_server
-
-        # Use the hostname from the server for TLS hostname verification.
-        if client_using_secure_connection? && single_url_connect_used?
-          # Always reuse the original hostname used to connect.
-          @hostname ||= srv[:hostname]
-        else
-          @hostname = srv[:hostname]
-        end
 
         # Create TCP socket connection to NATS.
         @io = create_socket
@@ -930,6 +928,8 @@ module NATS
               srv[:uri].hostname == u.hostname && srv[:uri].port == u.port
             end
 
+            # The first server that lists a server decides its credentials
+            # and its TLS name.
             if !present
               # Let explicit user and pass options set the credentials.
               u.user = options[:user] if options[:user]
@@ -941,8 +941,8 @@ module NATS
                 u.password ||= @uri.password if @uri.password
               end
 
-              # NOTE: Auto discovery won't work here when TLS host verification is enabled.
-              srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname}
+              tls_name = @configured_servers.include?([u.hostname, u.port]) ? u.hostname : discovered_tls_name(u)
+              srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname, tls_name: tls_name}
               srvs << srv
             end
           end
@@ -970,6 +970,28 @@ module NATS
       URI.parse("#{@uri.scheme}://#{u.host}:#{u.port}")
     rescue URI::Error
       nil
+    end
+
+    # The name the certificate of a server discovered on the current
+    # connection is verified against, and that is sent as SNI. A host name
+    # is verified against itself. An IP address is one more address of the
+    # current server: it is verified against the name the current server is
+    # verified against, and so, over any number of hops, against the name
+    # of a configured server, or a discovered host name. It has no name
+    # when that name is an IP address too. tls: {hostname:} overrides every
+    # name.
+    def discovered_tls_name(uri)
+      return uri.hostname unless ip_address?(uri.hostname)
+
+      @hostname unless ip_address?(@hostname)
+    end
+
+    # Whether host is an IPv4 or IPv6 address.
+    def ip_address?(host)
+      IPAddr.new(host.to_s)
+      true
+    rescue IPAddr::Error
+      false
     end
 
     def process_hdr(header)
@@ -1126,6 +1148,10 @@ module NATS
       @uri.user = @options[:user] if @options[:user]
       @uri.password = @options[:pass] if @options[:pass]
 
+      # Its TLS name, which a discovered IP address it lists inherits. A
+      # discovered IP address without one is verified against itself.
+      @hostname = srv[:tls_name] || srv[:hostname]
+
       srv
     end
 
@@ -1173,10 +1199,6 @@ module NATS
     # sends INFO, for servers with handshake_first in their tls block.
     def handshake_first?
       !!@tls && !!@tls[:handshake_first]
-    end
-
-    def single_url_connect_used?
-      @single_url_connect_used
     end
 
     # The server closes the connection when a payload is over max_payload from
@@ -1662,14 +1684,6 @@ module NATS
         return if closed_since?(generation)
 
         srv = select_next_server
-
-        # Set hostname to use for TLS hostname verification
-        if client_using_secure_connection? && single_url_connect_used?
-          # Reuse original hostname name in case of using TLS.
-          @hostname ||= srv[:hostname]
-        else
-          @hostname = srv[:hostname]
-        end
 
         # Establish TCP connection with new server
         @io = create_socket
