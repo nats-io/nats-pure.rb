@@ -769,5 +769,32 @@ describe "Client - TLS spec" do
     ensure
       nats&.close
     end
+
+    it "verifies every server against tls: {hostname:} and sends it as SNI" do
+      name = "server-A.clients.fake-nats-service.localhost"
+      first = fake_server("fakeserver")
+      second = fake_server("fakeserver")
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params(ca_file: "./spec/configs/certs/nats-service.localhost/ca.pem")
+      nats = NATS::IO::Client.new
+
+      # The certificates name server-A.clients.fake-nats-service.localhost,
+      # not 127.0.0.1.
+      nats.connect(
+        servers: ["tls://127.0.0.1:#{first.port}", "tls://127.0.0.1:#{second.port}"],
+        dont_randomize_servers: true,
+        reconnect_time_wait: 0.1,
+        max_reconnect_attempts: 1,
+        tls: {context: ctx, hostname: name}
+      )
+      nats.force_reconnect
+
+      # The fake server sees no SNI with jruby-openssl before 0.19.0, which
+      # does not call servername_cb.
+      sni = (defined?(JOpenSSL::VERSION) && Gem::Version.new(JOpenSSL::VERSION) < Gem::Version.new("0.19.0")) ? nil : name
+      expect(first.next_connect["sni"]).to eql(sni)
+      expect(second.next_connect["sni"]).to eql(sni)
+      nats.close
+    end
   end
 end

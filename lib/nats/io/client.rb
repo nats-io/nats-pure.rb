@@ -1863,9 +1863,13 @@ module NATS
         raise NotImplementedError, "#{@uri.scheme} protocol is not supported, check NATS cluster URL spelling"
       end
 
+      # tls: {hostname:} sets the name every server is verified against,
+      # and that is sent as SNI.
+      hostname = @tls&.fetch(:hostname, nil) || @hostname
+
       socket_class.new(
         uri: @uri,
-        tls: {context: tls_context, hostname: @hostname, insecure_skip_verify: insecure_skip_verify?},
+        tls: {context: tls_context, hostname: hostname, insecure_skip_verify: insecure_skip_verify?},
         connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
       )
     end
