@@ -273,16 +273,24 @@ the name of the server that listed it. Over any number of servers, that is the
 name of a server you configured, or a discovered host name.
 `tls: {hostname:}` overrides both. An IP address listed by a server that is
 verified against an IP address, such as one you configured as
-`tls://10.0.0.1:4222`, has no such name. Unless `tls: {hostname:}` is set, the
-client does not connect to it, also with `tls: {insecure_skip_verify: true}`,
-and reports it once per `connect` to `on_error`. That report can come while
-`connect` runs, so set `on_error` before `connect`:
+`tls://10.0.0.1:4222`, has no such name. Unless `tls: {hostname:}`, or
+`tls: {verify_discovered_servers_by_ip: true}` below, is set, the client does
+not connect to it, also with `tls: {insecure_skip_verify: true}`, and reports
+it once per `connect` to `on_error`. That report can come while `connect`
+runs, so set `on_error` before `connect`:
 
 ```ruby
 nats = NATS::IO::Client.new
 nats.on_error { |e| puts "Error: #{e}" }
 nats.connect(servers: ["tls://10.0.0.1:4222"], tls: {context: tls_context})
 ```
+
+For clusters whose certificates carry only IP addresses,
+`tls: {verify_discovered_servers_by_ip: true}` verifies a discovered IP address
+against itself, and lets the client connect to one that has no name. It is safe
+only where the CA that issued those certificates is not shared with others:
+any certificate of that CA for the address passes. `tls: {hostname:}`
+overrides it.
 
 For servers with `handshake_first` in their `tls` block, add
 `handshake_first: true` to `tls:`: the client then starts the TLS handshake

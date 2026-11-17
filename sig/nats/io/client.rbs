@@ -192,6 +192,8 @@ module NATS
 
     def client_using_secure_connection?: () -> bool
 
+    def verify_discovered_servers_by_ip?: () -> bool
+
     def send_command: (String) -> void
 
     def unsubscribe: (NATS::Subscription, Integer?) -> void

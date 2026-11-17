@@ -994,10 +994,12 @@ module NATS
     # current server: it is verified against the name the current server is
     # verified against, and so, over any number of hops, against the name
     # of a configured server, or a discovered host name. It has no name
-    # when that name is an IP address too. tls: {hostname:} overrides every
-    # name.
+    # when that name is an IP address too. With
+    # tls: {verify_discovered_servers_by_ip: true}, an IP address is
+    # verified against itself. tls: {hostname:} overrides every name.
     def discovered_tls_name(uri)
       return uri.hostname unless ip_address?(uri.hostname)
+      return uri.hostname if verify_discovered_servers_by_ip?
 
       @hostname unless ip_address?(@hostname)
     end
@@ -1006,7 +1008,8 @@ module NATS
     # name to verify its certificate against.
     def without_tls_name_error(server)
       NATS::IO::ConnectError.new("nats: skipping the discovered server #{server}, which has no name to verify its certificate against; " \
-        "tls: {hostname:} sets the name every server is verified against")
+        "tls: {hostname:} sets the name every server is verified against, or tls: {verify_discovered_servers_by_ip: true} " \
+        "verifies a discovered IP address against itself, which is safe only where the CA that issued the certificates is not shared with others")
     end
 
     # Whether host is an IPv4 or IPv6 address.
@@ -1221,6 +1224,13 @@ module NATS
     # sends INFO, for servers with handshake_first in their tls block.
     def handshake_first?
       !!@tls && !!@tls[:handshake_first]
+    end
+
+    # tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP
+    # address against itself, for clusters whose certificates carry only IP
+    # addresses. Only true does.
+    def verify_discovered_servers_by_ip?
+      !!@tls && @tls[:verify_discovered_servers_by_ip] == true
     end
 
     # The server closes the connection when a payload is over max_payload from

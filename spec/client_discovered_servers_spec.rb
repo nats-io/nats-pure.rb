@@ -521,7 +521,9 @@ describe "Client - discovered servers" do
       expect(errors.map(&:class)).to eql([NATS::IO::ConnectError])
       expect(errors.first.message).to eql(
         "nats: skipping the discovered server 127.0.0.1:#{other.port}, which has no name to verify its certificate " \
-        "against; tls: {hostname:} sets the name every server is verified against"
+        "against; tls: {hostname:} sets the name every server is verified against, or " \
+        "tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP address against itself, which is safe " \
+        "only where the CA that issued the certificates is not shared with others"
       )
 
       seed.shutdown
@@ -579,6 +581,50 @@ describe "Client - discovered servers" do
       seed.shutdown
       expect(configured.next_connect).not_to be_nil
       expect(skip_reports(errors, configured)).to eql(0)
+      nats.close
+    end
+
+    # The certificate of the discovered server carries 127.0.0.1, not the
+    # seed's name.
+    it "verifies a discovered IP against itself with verify_discovered_servers_by_ip" do
+      other = ip_tls_server
+      seed = tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url(seed_name, seed)], reconnect_time_wait: 0.1,
+        tls: both_ca_options(verify_discovered_servers_by_ip: true))
+
+      seed.shutdown
+      expect(other.next_connect).not_to be_nil
+      nats.close
+    end
+
+    it "connects to a discovered IP listed by a server configured by IP with verify_discovered_servers_by_ip" do
+      errors = []
+      other = ip_tls_server
+      seed = ip_tls_server(info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.on_error { |e| errors << e }
+      nats.connect(servers: [tls_url("127.0.0.1", seed)], reconnect_time_wait: 0.1,
+        tls: tls_options("ca.pem", verify_discovered_servers_by_ip: true))
+
+      seed.shutdown
+      expect(other.next_connect).not_to be_nil
+      expect(errors.map(&:message).grep(/skipping/)).to be_empty
+      nats.close
+    end
+
+    # The certificates carry server-A.clients.fake-nats-service.localhost,
+    # not 127.0.0.1.
+    it "verifies a discovered IP against tls: {hostname:} also with verify_discovered_servers_by_ip" do
+      name = "server-A.clients.fake-nats-service.localhost"
+      other = tls_server("fakeserver")
+      seed = tls_server("fakeserver", info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+      nats.connect(servers: [tls_url("127.0.0.1", seed)], reconnect_time_wait: 0.1,
+        tls: tls_options(hostname: name, verify_discovered_servers_by_ip: true))
+
+      seed.shutdown
+      expect(other.next_connect).to include("sni" => sni(name))
       nats.close
     end
   end
