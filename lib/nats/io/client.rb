@@ -1574,25 +1574,66 @@ module NATS
       # Send ping/pong after connect
       @io.write(PING_REQUEST)
 
-      next_op = @io.read_line(options[:connect_timeout])
-      if @options[:verbose]
-        # Need to get another command here if verbose
-        raise NATS::IO::ConnectError.new("expected to receive +OK") unless next_op =~ NATS::Protocol::OK
-        next_op = @io.read_line(options[:connect_timeout])
-      end
+      next_op = next_connect_op(MonotonicTime.now + options[:connect_timeout])
+      raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}") unless next_op =~ NATS::Protocol::PONG
 
-      case next_op
-      when NATS::Protocol::PONG
-        # do nothing
-      when NATS::Protocol::ERR
-        if @server_info[:auth_required]
-          raise NATS::IO::AuthError.new($1)
-        else
-          raise NATS::IO::ServerError.new($1)
-        end
-      else
-        raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}")
+      # On a connection that started TLS after INFO, nats-server 2.12 and
+      # later send an INFO right after the first PONG, inside TLS. The
+      # client waits for it, to know the servers it lists when connect
+      # returns. The version in the INFO read before the handshake decides
+      # only whether the client waits.
+      if tls_after_info && !@options[:ignore_discovered_urls] && sends_info_after_first_pong?(@server_info[:version])
+        read_info_after_first_pong
       end
+    end
+
+    # Reads the next operation of an attempt after CONNECT, until deadline.
+    # A PING is answered and +OK is skipped: in verbose mode the server
+    # answers CONNECT with +OK. A -ERR fails the attempt with the server's
+    # error.
+    def next_connect_op(deadline)
+      loop do
+        timeout = deadline - MonotonicTime.now
+        raise NATS::IO::SocketTimeoutError if timeout <= 0
+
+        op = @io.read_line(timeout)
+        case op
+        when NATS::Protocol::PING
+          @io.write(PONG_RESPONSE, timeout)
+        when NATS::Protocol::OK
+          # Skipped.
+        when NATS::Protocol::ERR
+          raise(@server_info[:auth_required] ? NATS::IO::AuthError.new($1) : NATS::IO::ServerError.new($1))
+        else
+          return op
+        end
+      end
+    end
+
+    # Reads the INFO that follows the first PONG, for up to connect_timeout
+    # from that PONG. When none comes in time, the client reports connected
+    # without it, and the read loop takes it when it comes. Any other
+    # operation, or a closed connection, fails the attempt.
+    def read_info_after_first_pong
+      op = begin
+        next_connect_op(MonotonicTime.now + options[:connect_timeout])
+      rescue NATS::IO::SocketTimeoutError
+        # A close from another thread can end the wait the same way.
+        raise if closed?
+
+        return
+      end
+      raise NATS::IO::ConnectError.new("expected INFO, got #{op}") unless op =~ NATS::Protocol::INFO
+
+      process_info($1)
+    end
+
+    # Whether a server of this version sends an INFO right after the PONG
+    # to the first PING, as nats-server does from 2.12.0 on. Only the three
+    # numbers count, so a pre-release counts as its release.
+    def sends_info_after_first_pong?(version)
+      numbers = /\A(\d+)\.(\d+)\.(\d+)(?:[-+]|\z)/.match(version.to_s)&.captures&.map(&:to_i)
+      !numbers.nil? && (numbers <=> [2, 12, 0]) >= 0
     end
 
     # Reconnect logic. generation is @close_generation from when the

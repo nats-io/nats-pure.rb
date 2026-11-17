@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "timeout"
+
 describe "Client - discovered servers" do
   let(:servers) { [] }
 
@@ -13,6 +15,24 @@ describe "Client - discovered servers" do
 
   def pool_urls(nats)
     nats.servers.map { |srv| srv[:uri].to_s }
+  end
+
+  # The certificates of these servers carry *.clients.nats-service.localhost,
+  # and those of fakeserver *.clients.fake-nats-service.localhost.
+  def tls_server(cert = "server", **opts)
+    tls = FakeNatsServer.tls_context("nats-service.localhost/#{cert}.pem", "nats-service.localhost/#{cert}-key.pem")
+    fake_server(tls: tls, **opts)
+  end
+
+  # These carry 127.0.0.1.
+  def ip_tls_server(**opts)
+    fake_server(tls: FakeNatsServer.tls_context("server.pem", "key.pem"), **opts)
+  end
+
+  def tls_options(ca = "nats-service.localhost/ca.pem", **opts)
+    ctx = OpenSSL::SSL::SSLContext.new
+    ctx.set_params(ca_file: "./spec/configs/certs/#{ca}")
+    {context: ctx}.merge(opts)
   end
 
   context "with connect_urls entries" do
@@ -84,24 +104,6 @@ describe "Client - discovered servers" do
   end
 
   context "with the first INFO of an attempt" do
-    # The certificates of these servers carry *.clients.nats-service.localhost,
-    # and those of fakeserver *.clients.fake-nats-service.localhost.
-    def tls_server(cert = "server", **opts)
-      tls = FakeNatsServer.tls_context("nats-service.localhost/#{cert}.pem", "nats-service.localhost/#{cert}-key.pem")
-      fake_server(tls: tls, **opts)
-    end
-
-    # These carry 127.0.0.1.
-    def ip_tls_server(**opts)
-      fake_server(tls: FakeNatsServer.tls_context("server.pem", "key.pem"), **opts)
-    end
-
-    def tls_options(ca = "nats-service.localhost/ca.pem", **opts)
-      ctx = OpenSSL::SSL::SSLContext.new
-      ctx.set_params(ca_file: "./spec/configs/certs/#{ca}")
-      {context: ctx}.merge(opts)
-    end
-
     it "does not dial a server listed before a TLS handshake that fails" do
       name = "server-A.clients.nats-service.localhost"
       other = tls_server
@@ -155,6 +157,175 @@ describe "Client - discovered servers" do
       nats.connect(servers: ["wss://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1, tls: tls_options("ca.pem"))
       expect(other.next_connect).not_to be_nil
       expect(nats.connected_server.to_s).to eql("wss://127.0.0.1:#{other.port}")
+      nats.close
+    end
+  end
+
+  context "with the INFO that follows the first PONG" do
+    let(:listed) { "tls://127.0.0.1:4999" }
+
+    def connect_tls(server, **opts)
+      NATS::IO::Client.new.tap do |nats|
+        nats.connect({servers: ["tls://127.0.0.1:#{server.port}"], reconnect: false, tls: tls_options("ca.pem")}.merge(opts))
+      end
+    end
+
+    def elapsed
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      yield
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    end
+
+    it "knows the servers that INFO lists when connect returns" do
+      server = ip_tls_server(first_ping: ["PONG\r\n", 0.3, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = connect_tls(server)
+      expect(pool_urls(nats)).to include(listed)
+      nats.close
+    end
+
+    it "waits for that INFO from a pre-release of 2.12" do
+      server = ip_tls_server(info: {version: "2.12.0-RC.1"}, first_ping: ["PONG\r\n", 0.3, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = connect_tls(server)
+      expect(pool_urls(nats)).to include(listed)
+      nats.close
+    end
+
+    it "reports connected without that INFO after connect_timeout" do
+      server = ip_tls_server(first_ping: ["PONG\r\n", 1.5, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = nil
+      expect(elapsed { nats = connect_tls(server, connect_timeout: 0.5) }).to be_between(0.5, 1.4)
+      expect(nats.connected?).to eql(true)
+      expect(pool_urls(nats)).not_to include(listed)
+      # The INFO that comes later is taken from the established connection.
+      wait_until(description: "the servers of the later INFO") { pool_urls(nats).include?(listed) }
+      nats.close
+    end
+
+    it "does not wait for a server before 2.12" do
+      server = ip_tls_server(info: {version: "2.11.0"}, first_ping: ["PONG\r\n", 1.5, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = nil
+      expect(elapsed { nats = connect_tls(server) }).to be < 1
+      expect(nats.connected?).to eql(true)
+      nats.close
+    end
+
+    it "does not wait with ignore_discovered_urls" do
+      server = ip_tls_server(first_ping: ["PONG\r\n", 1.5, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = nil
+      expect(elapsed { nats = connect_tls(server, ignore_discovered_urls: true) }).to be < 1
+      expect(nats.connected?).to eql(true)
+      nats.close
+    end
+
+    it "answers a PING while it waits" do
+      server = ip_tls_server(first_ping: ["PONG\r\nPING\r\n", :await_pong, {connect_urls: ["127.0.0.1:4999"]}])
+
+      nats = connect_tls(server)
+      expect(pool_urls(nats)).to include(listed)
+      nats.close
+    end
+
+    it "answers a PING and skips +OK before the first PONG" do
+      server = fake_server(first_ping: ["+OK\r\nPING\r\n", :await_pong, "PONG\r\n"])
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["nats://127.0.0.1:#{server.port}"], reconnect: false)
+      expect(nats.connected?).to eql(true)
+      nats.close
+    end
+
+    it "fails the attempt after connect_timeout when the server sends PINGs and reads nothing" do
+      # The client connects to one end of a socket pair, whose buffers are
+      # small, so the client soon cannot write its PONGs.
+      client_end, server_end = UNIXSocket.pair
+      socket = NATS::IO::Socket.new
+      allow(socket).to receive(:connect) { socket.socket = client_end }
+      server = Thread.new do
+        server_end.write("INFO #{{server_id: "PINGS", version: "2.14.0", proto: 1, max_payload: 1_048_576}.to_json}\r\n")
+        seen = +""
+        seen << server_end.readpartial(4096) until seen.include?("PING\r\n")
+        loop { server_end.write("PING\r\n" * 1000) }
+      rescue IOError, SystemCallError
+        # The client went away.
+      end
+      nats = NATS::IO::Client.new
+      # Only this client gets the socket pair, not a client of another
+      # example that is still reconnecting.
+      allow(nats).to receive(:create_socket).and_return(socket)
+
+      took = elapsed do
+        expect do
+          # Timeout ends the example if the connect does not.
+          Timeout.timeout(5) { nats.connect(servers: ["nats://127.0.0.1:4222"], reconnect: false, connect_timeout: 0.5) }
+        end.to raise_error(NATS::IO::SocketTimeoutError)
+      end
+      expect(took).to be < 1.4
+    ensure
+      server&.kill
+      [client_end, server_end].compact.each { |s| s.close unless s.closed? }
+    end
+
+    it "fails the attempt on -ERR while it waits" do
+      server = ip_tls_server(first_ping: ["PONG\r\n-ERR 'Authorization Violation'\r\n"])
+
+      expect { connect_tls(server) }.to raise_error(NATS::IO::ServerError, /Authorization Violation/)
+    end
+
+    it "fails the attempt on a line that does not parse while it waits" do
+      server = ip_tls_server(first_ping: ["PONG\r\nNOT A PROTOCOL LINE\r\n"])
+
+      expect { connect_tls(server) }.to raise_error(NATS::IO::ConnectError, /expected INFO, got NOT A PROTOCOL LINE/)
+    end
+
+    it "fails the attempt when the connection closes while it waits" do
+      server = ip_tls_server(first_ping: ["PONG\r\n", :close])
+
+      expect { connect_tls(server) }.to raise_error(NATS::IO::ConnectError, /expected INFO/)
+    end
+  end
+
+  context "with a cluster of nats-servers with TLS" do
+    before do
+      @nodes = [[4580, 6580], [4581, 6581]].map do |port, cluster_port|
+        NatsServerControl.init_with_config_from_string(%(
+          host: "127.0.0.1"
+          port: #{port}
+          tls {
+            cert_file: "./spec/configs/certs/server.pem"
+            key_file: "./spec/configs/certs/key.pem"
+            timeout: 10
+          }
+          cluster {
+            name: "DISCOVERY"
+            host: "127.0.0.1"
+            port: #{cluster_port}
+            routes = ["nats-route://127.0.0.1:6580", "nats-route://127.0.0.1:6581"]
+          }
+        ), {"pid_file" => "/tmp/test-nats-discovery.pid", "host" => "127.0.0.1", "port" => port})
+      end
+      @nodes.each(&:start_server)
+
+      # A client that is connected learns the other node once the route is up.
+      probe = NATS::IO::Client.new
+      probe.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: tls_options("ca.pem"))
+      wait_until(description: "the route between the nodes") { pool_urls(probe).include?("tls://127.0.0.1:4581") }
+      probe.close
+    end
+
+    after do
+      @nodes.each(&:kill_server)
+    end
+
+    it "knows the cluster's servers when connect returns" do
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://127.0.0.1:4580"], reconnect: false, tls: tls_options("ca.pem"))
+      expect(pool_urls(nats)).to match_array(["tls://127.0.0.1:4580", "tls://127.0.0.1:4581"])
       nats.close
     end
   end

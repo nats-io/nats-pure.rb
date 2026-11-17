@@ -163,6 +163,12 @@ module NATS
 
     def discovered_uri: (untyped) -> URI::Generic?
 
+    def next_connect_op: (Float) -> String?
+
+    def read_info_after_first_pong: () -> void
+
+    def sends_info_after_first_pong?: (untyped) -> bool
+
     def process_hdr: (String) -> Hash[String, untyped]?
 
     def process_pong: () -> void

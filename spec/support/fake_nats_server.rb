@@ -36,8 +36,13 @@ class FakeNatsServer
   # tls_first: the TLS handshake comes before INFO.
   # websocket: the client connects over WebSocket, with TLS (wss://) when
   # the server has a context.
+  # first_ping: the steps that answer the first PING, instead of PONG and
+  # the INFO after it. A String is written as it is and a Hash as an INFO
+  # with those fields, both in one write with the Strings and Hashes next
+  # to them; :await_pong waits for the client's PONG, :close closes the
+  # connection and a Numeric sleeps that many seconds.
   def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false, before_tls: nil, tls_first: false,
-    websocket: false)
+    websocket: false, first_ping: nil)
     @tls = tls
     @later = later || tls
     @info = info
@@ -45,6 +50,7 @@ class FakeNatsServer
     @before_tls = before_tls
     @tls_first = tls_first
     @websocket = websocket
+    @first_ping = first_ping
     @mutex = Mutex.new
     @cond = ConditionVariable.new
     @connects = []
@@ -167,7 +173,11 @@ class FakeNatsServer
         end
       when "PING\r\n"
         pings += 1
-        io.write((pings == 1) ? "PONG\r\n#{info_after_first_pong}" : "PONG\r\n")
+        if pings > 1
+          io.write("PONG\r\n")
+        elsif !answer_first_ping(io)
+          break
+        end
       end
     end
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
@@ -204,7 +214,28 @@ class FakeNatsServer
   end
 
   def info_after_first_pong
-    (Gem::Version.new(info[:version]) >= Gem::Version.new("2.12.0")) ? info_line : ""
+    (Gem::Version.new(info[:version]).release >= Gem::Version.new("2.12.0")) ? info_line : ""
+  end
+
+  # Runs the steps of first_ping; false when they closed the connection.
+  def answer_first_ping(io)
+    out = +""
+    (@first_ping || ["PONG\r\n#{info_after_first_pong}"]).each do |step|
+      case step
+      when String then out << step
+      when Hash then out << "INFO #{info.merge(step).to_json}\r\n"
+      else
+        io.write(out) unless out.empty?
+        out = +""
+        case step
+        when :await_pong then loop { break if [nil, "PONG\r\n"].include?(io.gets) }
+        when :close then return false
+        when Numeric then sleep step
+        end
+      end
+    end
+    io.write(out) unless out.empty?
+    true
   end
 
   def close_quietly(io)
