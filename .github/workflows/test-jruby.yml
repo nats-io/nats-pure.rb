@@ -24,6 +24,11 @@ jobs:
       with:
         ruby-version: jruby
         bundler-cache: true
+    - name: Run the TLS specs
+      # Required, unlike the full run below: they check that the client
+      # verifies the server's certificate and name on JRuby.
+      run: |
+        bundle exec rspec spec/client_tls_spec.rb --force-color || bundle exec rspec spec/client_tls_spec.rb --only-failures --force-color
     - name: Run RSpec
       # Mark failures as warnings for now due to high level of flakiness
       # and occasional OOM-s on CI

@@ -55,6 +55,10 @@ describe "Client - TLS spec" do
     end
 
     it "should allow to connect client with secure connection if server requires it" do
+      if defined?(JOpenSSL::VERSION) && Gem::Version.new(JOpenSSL::VERSION) < Gem::Version.new("0.19.0")
+        skip "jruby-openssl before 0.19.0 corrupts the TLS stream when one thread reads from an SSLSocket while another writes to it"
+      end
+
       errors = []
       closes = 0
       disconnects = 0
