@@ -1128,7 +1128,9 @@ module NATS
         if insecure_skip_verify?
           tls_context.set_params(verify_mode: OpenSSL::SSL::VERIFY_NONE, verify_hostname: false)
         else
-          tls_context.set_params
+          # The client checks the name after the handshake (verify_server!),
+          # where the error can list the names of the certificate.
+          tls_context.set_params(verify_hostname: false)
         end
       end
     end
@@ -2099,10 +2101,11 @@ module NATS
 
         begin
           tls_socket.connect
-        rescue OpenSSL::SSL::SSLError
+        rescue OpenSSL::SSL::SSLError => e
+          e = OpenSSL::SSL::SSLError.new(name_check_failed(tls_socket.peer_cert_chain&.first)) if name_check_failed?(tls_socket)
           # Nothing is sent on a connection whose handshake failed.
           tls_socket.close
-          raise
+          raise e
         end
         verify_server!(tls_socket) unless @tls[:insecure_skip_verify]
         @socket = tls_socket
@@ -2202,11 +2205,15 @@ module NATS
             raise OpenSSL::SSL::SSLError, "certificate verify failed (the context does not set VERIFY_PEER) for #{@uri.host}:#{@uri.port}"
           end
         elsif (result = tls_socket.verify_result) != OpenSSL::X509::V_OK
+          # A context with verify_hostname but without VERIFY_PEER completes
+          # the handshake after the name check failed.
+          raise OpenSSL::SSL::SSLError, name_check_failed(tls_socket.peer_cert) if name_check_failed?(tls_socket)
           raise OpenSSL::SSL::SSLError, "certificate verify failed (#{verify_error_string(result)}) for #{@uri.host}:#{@uri.port}"
         end
 
-        unless certificate_identity?(tls_socket.peer_cert, @tls[:hostname])
-          raise OpenSSL::SSL::SSLError, "hostname #{@tls[:hostname].inspect} does not match the server certificate"
+        cert = tls_socket.peer_cert
+        unless certificate_identity?(cert, @tls[:hostname])
+          raise OpenSSL::SSL::SSLError, name_check_failed(cert)
         end
       rescue
         tls_socket.close
@@ -2243,6 +2250,45 @@ module NATS
           ostr = OpenSSL::ASN1.decode(ext.to_der).value.last
           OpenSSL::ASN1.decode(ostr.value).value
         end
+      end
+
+      # Whether the handshake failed on the name: on CRuby a context with
+      # verify_hostname checks it during the handshake.
+      def name_check_failed?(tls_socket)
+        defined?(OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH) &&
+          tls_socket.verify_result == OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH
+      end
+
+      # The error for a certificate that is not issued for the name the
+      # server is verified against: that name, the names the certificate is
+      # issued for (at most four) and the setting for the name. Without the
+      # certificate it leaves the names out: OpenSSL 1.1 keeps none when the
+      # name check fails during the handshake.
+      def name_check_failed(cert)
+        text = "hostname #{@tls[:hostname].inspect} does not match the server certificate of #{@uri.host}:#{@uri.port}"
+        if cert
+          names = certificate_names(cert)
+          issued_for = names.empty? ? "no name" : names.first(4).map(&:inspect).join(", ")
+          issued_for += " and #{names.size - 4} more" if names.size > 4
+          text += ", which is issued for #{issued_for}"
+        end
+        "#{text}; tls: {hostname:} sets the name every server is verified against"
+      end
+
+      # The names certificate_identity? checks: the DNS names and IP
+      # addresses of subjectAltName, else the common name.
+      def certificate_names(cert)
+        names = subject_alt_names(cert).filter_map do |san|
+          case san.tag
+          when 2 then san.value
+          when 7 then IPAddr.new_ntoh(san.value).to_s if [4, 16].include?(san.value.bytesize)
+          end
+        end
+        return names unless names.empty?
+
+        cert.subject.to_a.filter_map { |oid, value| value if oid == "CN" }
+      rescue OpenSSL::ASN1::ASN1Error
+        []
       end
 
       def verify_error_string(code)

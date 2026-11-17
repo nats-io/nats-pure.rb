@@ -130,6 +130,37 @@ describe "Client - TLS spec" do
       nats.close
     end
 
+    it "names the name it expected, the certificate's names and tls: {hostname:}" do
+      mismatch = 'hostname "nats.example.com" does not match the server certificate of 127.0.0.1:4444'
+      names = ', which is issued for "127.0.0.1", "::1", "localhost", "server.localhost"'
+      setting = "; tls: {hostname:} sets the name every server is verified against"
+
+      # On CRuby this context checks the name during the handshake, after
+      # which OpenSSL 1.1 keeps no certificate to take the names from.
+      checks_names = OpenSSL::SSL::SSLContext.new
+      checks_names.set_params(ca_file: "./spec/configs/certs/ca.pem")
+      keeps_certificate = defined?(JRUBY_VERSION) || OpenSSL::OPENSSL_VERSION_NUMBER >= 0x30000000
+      # This one leaves the name to the client.
+      checks_no_names = OpenSSL::SSL::SSLContext.new
+      checks_no_names.ca_file = "./spec/configs/certs/ca.pem"
+      checks_no_names.verify_mode = OpenSSL::SSL::VERIFY_PEER
+      contexts = [[checks_names, keeps_certificate], [checks_no_names, true]]
+      unless defined?(JRUBY_VERSION)
+        # On CRuby this one completes the handshake after the name check
+        # failed.
+        checks_names_only = OpenSSL::SSL::SSLContext.new
+        checks_names_only.set_params(ca_file: "./spec/configs/certs/ca.pem", verify_mode: OpenSSL::SSL::VERIFY_NONE)
+        contexts << [checks_names_only, true]
+      end
+
+      contexts.each do |tls_context, with_names|
+        expect do
+          NATS::IO::Client.new.connect(servers: ["tls://127.0.0.1:4444"], reconnect: false,
+            tls: {context: tls_context, hostname: "nats.example.com"})
+        end.to raise_error(OpenSSL::SSL::SSLError, with_names ? mismatch + names + setting : mismatch + setting)
+      end
+    end
+
     it "should allow to client to try to connect securely using tls scheme" do
       nats = NATS::IO::Client.new
 
@@ -735,6 +766,31 @@ describe "Client - TLS spec" do
         errors.any? { |e| e.is_a?(OpenSSL::SSL::SSLError) && e.message.include?("does not match the server certificate") }
       end
       expect(other.next_connect(0.5)).to be_nil
+      nats.close
+    end
+
+    it "reconnects to a server it verified after another server failed the name check" do
+      # Served with TLS 1.2 so that the reconnect to it resumes the TLS session.
+      seed_tls = FakeNatsServer.tls_context("nats-service.localhost/server.pem", "nats-service.localhost/server-key.pem")
+      seed_tls.max_version = OpenSSL::SSL::TLS1_2_VERSION
+      seed = FakeNatsServer.new(tls: seed_tls).tap { |s| servers << s }
+      # Issued by the same CA for *.clients.fake-nats-service.localhost.
+      other = fake_server("fakeserver")
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params(ca_file: "./spec/configs/certs/nats-service.localhost/ca.pem")
+      nats = NATS::IO::Client.new
+
+      nats.connect(
+        servers: ["tls://server-A.clients.nats-service.localhost:#{seed.port}", "tls://server-A.clients.nats-service.localhost:#{other.port}"],
+        dont_randomize_servers: true,
+        reconnect_time_wait: 0.1,
+        tls: {context: ctx}
+      )
+      expect(seed.next_connect).to_not be_nil
+
+      nats.force_reconnect
+      expect(other.wait_for_accepted(1)).to eql(true)
+      expect(seed.next_connect).to_not be_nil
       nats.close
     end
 
