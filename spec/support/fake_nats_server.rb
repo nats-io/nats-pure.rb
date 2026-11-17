@@ -9,7 +9,8 @@ require "socket"
 # context, answers PING with PONG and records the CONNECT of every client,
 # with the server name the client sent in the handshake (SNI) as "sni". It
 # also records what clients send in plaintext after a TLS handshake that
-# failed.
+# failed. As nats-server 2.12 and later do, it writes an INFO right after
+# the PONG to the first PING, in the same write.
 class FakeNatsServer
   CERTS = File.expand_path("../configs/certs", __dir__)
 
@@ -30,11 +31,13 @@ class FakeNatsServer
   # info: INFO fields that are added or replace the defaults.
   # refuse: answers CONNECT with an authorization error and closes the
   # connection.
-  def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false)
+  # before_tls: bytes written with INFO, before the TLS handshake.
+  def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false, before_tls: nil)
     @tls = tls
     @later = later || tls
     @info = info
     @refuse = refuse
+    @before_tls = before_tls
     @mutex = Mutex.new
     @cond = ConditionVariable.new
     @connects = []
@@ -127,7 +130,7 @@ class FakeNatsServer
     io = sock
     return record_plaintext(sock) if tls == :silent
 
-    io.write(info_line)
+    io.write(info_line + @before_tls.to_s)
     if tls
       begin
         io = upgrade(sock, tls)
@@ -136,6 +139,7 @@ class FakeNatsServer
       end
     end
 
+    pings = 0
     while (line = io.gets)
       case line
       when /\ACONNECT (.*)\r\n\z/
@@ -149,7 +153,8 @@ class FakeNatsServer
           break
         end
       when "PING\r\n"
-        io.write("PONG\r\n")
+        pings += 1
+        io.write((pings == 1) ? "PONG\r\n#{info_after_first_pong}" : "PONG\r\n")
       end
     end
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
@@ -177,9 +182,16 @@ class FakeNatsServer
     ssl
   end
 
+  def info
+    {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: !@tls.nil?}.merge(@info)
+  end
+
   def info_line
-    info = {server_id: "FAKE", version: "2.14.0", proto: 1, headers: true, max_payload: 1_048_576, tls_required: !@tls.nil?}
-    "INFO #{info.merge(@info).to_json}\r\n"
+    "INFO #{info.to_json}\r\n"
+  end
+
+  def info_after_first_pong
+    (Gem::Version.new(info[:version]) >= Gem::Version.new("2.12.0")) ? info_line : ""
   end
 
   def close_quietly(io)

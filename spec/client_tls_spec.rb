@@ -161,6 +161,17 @@ describe "Client - TLS spec" do
       end
     end
 
+    it "connects over TLS in verbose mode" do
+      tls_context = OpenSSL::SSL::SSLContext.new
+      tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://127.0.0.1:4444"], reconnect: false, verbose: true, tls: {context: tls_context})
+      nats.flush
+      expect(nats.connected?).to eql(true)
+      nats.close
+    end
+
     it "fails with a TLS error against a server that sends INFO first" do
       tls_context = OpenSSL::SSL::SSLContext.new
       tls_context.set_params(ca_file: "./spec/configs/certs/ca.pem")
@@ -880,6 +891,17 @@ describe "Client - TLS spec" do
       expect(other.next_connect(1)).to be_nil
     ensure
       nats&.close
+    end
+
+    it "drops what the server sends between INFO and the TLS handshake" do
+      server = fake_server("server", before_tls: "-ERR 'Authorization Violation'\r\n")
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"], reconnect: false,
+        tls: {context: ca_context})
+      nats.flush
+      expect(nats.connected?).to eql(true)
+      nats.close
     end
 
     it "verifies every server against tls: {hostname:} and sends it as SNI" do

@@ -2116,6 +2116,10 @@ module NATS
 
       # (Re-)connect using secure connection if server and client agreed on using it.
       def setup_tls!
+        # Bytes the server sent after INFO and before the handshake are
+        # dropped: from here on, only what comes through TLS is read.
+        @unread&.clear
+
         # Setup TLS connection by rewrapping the socket
         tls_socket = OpenSSL::SSL::SSLSocket.new(@socket, @tls.fetch(:context))
 
@@ -2139,30 +2143,29 @@ module NATS
         @socket = tls_socket
       end
 
+      # Reads a line, up to and including "\n", or returns nil when the
+      # connection is closed first. A read from the socket can take more
+      # than the line, as one TLS record can carry several lines, so the
+      # rest is kept for the next read_line or read. The deadline counts
+      # from the call, for the whole line.
       def read_line(deadline = nil)
-        # FIXME: Should accumulate and read in a non blocking way instead
-        unless ::IO.select([@socket], nil, nil, deadline)
-          raise NATS::IO::SocketTimeoutError
+        @unread ||= String.new
+        limit = deadline && MonotonicTime.now + deadline
+        until (idx = @unread.index("\n"))
+          raise NATS::IO::SocketTimeoutError if limit && MonotonicTime.now >= limit
+
+          @unread << read_socket(MAX_SOCKET_READ_BYTES, limit)
         end
-        @socket.gets
+        @unread.slice!(0, idx + 1)
+      rescue EOFError
+        nil
       end
 
       def read(max_bytes, deadline = nil)
-        begin
-          @socket.read_nonblock(max_bytes)
-        rescue ::IO::WaitReadable
-          if ::IO.select([@socket], nil, nil, deadline)
-            retry
-          else
-            raise NATS::IO::SocketTimeoutError
-          end
-        rescue ::IO::WaitWritable
-          if ::IO.select(nil, [@socket], nil, deadline)
-            retry
-          else
-            raise NATS::IO::SocketTimeoutError
-          end
-        end
+        # Hand over what read_line read beyond its last line first.
+        return @unread.slice!(0, max_bytes) if @unread && !@unread.empty?
+
+        read_socket(max_bytes, deadline && MonotonicTime.now + deadline)
       rescue EOFError => e
         if (RUBY_ENGINE == "jruby") && (e.message == "No message available")
           # FIXME: <EOFError: No message available> can happen in jruby
@@ -2218,6 +2221,36 @@ module NATS
       end
 
       private
+
+      # limit: a MonotonicTime.now value, or nil to wait without one. A TLS
+      # socket can be readable and still raise IO::WaitReadable until the
+      # rest of a record comes, so each wait takes only the time left.
+      def read_socket(max_bytes, limit)
+        @socket.read_nonblock(max_bytes)
+      rescue ::IO::WaitReadable
+        if ::IO.select([@socket], nil, nil, time_left(limit))
+          retry
+        else
+          raise NATS::IO::SocketTimeoutError
+        end
+      rescue ::IO::WaitWritable
+        if ::IO.select(nil, [@socket], nil, time_left(limit))
+          retry
+        else
+          raise NATS::IO::SocketTimeoutError
+        end
+      end
+
+      # The seconds until limit, or nil without one. Raises
+      # NATS::IO::SocketTimeoutError once limit has passed.
+      def time_left(limit)
+        return nil unless limit
+
+        left = limit - MonotonicTime.now
+        raise NATS::IO::SocketTimeoutError if left <= 0
+
+        left
+      end
 
       # A context checks only what it is set up to check: one made with
       # OpenSSL::SSL::SSLContext.new checks nothing, and jruby-openssl before
