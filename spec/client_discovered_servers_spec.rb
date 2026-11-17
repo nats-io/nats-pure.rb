@@ -82,4 +82,80 @@ describe "Client - discovered servers" do
       nats.close
     end
   end
+
+  context "with the first INFO of an attempt" do
+    # The certificates of these servers carry *.clients.nats-service.localhost,
+    # and those of fakeserver *.clients.fake-nats-service.localhost.
+    def tls_server(cert = "server", **opts)
+      tls = FakeNatsServer.tls_context("nats-service.localhost/#{cert}.pem", "nats-service.localhost/#{cert}-key.pem")
+      fake_server(tls: tls, **opts)
+    end
+
+    # These carry 127.0.0.1.
+    def ip_tls_server(**opts)
+      fake_server(tls: FakeNatsServer.tls_context("server.pem", "key.pem"), **opts)
+    end
+
+    def tls_options(ca = "nats-service.localhost/ca.pem", **opts)
+      ctx = OpenSSL::SSL::SSLContext.new
+      ctx.set_params(ca_file: "./spec/configs/certs/#{ca}")
+      {context: ctx}.merge(opts)
+    end
+
+    it "does not dial a server listed before a TLS handshake that fails" do
+      name = "server-A.clients.nats-service.localhost"
+      other = tls_server
+      seed = tls_server("fakeserver", info: {connect_urls: ["#{name}:#{other.port}"]})
+      nats = NATS::IO::Client.new
+
+      expect do
+        nats.connect(servers: ["tls://#{name}:#{seed.port}"], reconnect_time_wait: 0.1, max_reconnect_attempts: 1,
+          tls: tls_options)
+      end.to raise_error(OpenSSL::SSL::SSLError, /does not match the server certificate/)
+      expect(other.accepted).to eql(0)
+    end
+
+    it "does not keep the servers of the INFO read before TLS" do
+      seed = tls_server(info: {version: "2.11.0", connect_urls: ["127.0.0.1:4999"]})
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://server-A.clients.nats-service.localhost:#{seed.port}"], reconnect: false,
+        tls: tls_options)
+      nats.flush
+      expect(pool_urls(nats)).to eql(["tls://server-A.clients.nats-service.localhost:#{seed.port}"])
+      nats.close
+    end
+
+    it "uses the servers of the first INFO of a refused plaintext attempt" do
+      other = fake_server
+      seed = fake_server(refuse: true, info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["nats://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1)
+      expect(other.next_connect).not_to be_nil
+      nats.close
+    end
+
+    it "uses the servers of the first INFO of a refused attempt with handshake first" do
+      other = ip_tls_server(tls_first: true)
+      seed = ip_tls_server(tls_first: true, refuse: true, info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["tls://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1,
+        tls: tls_options("ca.pem", handshake_first: true))
+      expect(other.next_connect).not_to be_nil
+      nats.close
+    end
+
+    it "uses the servers of the first INFO of a refused attempt over wss" do
+      other = ip_tls_server(websocket: true)
+      seed = ip_tls_server(websocket: true, refuse: true, info: {connect_urls: ["127.0.0.1:#{other.port}"]})
+      nats = NATS::IO::Client.new
+
+      nats.connect(servers: ["wss://127.0.0.1:#{seed.port}"], reconnect_time_wait: 0.1, tls: tls_options("ca.pem"))
+      expect(other.next_connect).not_to be_nil
+      expect(nats.connected_server.to_s).to eql("wss://127.0.0.1:#{other.port}")
+      nats.close
+    end
+  end
 end

@@ -6,11 +6,12 @@ require "socket"
 
 # A NATS server for the TLS and discovery specs. It listens on a free port
 # of host, sends INFO, upgrades the connection to TLS when it has a
-# context, answers PING with PONG and records the CONNECT of every client,
-# with the server name the client sent in the handshake (SNI) as "sni". It
-# also records what clients send in plaintext after a TLS handshake that
-# failed. As nats-server 2.12 and later do, it writes an INFO right after
-# the PONG to the first PING, in the same write.
+# context (after INFO, or first), or speaks WebSocket, answers PING with
+# PONG and records the CONNECT of every client, with the server name the
+# client sent in the handshake (SNI) as "sni". It also records what
+# clients send in plaintext after a TLS handshake that failed. As
+# nats-server 2.12 and later do, it writes an INFO right after the PONG to
+# the first PING, in the same write.
 class FakeNatsServer
   CERTS = File.expand_path("../configs/certs", __dir__)
 
@@ -32,12 +33,18 @@ class FakeNatsServer
   # refuse: answers CONNECT with an authorization error and closes the
   # connection.
   # before_tls: bytes written with INFO, before the TLS handshake.
-  def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false, before_tls: nil)
+  # tls_first: the TLS handshake comes before INFO.
+  # websocket: the client connects over WebSocket, with TLS (wss://) when
+  # the server has a context.
+  def initialize(tls: nil, later: nil, host: "127.0.0.1", info: {}, refuse: false, before_tls: nil, tls_first: false,
+    websocket: false)
     @tls = tls
     @later = later || tls
     @info = info
     @refuse = refuse
     @before_tls = before_tls
+    @tls_first = tls_first
+    @websocket = websocket
     @mutex = Mutex.new
     @cond = ConditionVariable.new
     @connects = []
@@ -130,12 +137,18 @@ class FakeNatsServer
     io = sock
     return record_plaintext(sock) if tls == :silent
 
-    io.write(info_line + @before_tls.to_s)
-    if tls
-      begin
-        io = upgrade(sock, tls)
-      rescue OpenSSL::SSL::SSLError
-        return record_plaintext(sock)
+    if @tls_first || @websocket
+      io = ssl = upgrade(sock, tls) if tls
+      io = WebSocketConnection.new(io) if @websocket
+      io.write(info_line)
+    else
+      io.write(info_line + @before_tls.to_s)
+      if tls
+        begin
+          io = ssl = upgrade(sock, tls)
+        rescue OpenSSL::SSL::SSLError
+          return record_plaintext(sock)
+        end
       end
     end
 
@@ -145,7 +158,7 @@ class FakeNatsServer
       when /\ACONNECT (.*)\r\n\z/
         connect = JSON.parse($1)
         @mutex.synchronize do
-          @connects << connect.merge("sni" => @server_names.delete(io))
+          @connects << connect.merge("sni" => @server_names.delete(ssl))
           @cond.broadcast
         end
         if @refuse
@@ -158,7 +171,7 @@ class FakeNatsServer
       end
     end
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
-    # The client went away.
+    # The client went away or did not complete the handshake.
   ensure
     close_quietly(io)
     @mutex.synchronize do
@@ -198,5 +211,40 @@ class FakeNatsServer
     io.close
   rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
     # Already closed.
+  end
+
+  # The server side of a WebSocket connection, with the gets and write the
+  # server loop uses.
+  class WebSocketConnection
+    def initialize(io)
+      require "websocket"
+      @io = io
+      handshake = ::WebSocket::Handshake::Server.new
+      handshake << io.readpartial(4096) until handshake.finished?
+      io.write(handshake.to_s)
+      @version = handshake.version
+      @frames = ::WebSocket::Frame::Incoming::Server.new(version: @version)
+      @lines = +""
+    end
+
+    def gets
+      until (idx = @lines.index("\n"))
+        @frames << @io.readpartial(4096)
+        while (frame = @frames.next)
+          @lines << frame.data
+        end
+      end
+      @lines.slice!(0, idx + 1)
+    rescue EOFError
+      nil
+    end
+
+    def write(data)
+      @io.write(::WebSocket::Frame::Outgoing::Server.new(version: @version, data: data, type: :binary).to_s)
+    end
+
+    def close
+      @io.close
+    end
   end
 end

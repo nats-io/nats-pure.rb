@@ -159,7 +159,7 @@ module NATS
 
     def validate_settings!: () -> void
 
-    def process_info: (String) -> Hash[Symbol, untyped]
+    def process_info: (String, ?discover: bool) -> Hash[Symbol, untyped]
 
     def discovered_uri: (untyped) -> URI::Generic?
 

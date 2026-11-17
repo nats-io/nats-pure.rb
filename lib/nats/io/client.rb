@@ -892,7 +892,9 @@ module NATS
       raise(NATS::IO::ClientError, "custom inbox may not begin with '.'") if @inbox_prefix.start_with?(".")
     end
 
-    def process_info(line)
+    # Takes an INFO from the server. Unless ignore_discovered_urls is set,
+    # or discover is false, the servers it lists are added to the pool.
+    def process_info(line, discover: true)
       parsed_info = JSON.parse(line)
 
       # INFO can be received asynchronously too,
@@ -905,7 +907,7 @@ module NATS
 
         # Detect any announced server that we might not be aware of...
         connect_urls = @server_info[:connect_urls]
-        if !@options[:ignore_discovered_urls] && connect_urls
+        if discover && !@options[:ignore_discovered_urls] && connect_urls
           srvs = []
           connect_urls.each do |url|
             u = discovered_uri(url)
@@ -1531,6 +1533,12 @@ module NATS
       tls_first = handshake_first? && %w[nats tls].include?(@uri.scheme)
       @io.setup_tls! if tls_first
 
+      # A client that asks for TLS and has none yet starts it after INFO,
+      # or fails the attempt. The servers of an INFO read before the TLS
+      # handshake are not used, whether the attempt goes on or fails: the
+      # discovered servers come from the INFOs received inside TLS.
+      tls_after_info = client_using_secure_connection? && !tls_first && @uri.scheme != "wss"
+
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line || line.empty?
@@ -1539,7 +1547,7 @@ module NATS
 
       if (match = line.match(NATS::Protocol::INFO))
         info_json = match.captures.first
-        process_info(info_json)
+        process_info(info_json, discover: !tls_after_info)
       else
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
       end
