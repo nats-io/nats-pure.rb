@@ -578,6 +578,125 @@ describe "Client - TLS spec" do
       nats&.close
     end
 
+    it "sends nothing on close while an attempt waits for the server" do
+      # The connections after the first get nothing, not even INFO.
+      server = fake_server("server", later: :silent)
+      nats = NATS::IO::Client.new
+      nats.connect(
+        servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"],
+        connect_timeout: 5,
+        reconnect_time_wait: 0.1,
+        tls: {context: ca_context}
+      )
+      expect(server.next_connect).to_not be_nil
+      nats.force_reconnect
+      # Kept until the client is connected again.
+      nats.publish("updates", "kept while reconnecting")
+
+      expect(server.wait_for_accepted(2)).to eql(true)
+      nats.close
+      server.wait_for_all_closed
+      expect(server.plaintext).to_not include("PUB")
+    end
+
+    it "closes the client and sends nothing when drained while reconnecting" do
+      # The connections after the first get nothing, not even INFO.
+      server = fake_server("server", later: :silent)
+      nats = NATS::IO::Client.new
+      nats.connect(
+        servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"],
+        connect_timeout: 5,
+        reconnect_time_wait: 0.1,
+        tls: {context: ca_context}
+      )
+      expect(server.next_connect).to_not be_nil
+      nats.force_reconnect
+      # Kept until the client is connected again.
+      nats.publish("updates", "kept while reconnecting")
+
+      expect(server.wait_for_accepted(2)).to eql(true)
+      nats.drain
+      expect(nats.closed?).to eql(true)
+      server.wait_for_all_closed
+      expect(server.plaintext).to_not include("PUB")
+    end
+
+    it "closes the client when on_disconnect drains it while reconnecting" do
+      # The connections after the first get nothing, not even INFO.
+      server = fake_server("server", later: :silent)
+      nats = NATS::IO::Client.new
+      nats.on_disconnect { nats.drain }
+      nats.connect(
+        servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"],
+        connect_timeout: 5,
+        reconnect_time_wait: 0.1,
+        tls: {context: ca_context}
+      )
+      expect(server.next_connect).to_not be_nil
+      nats.force_reconnect
+
+      wait_until(description: "the client to close") { nats.closed? }
+    end
+
+    it "sends nothing on a connection that has not started TLS when on_error drains the client" do
+      # The connections after the first get nothing, not even INFO.
+      server = fake_server("server", later: :silent)
+      nats = NATS::IO::Client.new
+      drained = false
+      published = false
+      nats.on_error do
+        unless drained
+          drained = true
+          nats.drain
+        end
+      end
+      nats.on_disconnect do
+        unless published
+          published = true
+          # Kept until the client is connected again.
+          nats.publish("updates", "kept while reconnecting")
+        end
+      end
+      nats.connect(
+        servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"],
+        connect_timeout: 5,
+        reconnect_time_wait: 0,
+        max_reconnect_attempts: -1,
+        tls: {context: ca_context}
+      )
+      nats.subscribe("work") {}
+      nats.flush
+
+      server.drop_clients
+      wait_until(description: "the client to close") { nats.closed? }
+      server.wait_for_all_closed
+      expect(server.plaintext).to_not include("PUB")
+    end
+
+    it "sends nothing on a connection that has not started TLS when connect is called again after a close while reconnecting" do
+      # The connections after the first get nothing, not even INFO.
+      server = fake_server("server", later: :silent)
+      opts = {
+        servers: ["tls://server-A.clients.nats-service.localhost:#{server.port}"],
+        connect_timeout: 1,
+        reconnect_time_wait: 0.1,
+        max_reconnect_attempts: 1,
+        tls: {context: ca_context}
+      }
+      nats = NATS::IO::Client.new
+      nats.connect(opts)
+      expect(server.next_connect).to_not be_nil
+      nats.force_reconnect
+      # Kept until the client is connected again.
+      nats.publish("updates", "kept while reconnecting")
+      expect(server.wait_for_accepted(2)).to eql(true)
+      nats.close
+
+      expect { nats.connect(opts) }.to raise_error(NATS::IO::SocketTimeoutError)
+      server.wait_for_all_closed
+      expect(server.plaintext).to_not include("PUB")
+    end
+
     it "verifies a server reached by an IPv6 address against the certificate's IP addresses" do
       # server.pem is issued for the IP addresses 127.0.0.1 and ::1.
       server = FakeNatsServer.new(tls: FakeNatsServer.tls_context("server.pem", "key.pem"), host: "::1")

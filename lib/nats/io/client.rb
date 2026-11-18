@@ -226,6 +226,9 @@ module NATS
       # that the connection was closed meanwhile.
       @close_generation = 0
 
+      # The thread whose close runs the disconnect and close callbacks.
+      @close_callbacks_thread = nil
+
       # New style request/response implementation.
       @resp_sub = nil
       @resp_map = nil
@@ -856,6 +859,8 @@ module NATS
     # callback option to know when the connection has moved from draining to closed.
     def drain
       return if draining?
+      # There is no connection to drain while reconnecting.
+      return close if reconnecting?
 
       synchronize do
         @drain_t ||= Thread.new { do_drain }
@@ -1210,7 +1215,13 @@ module NATS
     end
 
     def do_drain
-      synchronize { @status = DRAINING_SUBS }
+      # A reconnect that started after drain was called leaves no
+      # connection to drain.
+      reconnecting = synchronize do
+        @status = DRAINING_SUBS unless reconnecting?
+        reconnecting?
+      end
+      return close if reconnecting
 
       # Do unsubscribe protocol for all the susbcriptions, then have a single thread
       # waiting until all subs are done or drain timeout error reported to async error cb.
@@ -1670,8 +1681,10 @@ module NATS
         end
 
         # Try to write any pending flushes in case
-        # we have a connection then close it.
-        should_flush = @pending_queue && @io && @io.socket && !@io.closed?
+        # we have a connection then close it. While connecting or
+        # reconnecting there is none: @io is an attempt that has not sent
+        # CONNECT, or has failed.
+        should_flush = !reconnecting? && !connecting? && @pending_queue && @io && @io.socket && !@io.closed?
         if should_flush
           begin
             cmds = []
@@ -1688,9 +1701,16 @@ module NATS
         # Destroy any remaining subscriptions.
         @subs.clear
 
-        if do_cbs
-          @disconnect_cb&.call(@last_err)
-          @close_cb&.call
+        # A close from one of these callbacks closes without calling them
+        # again.
+        if do_cbs && @close_callbacks_thread != Thread.current
+          begin
+            @close_callbacks_thread = Thread.current
+            @disconnect_cb&.call(@last_err)
+            @close_cb&.call
+          ensure
+            @close_callbacks_thread = nil
+          end
         end
 
         @status = conn_status

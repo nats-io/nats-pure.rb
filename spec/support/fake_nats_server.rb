@@ -69,9 +69,15 @@ class FakeNatsServer
     wait_for(timeout) { @closed >= @accepted }
   end
 
+  # Closes the connections accepted so far, as a server that goes away
+  # does.
+  def drop_clients
+    @mutex.synchronize { @clients.each { |c| close_quietly(c) } }
+  end
+
   def shutdown
     @server.close
-    @mutex.synchronize { @clients.each { |c| close_quietly(c) } }
+    drop_clients
     @thread.join(1)
   end
 
