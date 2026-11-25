@@ -80,7 +80,8 @@ module NATS
     @tls: bool?
 
     @hostname: String?
-    @single_url_connect_used: bool
+    @configured_servers: Array[[String?, Integer?]]
+    @without_tls_name: Hash[String, bool]
 
     @connect_called: bool
 
@@ -159,7 +160,21 @@ module NATS
 
     def validate_settings!: () -> void
 
-    def process_info: (String) -> Hash[Symbol, untyped]
+    def process_info: (String, ?discover: bool, ?first: bool) -> Hash[Symbol, untyped]
+
+    def discovered_uri: (untyped) -> URI::Generic?
+
+    def discovered_tls_name: (URI::Generic) -> String?
+
+    def without_tls_name_error: (String) -> NATS::IO::ConnectError
+
+    def ip_address?: (String?) -> bool
+
+    def next_connect_op: (Float) -> String?
+
+    def read_info_after_first_pong: () -> void
+
+    def sends_info_after_first_pong?: (untyped) -> bool
 
     def process_hdr: (String) -> Hash[String, untyped]?
 
@@ -177,7 +192,7 @@ module NATS
 
     def client_using_secure_connection?: () -> bool
 
-    def single_url_connect_used?: () -> bool
+    def verify_discovered_servers_by_ip?: () -> bool
 
     def send_command: (String) -> void
 
@@ -225,7 +240,7 @@ module NATS
 
     def should_reconnect?: () -> bool
 
-    def create_socket: () -> NATS::IO::Socket
+    def create_socket: (Hash[Symbol, untyped]) -> NATS::IO::Socket
 
     def setup_nkeys_connect: () -> void
 

@@ -24,27 +24,19 @@ nats.on_error do |e|
   puts e.backtrace
 end
 
+# Verify the server, against the given CA only.
 tls_context = OpenSSL::SSL::SSLContext.new
-tls_context.ssl_version = :TLSv1_2
-
-# Deactivating this makes it possible to connect to server
-# skipping hostname validation...
-tls_context.verify_mode = OpenSSL::SSL::VERIFY_PEER
-tls_context.verify_hostname = true
-
-# Set the RootCAs
-tls_context.cert_store = OpenSSL::X509::Store.new
-ca_file = File.read("./spec/configs/certs/nats-service.localhost/ca.pem")
-tls_context.cert_store.add_cert(OpenSSL::X509::Certificate.new(ca_file))
+tls_context.set_params(ca_file: "./spec/configs/certs/nats-service.localhost/ca.pem")
 
 # The server is setup to use a wildcard certificate for:
 #
 # *.clients.nats-service.localhost
 #
-# so given the options above, having a wrong domain would
-# make the client connection fail with an error
+# so a server name outside that domain makes the connection fail with:
 #
-# Error: SSL_connect returned=1 errno=0 state=error: certificate verify failed (error number 1)
+# hostname "..." does not match the server certificate of ..., which is issued
+# for "*.clients.nats-service.localhost", "clients.nats-service.localhost";
+# tls: {hostname:} sets the name every server is verified against
 #
 server = "nats://server-A.clients.nats-service.localhost:4222"
 

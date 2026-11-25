@@ -27,6 +27,7 @@ require "json"
 require "monitor"
 require "uri"
 require "securerandom"
+require "ipaddr"
 require "concurrent"
 
 begin
@@ -213,10 +214,13 @@ module NATS
       # Secure TLS options
       @tls = nil
 
-      # Hostname of current server; used for when TLS host
-      # verification is enabled.
+      # The TLS name of the current server: the name its certificate is
+      # verified against unless tls: {hostname:} is set, and the name a
+      # discovered IP address it lists inherits.
       @hostname = nil
-      @single_url_connect_used = false
+
+      # The discovered servers reported to on_error for having no such name.
+      @without_tls_name = {}
 
       # Track whether connect has been already been called.
       @connect_called = false
@@ -224,6 +228,9 @@ module NATS
       # Bumped by every close, so that a reconnect started earlier can tell
       # that the connection was closed meanwhile.
       @close_generation = 0
+
+      # The thread whose close runs the disconnect and close callbacks.
+      @close_callbacks_thread = nil
 
       # New style request/response implementation.
       @resp_sub = nil
@@ -293,6 +300,7 @@ module NATS
     private def parse_and_validate_options
       # Reset these in case we have reconnected via fork.
       @server_pool = []
+      @without_tls_name = {}
       @resp_sub = nil
       @resp_map = nil
       @resp_sub_prefix = nil
@@ -319,7 +327,6 @@ module NATS
         if srvs.any? { |u| %w[tls wss].include? u.scheme } && !opts[:tls]
           opts[:tls] = {context: tls_context}
         end
-        @single_url_connect_used = true if srvs.size == 1
       when Hash
         opts = uri
       end
@@ -358,11 +365,18 @@ module NATS
         else
           URI.parse(u)
         end
+        # A configured server is verified against the host of its URL.
         @server_pool << {
           uri: nats_uri,
-          hostname: nats_uri.hostname
+          hostname: nats_uri.hostname,
+          tls_name: nats_uri.hostname
         }
       end
+
+      # The pool drops a server after failed attempts. Listed again by a
+      # server, a configured server is still verified against the host of
+      # its URL.
+      @configured_servers = @server_pool.map { |srv| [srv[:uri].hostname, srv[:uri].port] }
 
       if @options[:old_style_request]
         # Replace for this instance the implementation
@@ -399,16 +413,8 @@ module NATS
       begin
         srv = select_next_server
 
-        # Use the hostname from the server for TLS hostname verification.
-        if client_using_secure_connection? && single_url_connect_used?
-          # Always reuse the original hostname used to connect.
-          @hostname ||= srv[:hostname]
-        else
-          @hostname = srv[:hostname]
-        end
-
         # Create TCP socket connection to NATS.
-        @io = create_socket
+        @io = create_socket(srv)
         @io.connect
 
         # Capture state that we have had a TCP connection established against
@@ -855,6 +861,8 @@ module NATS
     # callback option to know when the connection has moved from draining to closed.
     def drain
       return if draining?
+      # There is no connection to drain while reconnecting.
+      return close if reconnecting?
 
       synchronize do
         @drain_t ||= Thread.new { do_drain }
@@ -886,8 +894,13 @@ module NATS
       raise(NATS::IO::ClientError, "custom inbox may not begin with '.'") if @inbox_prefix.start_with?(".")
     end
 
-    def process_info(line)
+    # Takes an INFO from the server. Unless ignore_discovered_urls is set,
+    # or discover is false, the servers it lists replace the discovered
+    # servers; those of the first INFO of an attempt (first: true) are only
+    # added.
+    def process_info(line, discover: true, first: false)
       parsed_info = JSON.parse(line)
+      skipped = []
 
       # INFO can be received asynchronously too,
       # so has to be done under the lock.
@@ -899,13 +912,20 @@ module NATS
 
         # Detect any announced server that we might not be aware of...
         connect_urls = @server_info[:connect_urls]
-        if !@options[:ignore_discovered_urls] && connect_urls
-          srvs = []
-          connect_urls.each do |url|
-            # Use the same scheme as the currently in use URI.
-            scheme = @uri.scheme
-            u = URI.parse("#{scheme}://#{url}")
+        if discover && !@options[:ignore_discovered_urls] && connect_urls
+          uris = connect_urls.filter_map { |url| discovered_uri(url) }
 
+          # A later list drops the discovered servers it no longer names.
+          # The configured servers and the current one stay, and an empty
+          # list changes nothing.
+          if !first && !connect_urls.empty?
+            server_pool.reject! do |srv|
+              srv[:discovered] && [@uri, *uris].none? { |u| srv[:uri].hostname == u.hostname && srv[:uri].port == u.port }
+            end
+          end
+
+          srvs = []
+          uris.each do |u|
             # Skip in case it is the current server which we already know
             next if @uri.hostname == u.hostname && @uri.port == u.port
 
@@ -913,6 +933,8 @@ module NATS
               srv[:uri].hostname == u.hostname && srv[:uri].port == u.port
             end
 
+            # The first server that lists a server decides its credentials
+            # and its TLS name.
             if !present
               # Let explicit user and pass options set the credentials.
               u.user = options[:user] if options[:user]
@@ -924,8 +946,18 @@ module NATS
                 u.password ||= @uri.password if @uri.password
               end
 
-              # NOTE: Auto discovery won't work here when TLS host verification is enabled.
-              srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname}
+              tls_name = @configured_servers.include?([u.hostname, u.port]) ? u.hostname : discovered_tls_name(u)
+
+              # Over TLS, a server with no name to verify its certificate
+              # against is not connected to. It is reported once per connect.
+              if tls_name.nil? && client_using_secure_connection? && !@tls&.fetch(:hostname, nil)
+                key = "#{u.host}:#{u.port}"
+                skipped << without_tls_name_error(key) unless @without_tls_name[key]
+                @without_tls_name[key] = true
+                next
+              end
+
+              srv = {uri: u, reconnect_attempts: 0, discovered: true, hostname: u.hostname, tls_name: tls_name}
               srvs << srv
             end
           end
@@ -935,8 +967,57 @@ module NATS
           server_pool.push(*srvs)
         end
       end
+      skipped.each { |e| err_cb_call(self, e, nil) } if @err_cb
 
       @server_info
+    end
+
+    # The URI of a connect_urls entry, with the scheme of the current
+    # connection, or nil to skip the entry. nats-server writes an entry as
+    # host:port, with an IPv6 address in brackets. An entry with a scheme is
+    # skipped, and so is one that is not host:port. User info in an entry is
+    # dropped: a discovered server gets the client's own credentials.
+    def discovered_uri(entry)
+      return nil unless entry.is_a?(String) && !entry.include?("://")
+
+      u = URI.parse("nats://#{entry}")
+      return nil if u.host.to_s.empty? || !u.port&.between?(1, 65535) || !u.path.empty? || u.query || u.fragment
+
+      URI.parse("#{@uri.scheme}://#{u.host}:#{u.port}")
+    rescue URI::Error
+      nil
+    end
+
+    # The name the certificate of a server discovered on the current
+    # connection is verified against, and that is sent as SNI. A host name
+    # is verified against itself. An IP address is one more address of the
+    # current server: it is verified against the name the current server is
+    # verified against, and so, over any number of hops, against the name
+    # of a configured server, or a discovered host name. It has no name
+    # when that name is an IP address too. With
+    # tls: {verify_discovered_servers_by_ip: true}, an IP address is
+    # verified against itself. tls: {hostname:} overrides every name.
+    def discovered_tls_name(uri)
+      return uri.hostname unless ip_address?(uri.hostname)
+      return uri.hostname if verify_discovered_servers_by_ip?
+
+      @hostname unless ip_address?(@hostname)
+    end
+
+    # The error for a discovered server, given as host:port, that has no
+    # name to verify its certificate against.
+    def without_tls_name_error(server)
+      NATS::IO::ConnectError.new("nats: skipping the discovered server #{server}, which has no name to verify its certificate against; " \
+        "tls: {hostname:} sets the name every server is verified against, or tls: {verify_discovered_servers_by_ip: true} " \
+        "verifies a discovered IP address against itself, which is safe only where the CA that issued the certificates is not shared with others")
+    end
+
+    # Whether host is an IPv4 or IPv6 address.
+    def ip_address?(host)
+      IPAddr.new(host.to_s)
+      true
+    rescue IPAddr::Error
+      false
     end
 
     def process_hdr(header)
@@ -1093,6 +1174,9 @@ module NATS
       @uri.user = @options[:user] if @options[:user]
       @uri.password = @options[:pass] if @options[:pass]
 
+      # Its TLS name, which a discovered IP address it lists inherits.
+      @hostname = srv[:tls_name]
+
       srv
     end
 
@@ -1117,12 +1201,36 @@ module NATS
         # Insecure TLS versions not supported already:
         # https://github.com/ruby/openssl/commit/3e5a009966bd7f806f7180d82cf830a04be28986
         #
-        tls_context.set_params
+        # With insecure_skip_verify there is no context of the user to leave
+        # verification to, so this one verifies nothing.
+        if insecure_skip_verify?
+          tls_context.set_params(verify_mode: OpenSSL::SSL::VERIFY_NONE, verify_hostname: false)
+        else
+          # The client checks the name after the handshake (verify_server!),
+          # where the error can list the names of the certificate.
+          tls_context.set_params(verify_hostname: false)
+        end
       end
     end
 
-    def single_url_connect_used?
-      @single_url_connect_used
+    # tls: {insecure_skip_verify: true} turns the client's check of the
+    # server's certificate off. Only true does, so that a value such as
+    # "false" keeps the check on.
+    def insecure_skip_verify?
+      !!@tls && @tls[:insecure_skip_verify] == true
+    end
+
+    # tls: {handshake_first: true} starts the TLS handshake before the server
+    # sends INFO, for servers with handshake_first in their tls block.
+    def handshake_first?
+      !!@tls && !!@tls[:handshake_first]
+    end
+
+    # tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP
+    # address against itself, for clusters whose certificates carry only IP
+    # addresses. Only true does.
+    def verify_discovered_servers_by_ip?
+      !!@tls && @tls[:verify_discovered_servers_by_ip] == true
     end
 
     # The server closes the connection when a payload is over max_payload from
@@ -1196,7 +1304,13 @@ module NATS
     end
 
     def do_drain
-      synchronize { @status = DRAINING_SUBS }
+      # A reconnect that started after drain was called leaves no
+      # connection to drain.
+      reconnecting = synchronize do
+        @status = DRAINING_SUBS unless reconnecting?
+        reconnecting?
+      end
+      return close if reconnecting
 
       # Do unsubscribe protocol for all the susbcriptions, then have a single thread
       # waiting until all subs are done or drain timeout error reported to async error cb.
@@ -1478,6 +1592,17 @@ module NATS
     end
 
     def process_connect_init
+      # A server with handshake_first expects the TLS handshake before INFO.
+      # A wss:// connection has its TLS before the WebSocket upgrade.
+      tls_first = handshake_first? && %w[nats tls].include?(@uri.scheme)
+      @io.setup_tls! if tls_first
+
+      # A client that asks for TLS and has none yet starts it after INFO,
+      # or fails the attempt. The servers of an INFO read before the TLS
+      # handshake are not used, whether the attempt goes on or fails: the
+      # discovered servers come from the INFOs received inside TLS.
+      tls_after_info = client_using_secure_connection? && !tls_first && @uri.scheme != "wss"
+
       # FIXME: Can receive PING as well here in recent versions.
       line = @io.read_line(options[:connect_timeout])
       if !line || line.empty?
@@ -1486,12 +1611,14 @@ module NATS
 
       if (match = line.match(NATS::Protocol::INFO))
         info_json = match.captures.first
-        process_info(info_json)
+        process_info(info_json, discover: !tls_after_info, first: true)
       else
         raise NATS::IO::ConnectError.new("nats: protocol exception, INFO not valid")
       end
 
-      if server_using_secure_connection? && client_using_secure_connection?
+      if tls_first
+        # The connection has TLS already.
+      elsif server_using_secure_connection? && client_using_secure_connection?
         @io.setup_tls!
       # Server > v2.9.19 returns tls_required regardless of no_tls for WebSocket config being used so need to check URI.
       elsif server_using_secure_connection? && !client_using_secure_connection? && (@uri.scheme != "ws")
@@ -1511,25 +1638,66 @@ module NATS
       # Send ping/pong after connect
       @io.write(PING_REQUEST)
 
-      next_op = @io.read_line(options[:connect_timeout])
-      if @options[:verbose]
-        # Need to get another command here if verbose
-        raise NATS::IO::ConnectError.new("expected to receive +OK") unless next_op =~ NATS::Protocol::OK
-        next_op = @io.read_line(options[:connect_timeout])
-      end
+      next_op = next_connect_op(MonotonicTime.now + options[:connect_timeout])
+      raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}") unless next_op =~ NATS::Protocol::PONG
 
-      case next_op
-      when NATS::Protocol::PONG
-        # do nothing
-      when NATS::Protocol::ERR
-        if @server_info[:auth_required]
-          raise NATS::IO::AuthError.new($1)
-        else
-          raise NATS::IO::ServerError.new($1)
-        end
-      else
-        raise NATS::IO::ConnectError.new("expected PONG, got #{next_op}")
+      # On a connection that started TLS after INFO, nats-server 2.12 and
+      # later send an INFO right after the first PONG, inside TLS. The
+      # client waits for it, to know the servers it lists when connect
+      # returns. The version in the INFO read before the handshake decides
+      # only whether the client waits.
+      if tls_after_info && !@options[:ignore_discovered_urls] && sends_info_after_first_pong?(@server_info[:version])
+        read_info_after_first_pong
       end
+    end
+
+    # Reads the next operation of an attempt after CONNECT, until deadline.
+    # A PING is answered and +OK is skipped: in verbose mode the server
+    # answers CONNECT with +OK. A -ERR fails the attempt with the server's
+    # error.
+    def next_connect_op(deadline)
+      loop do
+        timeout = deadline - MonotonicTime.now
+        raise NATS::IO::SocketTimeoutError if timeout <= 0
+
+        op = @io.read_line(timeout)
+        case op
+        when NATS::Protocol::PING
+          @io.write(PONG_RESPONSE, timeout)
+        when NATS::Protocol::OK
+          # Skipped.
+        when NATS::Protocol::ERR
+          raise(@server_info[:auth_required] ? NATS::IO::AuthError.new($1) : NATS::IO::ServerError.new($1))
+        else
+          return op
+        end
+      end
+    end
+
+    # Reads the INFO that follows the first PONG, for up to connect_timeout
+    # from that PONG. When none comes in time, the client reports connected
+    # without it, and the read loop takes it when it comes. Any other
+    # operation, or a closed connection, fails the attempt.
+    def read_info_after_first_pong
+      op = begin
+        next_connect_op(MonotonicTime.now + options[:connect_timeout])
+      rescue NATS::IO::SocketTimeoutError
+        # A close from another thread can end the wait the same way.
+        raise if closed?
+
+        return
+      end
+      raise NATS::IO::ConnectError.new("expected INFO, got #{op}") unless op =~ NATS::Protocol::INFO
+
+      process_info($1)
+    end
+
+    # Whether a server of this version sends an INFO right after the PONG
+    # to the first PING, as nats-server does from 2.12.0 on. Only the three
+    # numbers count, so a pre-release counts as its release.
+    def sends_info_after_first_pong?(version)
+      numbers = /\A(\d+)\.(\d+)\.(\d+)(?:[-+]|\z)/.match(version.to_s)&.captures&.map(&:to_i)
+      !numbers.nil? && (numbers <=> [2, 12, 0]) >= 0
     end
 
     # Reconnect logic. generation is @close_generation from when the
@@ -1549,16 +1717,8 @@ module NATS
 
         srv = select_next_server
 
-        # Set hostname to use for TLS hostname verification
-        if client_using_secure_connection? && single_url_connect_used?
-          # Reuse original hostname name in case of using TLS.
-          @hostname ||= srv[:hostname]
-        else
-          @hostname = srv[:hostname]
-        end
-
         # Establish TCP connection with new server
-        @io = create_socket
+        @io = create_socket(srv)
         @io.connect
         @stats[:reconnects] += 1
 
@@ -1656,8 +1816,10 @@ module NATS
         end
 
         # Try to write any pending flushes in case
-        # we have a connection then close it.
-        should_flush = @pending_queue && @io && @io.socket && !@io.closed?
+        # we have a connection then close it. While connecting or
+        # reconnecting there is none: @io is an attempt that has not sent
+        # CONNECT, or has failed.
+        should_flush = !reconnecting? && !connecting? && @pending_queue && @io && @io.socket && !@io.closed?
         if should_flush
           begin
             cmds = []
@@ -1674,9 +1836,16 @@ module NATS
         # Destroy any remaining subscriptions.
         @subs.clear
 
-        if do_cbs
-          @disconnect_cb&.call(@last_err)
-          @close_cb&.call
+        # A close from one of these callbacks closes without calling them
+        # again.
+        if do_cbs && @close_callbacks_thread != Thread.current
+          begin
+            @close_callbacks_thread = Thread.current
+            @disconnect_cb&.call(@last_err)
+            @close_cb&.call
+          ensure
+            @close_callbacks_thread = nil
+          end
         end
 
         @status = conn_status
@@ -1818,7 +1987,7 @@ module NATS
       @options[:reconnect]
     end
 
-    def create_socket
+    def create_socket(srv)
       socket_class = case @uri.scheme
       when "nats", "tls"
         NATS::IO::Socket
@@ -1829,9 +1998,15 @@ module NATS
         raise NotImplementedError, "#{@uri.scheme} protocol is not supported, check NATS cluster URL spelling"
       end
 
+      # tls: {hostname:} sets the name every server is verified against,
+      # and that is sent as SNI. discovered: a discovered server, verified
+      # against the name the client gave it.
+      hostname = @tls&.fetch(:hostname, nil)
+
       socket_class.new(
         uri: @uri,
-        tls: {context: tls_context, hostname: @hostname},
+        tls: {context: tls_context, hostname: hostname || @hostname, insecure_skip_verify: insecure_skip_verify?,
+              discovered: !!srv[:discovered] && !hostname},
         connect_timeout: NATS::IO::DEFAULT_CONNECT_TIMEOUT
       )
     end
@@ -2048,44 +2223,56 @@ module NATS
 
       # (Re-)connect using secure connection if server and client agreed on using it.
       def setup_tls!
+        # Bytes the server sent after INFO and before the handshake are
+        # dropped: from here on, only what comes through TLS is read.
+        @unread&.clear
+
         # Setup TLS connection by rewrapping the socket
         tls_socket = OpenSSL::SSL::SSLSocket.new(@socket, @tls.fetch(:context))
 
         # Close TCP socket after closing TLS socket as well.
         tls_socket.sync_close = true
 
-        # Required to enable hostname verification if Ruby runtime supports it (>= 2.4):
+        # Sets SNI, and the name that a context with verify_hostname checks
+        # during the handshake on CRuby:
         # https://github.com/ruby/openssl/commit/028e495734e9e6aa5dba1a2e130b08f66cf31a21
         tls_socket.hostname = @tls[:hostname]
 
-        tls_socket.connect
+        begin
+          tls_socket.connect
+        rescue OpenSSL::SSL::SSLError => e
+          e = OpenSSL::SSL::SSLError.new(name_check_failed(tls_socket.peer_cert_chain&.first)) if name_check_failed?(tls_socket)
+          # Nothing is sent on a connection whose handshake failed.
+          tls_socket.close
+          raise e
+        end
+        verify_server!(tls_socket) unless @tls[:insecure_skip_verify]
         @socket = tls_socket
       end
 
+      # Reads a line, up to and including "\n", or returns nil when the
+      # connection is closed first. A read from the socket can take more
+      # than the line, as one TLS record can carry several lines, so the
+      # rest is kept for the next read_line or read. The deadline counts
+      # from the call, for the whole line.
       def read_line(deadline = nil)
-        # FIXME: Should accumulate and read in a non blocking way instead
-        unless ::IO.select([@socket], nil, nil, deadline)
-          raise NATS::IO::SocketTimeoutError
+        @unread ||= String.new
+        limit = deadline && MonotonicTime.now + deadline
+        until (idx = @unread.index("\n"))
+          raise NATS::IO::SocketTimeoutError if limit && MonotonicTime.now >= limit
+
+          @unread << read_socket(MAX_SOCKET_READ_BYTES, limit)
         end
-        @socket.gets
+        @unread.slice!(0, idx + 1)
+      rescue EOFError
+        nil
       end
 
       def read(max_bytes, deadline = nil)
-        begin
-          @socket.read_nonblock(max_bytes)
-        rescue ::IO::WaitReadable
-          if ::IO.select([@socket], nil, nil, deadline)
-            retry
-          else
-            raise NATS::IO::SocketTimeoutError
-          end
-        rescue ::IO::WaitWritable
-          if ::IO.select(nil, [@socket], nil, deadline)
-            retry
-          else
-            raise NATS::IO::SocketTimeoutError
-          end
-        end
+        # Hand over what read_line read beyond its last line first.
+        return @unread.slice!(0, max_bytes) if @unread && !@unread.empty?
+
+        read_socket(max_bytes, deadline && MonotonicTime.now + deadline)
       rescue EOFError => e
         if (RUBY_ENGINE == "jruby") && (e.message == "No message available")
           # FIXME: <EOFError: No message available> can happen in jruby
@@ -2141,6 +2328,160 @@ module NATS
       end
 
       private
+
+      # limit: a MonotonicTime.now value, or nil to wait without one. A TLS
+      # socket can be readable and still raise IO::WaitReadable until the
+      # rest of a record comes, so each wait takes only the time left.
+      def read_socket(max_bytes, limit)
+        @socket.read_nonblock(max_bytes)
+      rescue ::IO::WaitReadable
+        if ::IO.select([@socket], nil, nil, time_left(limit))
+          retry
+        else
+          raise NATS::IO::SocketTimeoutError
+        end
+      rescue ::IO::WaitWritable
+        if ::IO.select(nil, [@socket], nil, time_left(limit))
+          retry
+        else
+          raise NATS::IO::SocketTimeoutError
+        end
+      end
+
+      # The seconds until limit, or nil without one. Raises
+      # NATS::IO::SocketTimeoutError once limit has passed.
+      def time_left(limit)
+        return nil unless limit
+
+        left = limit - MonotonicTime.now
+        raise NATS::IO::SocketTimeoutError if left <= 0
+
+        left
+      end
+
+      # A context checks only what it is set up to check: one made with
+      # OpenSSL::SSL::SSLContext.new checks nothing, and jruby-openssl before
+      # 0.19.0 checks no name during the handshake. So the client checks the
+      # chain and the name after every handshake, before it sends anything.
+      def verify_server!(tls_socket)
+        # jruby-openssl keeps the result of the last check per context, so
+        # after a resumed session, or with another handshake on the same
+        # context, the result can be that of another server. With VERIFY_PEER
+        # it fails the handshake when the chain does not verify.
+        if RUBY_ENGINE == "jruby"
+          if (tls_socket.context.verify_mode.to_i & OpenSSL::SSL::VERIFY_PEER).zero?
+            raise OpenSSL::SSL::SSLError, "certificate verify failed (the context does not set VERIFY_PEER) for #{@uri.host}:#{@uri.port}"
+          end
+        elsif (result = tls_socket.verify_result) != OpenSSL::X509::V_OK
+          # A context with verify_hostname but without VERIFY_PEER completes
+          # the handshake after the name check failed.
+          raise OpenSSL::SSL::SSLError, name_check_failed(tls_socket.peer_cert) if name_check_failed?(tls_socket)
+          raise OpenSSL::SSL::SSLError, "certificate verify failed (#{verify_error_string(result)}) for #{@uri.host}:#{@uri.port}"
+        end
+
+        cert = tls_socket.peer_cert
+        unless certificate_identity?(cert, @tls[:hostname])
+          raise OpenSSL::SSL::SSLError, name_check_failed(cert)
+        end
+      rescue
+        tls_socket.close
+        raise
+      end
+
+      # Whether the certificate is issued for name, by the rules of CRuby's
+      # OpenSSL::SSL.verify_certificate_identity: the DNS names and IP
+      # addresses of subjectAltName, else the common name. That of
+      # jruby-openssl before 0.19.0 compares the printed names, in which ::1
+      # is 0:0:0:0:0:0:0:1.
+      def certificate_identity?(cert, name)
+        return false unless cert
+
+        ip = begin
+          IPAddr.new(name).hton
+        rescue IPAddr::Error
+          nil
+        end
+        sans = subject_alt_names(cert).select { |san| san.tag == 2 || san.tag == 7 }
+        if sans.empty?
+          return cert.subject.to_a.any? { |oid, value| oid == "CN" && OpenSSL::SSL.verify_hostname(name, value) }
+        end
+
+        sans.any? { |san| (san.tag == 2) ? OpenSSL::SSL.verify_hostname(name, san.value) : san.value == ip }
+      rescue OpenSSL::ASN1::ASN1Error
+        false
+      end
+
+      # The GeneralName entries of the certificate's subjectAltName: tag 2 is
+      # a DNS name, tag 7 an IP address in network byte order.
+      def subject_alt_names(cert)
+        cert.extensions.select { |ext| ext.oid == "subjectAltName" }.flat_map do |ext|
+          ostr = OpenSSL::ASN1.decode(ext.to_der).value.last
+          OpenSSL::ASN1.decode(ostr.value).value
+        end
+      end
+
+      # Whether the handshake failed on the name: on CRuby a context with
+      # verify_hostname checks it during the handshake.
+      def name_check_failed?(tls_socket)
+        defined?(OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH) &&
+          tls_socket.verify_result == OpenSSL::X509::V_ERR_HOSTNAME_MISMATCH
+      end
+
+      # The error for a certificate that is not issued for the name the
+      # server is verified against: that name, the names the certificate is
+      # issued for (at most four) and the setting for the name. Without the
+      # certificate it leaves the names out: OpenSSL 1.1 keeps none when the
+      # name check fails during the handshake. For a discovered server, also
+      # what the cluster can advertise instead, and the setting for
+      # certificates that carry the server's IP address.
+      def name_check_failed(cert)
+        names = cert ? certificate_names(cert) : []
+        text = "hostname #{@tls[:hostname].inspect} does not match the server certificate of #{@uri.host}:#{@uri.port}"
+        if cert
+          issued_for = names.empty? ? "no name" : names.first(4).map(&:inspect).join(", ")
+          issued_for += " and #{names.size - 4} more" if names.size > 4
+          text += ", which is issued for #{issued_for}"
+        end
+        text += "; tls: {hostname:} sets the name every server is verified against"
+        return text unless @tls[:discovered]
+
+        advertise = %w[ws wss].include?(@uri.scheme) ? "advertise in the websocket block of nats-server" : "client_advertise in nats-server"
+        text += ", or each server of the cluster can advertise a name its certificate is issued for (#{advertise})"
+        if issued_for_address?(names)
+          text += ", or tls: {verify_discovered_servers_by_ip: true} verifies a discovered IP address against itself, " \
+            "which is safe only where the CA that issued the certificates is not shared with others"
+        end
+        text
+      end
+
+      # Whether names hold the IP address the server was dialed at.
+      def issued_for_address?(names)
+        names.include?(IPAddr.new(@uri.hostname).to_s)
+      rescue IPAddr::Error
+        false
+      end
+
+      # The names certificate_identity? checks: the DNS names and IP
+      # addresses of subjectAltName, else the common name.
+      def certificate_names(cert)
+        names = subject_alt_names(cert).filter_map do |san|
+          case san.tag
+          when 2 then san.value
+          when 7 then IPAddr.new_ntoh(san.value).to_s if [4, 16].include?(san.value.bytesize)
+          end
+        end
+        return names unless names.empty?
+
+        cert.subject.to_a.filter_map { |oid, value| value if oid == "CN" }
+      rescue OpenSSL::ASN1::ASN1Error
+        []
+      end
+
+      def verify_error_string(code)
+        store_ctx = OpenSSL::X509::StoreContext.new(OpenSSL::X509::Store.new)
+        store_ctx.error = code
+        store_ctx.error_string
+      end
 
       def connect_addrinfo(ai, port, timeout)
         sock = ::Socket.new(::Socket.const_get(ai[0]), ::Socket::SOCK_STREAM, 0)

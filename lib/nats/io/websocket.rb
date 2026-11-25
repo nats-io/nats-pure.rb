@@ -75,7 +75,7 @@ module NATS
         raise HandshakeError, "Attempted to write to socket while WebSocket handshake is in progress" unless @handshaked
 
         frame = ::WebSocket::Frame::Outgoing::Client.new(data: data, type: :binary, version: @handshake.version)
-        super(frame.to_s)
+        super(frame.to_s, deadline)
       end
 
       private

@@ -77,4 +77,15 @@ describe NATS::IO::WebSocket do
       expect(bounded { ws.read(NATS::IO::MAX_SOCKET_READ_BYTES, 1) }).to eq("PING\r\n")
     end
   end
+
+  describe "#write" do
+    before do
+      ws.instance_variable_set(:@handshake, ::WebSocket::Handshake::Client.new(url: "ws://127.0.0.1:8080"))
+      ws.instance_variable_set(:@handshaked, true)
+    end
+
+    it "gives up after its deadline when the other side reads nothing" do
+      expect { bounded { ws.write("x" * 1_048_576, 0.5) } }.to raise_error(NATS::IO::SocketTimeoutError)
+    end
+  end
 end
