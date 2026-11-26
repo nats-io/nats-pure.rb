@@ -215,20 +215,29 @@ module NATS
 
     # keys returns the keys from a KeyValue store.
     # Optionally filters the keys based on the provided filter list.
-    def keys(params = {})
+    def keys(params = {}, filters = [])
       params[:ignore_deletes] = true
       params[:meta_only] = true
 
-      w = watchall(params)
+      filters = [filters] unless filters.is_a?(Enumerable)
+      w = if filters.empty?
+        [watchall(params)]
+      else
+        filters.collect do |filter|
+          watch(filter, params)
+        end
+      end
       got_keys = false
 
       Enumerator.new do |y|
-        w.each do |entry|
-          break if entry.nil?
-          got_keys = true
-          y << entry.key
+        w.each do |filter|
+          filter.each do |entry|
+            break if entry.nil?
+            got_keys = true
+            y << entry.key
+          end
         end
-        w.stop
+        w.each { |filter| filter.stop }
         raise NoKeysFoundError unless got_keys
       end
     end
